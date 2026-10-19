@@ -1,0 +1,1 @@
+package dev.wrath; public final class NativeTextureName implements java.util.function.Supplier<String> {public String get(){return "Wrath character";}}

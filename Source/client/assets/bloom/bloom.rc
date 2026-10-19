@@ -1,0 +1,12 @@
+#include <windows.h>
+2300 RCDATA "original/petals.png"
+2301 RCDATA "original/petal-anchors.bin"
+2302 RCDATA "original/effects.png"
+2400 RCDATA "original/sky-galaxy.png"
+2401 RCDATA "original/sky-glow.png"
+2402 RCDATA "original/sky-haze.png"
+2403 RCDATA "original/sky-clouds.png"
+2404 RCDATA "original/sky-moon.png"
+2405 RCDATA "original/sky-ribbons.png"
+2406 RCDATA "original/sky-celestial.png"
+2450 RCDATA "original/sky-stars.bin"

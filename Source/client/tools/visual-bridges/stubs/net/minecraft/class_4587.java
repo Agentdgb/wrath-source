@@ -1,0 +1,1 @@
+package net.minecraft; public class class_4587 {public static class class_4665 {}}

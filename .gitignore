@@ -1,0 +1,20 @@
+# Intermediate build artifacts
+Source/build/
+build/
+*.obj
+*.tlog
+*.idb
+*.ipdb
+*.iobj
+*.res
+
+# Visual Studio cache
+.vs/
+*.user
+*.suo
+*.VC.db
+*.opendb
+
+# Python cache
+__pycache__/
+*.pyc

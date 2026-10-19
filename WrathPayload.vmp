@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document>
+	<Protection InputFileName="C:\Users\Admin\Desktop\Wrath Source\WrathPayload.dll" Options="32768" CheckKernelDebugger="true" CompressionMode="0" VMCodeSectionName=".vmp" VMExecutorCount="1" LicenseDataFileName="" OutputFileName="C:\Users\Admin\Desktop\Wrath Source\WrathPayload_Protected.dll" WaterMarkName="" RunParameters="">
+		<Folders/>
+		<Procedures>
+			<Procedure MapAddress="DllMain" IncludedInCompilation="true" Options="1" CompilationType="2"/>
+		</Procedures>
+	</Protection>
+	<DLLBox/>
+	<Script IncludedInCompilation="true"></Script>
+</Document>

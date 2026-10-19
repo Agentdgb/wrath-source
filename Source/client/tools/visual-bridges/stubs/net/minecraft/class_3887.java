@@ -1,0 +1,1 @@
+package net.minecraft; public abstract class class_3887 { protected class_3887(class_3883 c){} public abstract void method_4199(class_4587 m,class_11659 q,int l,class_10017 s,float y,float x); }

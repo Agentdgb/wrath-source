@@ -1,0 +1,30 @@
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 129,0,2792,79
+ PRODUCTVERSION 129,0,2792,79
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Microsoft Corporation"
+            VALUE "FileDescription", "Microsoft Edge WebView2 Helper"
+            VALUE "FileVersion", "129.0.2792.79"
+            VALUE "InternalName", "msedgewebview2.exe"
+            VALUE "LegalCopyright", "Copyright Microsoft Corporation. All rights reserved."
+            VALUE "OriginalFilename", "msedgewebview2.exe"
+            VALUE "ProductName", "Microsoft Edge WebView2"
+            VALUE "ProductVersion", "129.0.2792.79"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

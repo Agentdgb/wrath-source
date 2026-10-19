@@ -1,0 +1,48 @@
+========================================================================
+                         WRATH CLIENT — GUIA Y ESTRUCTURA
+========================================================================
+
+Estructura de la raiz organizada:
+  WrathLoader.exe    -> Loader e inyector nativo en C++20 con GUI ImGui.
+  WrathPayload.dll   -> Cliente principal con ClickGUI, shaders, JVM hooks y bloom.
+  launch_dev.bat     -> Lanzador rapido en Modo Developer (Bypass directo sin servidor).
+  launch_session.bat -> Lanzador seguro on-demand (inicia servidor, autentica y apaga).
+  server.cfg         -> Configuracion de red del cliente (host y puerto del servidor).
+  VMProtectSDK64.dll -> Biblioteca de enlace dinamico de proteccion.
+  assets/            -> Fuentes tipograficas Inter e imagenes de interfaz.
+  Server/            -> Servidor FastAPI, bot de Discord, base de datos de HWID/licencias.
+  Source/            -> Codigo fuente completo (loader, client, bypass, shaders).
+  Wrath Updated/     -> Distribucion portable y sincronizada con los ultimos binarios.
+
+MODOS DE EJECUCION
+------------------
+1. MODO DEVELOPER / BYPASS DIRECTO (Recomendado para pruebas rapidas):
+   - Abre Minecraft 1.21.11 (Fabric).
+   - Ejecuta `launch_dev.bat` como Administrador, O ejecuta directamente:
+       WrathLoader.exe --bypass
+   - Tambien puedes abrir WrathLoader.exe normalmente y escribir "bypass", "dev"
+     o "owner" en el campo de texto de login para saltar la autenticacion.
+   - Inyecta directamente en javaw.exe usando NtCreateThreadEx con mitigacion TLS.
+
+2. MODO PRODUCCION / AUTENTICACION COMPLETA:
+   - Abre Minecraft 1.21.11 (Fabric).
+   - Ejecuta `launch_session.bat` como Administrador.
+   - Iniciara el servidor FastAPI local en segundo plano, autenticara tu sesion
+     por Discord OAuth2 / HWID, inyectara el cliente y apagara el servidor
+     automaticamente sin dejar procesos residuales en el sistema.
+
+CONTROLES EN JUEGO
+------------------
+- Menu ClickGUI : Right Shift o Insert.
+- Descarga      : Boton "Unload client" en la barra lateral del menu.
+- Purgar config : Shift + Click en "Unload client".
+
+COMPILACION DESDE SOURCE
+------------------------
+1. Abre una consola en la carpeta `Source`.
+2. Ejecuta:
+     cmake -S . -B build -A x64
+     cmake --build build --config Release --target WrathLoader
+     cmake --build build --config Release --target WrathPayload
+3. Los binarios compilados se alojan en `Source/build/dist/`.
+========================================================================

@@ -1,0 +1,9 @@
+LIBRARY WrathPayload
+EXPORTS
+    Agent_OnLoad
+    Agent_OnAttach
+    Agent_OnUnload
+    VantaInit
+    WrathInit
+    VantaShutdown
+    WrathShutdown
