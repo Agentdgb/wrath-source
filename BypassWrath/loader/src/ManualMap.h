@@ -208,32 +208,77 @@ inline void RegisterCfgCallTargets(HANDLE hProc, PVOID remote_stub, size_t stub_
     FreeLibrary(hKb);
 }
 
-// ── Thread Start Address Spoofing (P2 - T20) ───────────────────────────────
+// ── T20: Resolve an export from a remote module via ReadProcessMemory ────────
+// No LoadLibrary on loader side — walks remote export directory entirely in-process.
+inline FARPROC GetRemoteExportByName(HANDLE hProc, PVOID remote_base, const char* export_name) {
+    if (!hProc || !remote_base || !export_name) return nullptr;
+
+    IMAGE_DOS_HEADER dos{};
+    if (!ReadProcessMemory(hProc, remote_base, &dos, sizeof(dos), nullptr)
+        || dos.e_magic != IMAGE_DOS_SIGNATURE)
+        return nullptr;
+
+    IMAGE_NT_HEADERS nt{};
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(remote_base) + dos.e_lfanew,
+                           &nt, sizeof(nt), nullptr)
+        || nt.Signature != IMAGE_NT_SIGNATURE)
+        return nullptr;
+
+    const auto& exp_dd = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!exp_dd.VirtualAddress || !exp_dd.Size) return nullptr;
+
+    IMAGE_EXPORT_DIRECTORY exp{};
+    if (!ReadProcessMemory(hProc,
+            reinterpret_cast<BYTE*>(remote_base) + exp_dd.VirtualAddress,
+            &exp, sizeof(exp), nullptr))
+        return nullptr;
+
+    if (!exp.NumberOfNames) return nullptr;
+
+    std::vector<DWORD> names(exp.NumberOfNames);
+    std::vector<WORD>  ords(exp.NumberOfNames);
+    std::vector<DWORD> funcs(exp.NumberOfFunctions);
+
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(remote_base) + exp.AddressOfNames,
+            names.data(), names.size() * sizeof(DWORD), nullptr)) return nullptr;
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(remote_base) + exp.AddressOfNameOrdinals,
+            ords.data(), ords.size() * sizeof(WORD), nullptr)) return nullptr;
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(remote_base) + exp.AddressOfFunctions,
+            funcs.data(), funcs.size() * sizeof(DWORD), nullptr)) return nullptr;
+
+    for (DWORD i = 0; i < exp.NumberOfNames; ++i) {
+        char name_buf[128]{};
+        if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(remote_base) + names[i],
+                name_buf, sizeof(name_buf) - 1, nullptr))
+            continue;
+        if (strcmp(name_buf, export_name) == 0) {
+            if (ords[i] >= exp.NumberOfFunctions) continue;
+            return reinterpret_cast<FARPROC>(
+                reinterpret_cast<BYTE*>(remote_base) + funcs[ords[i]]);
+        }
+    }
+    return nullptr;
+}
+
+// ── Thread Start Address Spoofing (P2 - T20) ────────────────────────────────
+// Prefers jvm.dll!JNI_GetCreatedJavaVMs resolved via remote export walk.
+// Fallback: ntdll!TppWorkerThread / RtlUserThreadStart via hash.
 using pfnNtSetInfoThread_t = bp::NTSTATUS(NTAPI*)(HANDLE, DWORD, PVOID, ULONG);
 
 inline void SpoofWin32StartAddress(HANDLE hProc, HANDLE hThread) {
     FARPROC spoof_va = nullptr;
 
-    // T20: Try jvm.dll export first
+    // T20: Resolve jvm.dll!JNI_GetCreatedJavaVMs via remote export walk (no LoadLibrary)
     PVOID remoteJvm = GetRemoteModuleBase(hProc, L"jvm.dll");
-    if (remoteJvm) {
-        HMODULE hLocalJvm = GetModuleHandleW(L"jvm.dll");
-        if (hLocalJvm) {
-            FARPROC localFn = GetProcAddress(hLocalJvm, "JNI_GetCreatedJavaVMs");
-            if (localFn) {
-                DWORD rva = static_cast<DWORD>(
-                    reinterpret_cast<uintptr_t>(localFn) - reinterpret_cast<uintptr_t>(hLocalJvm));
-                spoof_va = reinterpret_cast<FARPROC>(reinterpret_cast<BYTE*>(remoteJvm) + rva);
-            }
-        }
-    }
+    if (remoteJvm)
+        spoof_va = GetRemoteExportByName(hProc, remoteJvm, "JNI_GetCreatedJavaVMs");
 
     // Fallback: ntdll!TppWorkerThread / RtlUserThreadStart
     if (!spoof_va) {
-        HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
-        if (hNt) {
-            spoof_va = ResolveByHash(hNt, kHashTppWorker);
-            if (!spoof_va) spoof_va = ResolveByHash(hNt, kHashRtlUser);
+        HMODULE hNtLocal = GetModuleHandleW(L"ntdll.dll");
+        if (hNtLocal) {
+            spoof_va = ResolveByHash(hNtLocal, kHashTppWorker);
+            if (!spoof_va) spoof_va = ResolveByHash(hNtLocal, kHashRtlUser);
         }
     }
     if (!spoof_va) return;
@@ -251,40 +296,39 @@ inline void SpoofWin32StartAddress(HANDLE hProc, HANDLE hThread) {
 
 // ── PE helpers ─────────────────────────────────────────────────────────────
 
-inline DWORD RvaToFileOff(const IMAGE_NT_HEADERS* nt, DWORD rva) {
-    const auto* s = IMAGE_FIRST_SECTION(nt);
-    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++s)
-        if (rva >= s->VirtualAddress && rva < s->VirtualAddress + s->Misc.VirtualSize)
-            return (rva - s->VirtualAddress) + s->PointerToRawData;
-    return rva;
-}
-
 // ── Remote loader stub (PIC, runs inside target) ───────────────────────────
 // T13: MmData cleaned of unused fields.
+// IAT fix: virtProt passed so stub can unprotect .idata before writing thunks.
 struct MmData {
-    BYTE*                   base;
-    PIMAGE_NT_HEADERS       nt;
-    PIMAGE_BASE_RELOCATION  reloc;
+    BYTE*                    base;
+    PIMAGE_NT_HEADERS        nt;
+    PIMAGE_BASE_RELOCATION   reloc;
     PIMAGE_IMPORT_DESCRIPTOR imp;
+    DWORD                    imp_rva;   // VirtualAddress of import dir
+    DWORD                    imp_size;  // Size of import dir
 
-    using fnLoadLibA    = HMODULE(WINAPI*)(LPCSTR);
-    using fnGetProc     = FARPROC(WINAPI*)(HMODULE, LPCSTR);
-    using fnDllMain     = BOOL(WINAPI*)(HINSTANCE, DWORD, LPVOID);
+    using fnLoadLibA   = HMODULE(WINAPI*)(LPCSTR);
+    using fnGetProc    = FARPROC(WINAPI*)(HMODULE, LPCSTR);
+    using fnDllMain    = BOOL(WINAPI*)(HINSTANCE, DWORD, LPVOID);
+    using fnVirtProt   = BOOL(WINAPI*)(LPVOID, SIZE_T, DWORD, PDWORD);
+    using fnLdrLock    = NTSTATUS(NTAPI*)(ULONG, ULONG*, PVOID*);
+    using fnLdrUnlock  = NTSTATUS(NTAPI*)(ULONG, PVOID);
 
     fnLoadLibA  loadLib;
     fnGetProc   getProc;
+    fnVirtProt  virtProt;  // VirtualProtect from remote kernel32
+    fnLdrLock   ldrLock;   // LdrLockLoaderLock from ntdll
+    fnLdrUnlock ldrUnlock; // LdrUnlockLoaderLock from ntdll
 };
 
 #pragma check_stack(off)
 #pragma runtime_checks("", off)
 __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
     if (!d) return;
-    BYTE*                    loc     = d->base;
-    auto*                    nt      = d->nt;
-    auto*                    reloc   = d->reloc;
-    auto*                    imp     = d->imp;
-    auto                     loadLib = d->loadLib;
-    auto                     getProc = d->getProc;
+    BYTE*                    loc   = d->base;
+    auto*                    nt    = d->nt;
+    auto*                    reloc = d->reloc;
+    auto*                    imp   = d->imp;
 
     // 1. Base relocations (if reloc non-null)
     const uintptr_t delta = reinterpret_cast<uintptr_t>(loc)
@@ -309,7 +353,18 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
     }
 
     // 2. IAT resolution inside target process (P0 - T1)
+    // Unprotect .idata before writing thunks (required on SEC_IMAGE path where
+    // .idata is mapped PAGE_EXECUTE_READ; VirtualProtect creates COW pages).
+    auto loadLib  = d->loadLib;
+    auto getProc  = d->getProc;
+    auto virtProt = d->virtProt;
+
     if (imp && loadLib && getProc) {
+        // Unprotect import directory range (covers descriptors + name hint table)
+        DWORD old_imp = 0;
+        if (virtProt && d->imp_size)
+            virtProt(loc + d->imp_rva, d->imp_size, PAGE_EXECUTE_READWRITE, &old_imp);
+
         while (imp->Characteristics || imp->Name) {
             const char* mod = reinterpret_cast<const char*>(loc + imp->Name);
             HMODULE h = loadLib(mod);
@@ -317,6 +372,14 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
                 auto* thunk = reinterpret_cast<PIMAGE_THUNK_DATA>(
                     loc + (imp->OriginalFirstThunk ? imp->OriginalFirstThunk : imp->FirstThunk));
                 auto* func  = reinterpret_cast<PIMAGE_THUNK_DATA>(loc + imp->FirstThunk);
+
+                // Also unprotect FirstThunk array (may be in a different section)
+                DWORD old_ft = 0;
+                BYTE* ft_page = reinterpret_cast<BYTE*>(
+                    reinterpret_cast<uintptr_t>(func) & ~static_cast<uintptr_t>(0xFFF));
+                if (virtProt)
+                    virtProt(ft_page, 0x2000, PAGE_EXECUTE_READWRITE, &old_ft);
+
                 while (thunk->u1.AddressOfData) {
                     if (IMAGE_SNAP_BY_ORDINAL(thunk->u1.Ordinal))
                         func->u1.Function = reinterpret_cast<uintptr_t>(
@@ -327,16 +390,27 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
                     }
                     ++thunk; ++func;
                 }
+
+                if (virtProt && old_ft)
+                    virtProt(ft_page, 0x2000, old_ft, &old_ft);
             }
             ++imp;
         }
+
+        if (virtProt && old_imp && d->imp_size)
+            virtProt(loc + d->imp_rva, d->imp_size, old_imp, &old_imp);
     }
 
     // 3. CRT init + DllMain via AddressOfEntryPoint (_DllMainCRTStartup)
+    // Synchronized with target loader via LdrLockLoaderLock to prevent race with JVM threads
     if (nt->OptionalHeader.AddressOfEntryPoint) {
         auto ep = reinterpret_cast<MmData::fnDllMain>(
             loc + nt->OptionalHeader.AddressOfEntryPoint);
+        ULONG disp = 0;
+        PVOID cookie = nullptr;
+        if (d->ldrLock) d->ldrLock(0, &disp, &cookie);
         ep(reinterpret_cast<HINSTANCE>(loc), DLL_PROCESS_ATTACH, nullptr);
+        if (d->ldrUnlock && cookie) d->ldrUnlock(0, cookie);
     }
 }
 #pragma runtime_checks("", restore)
@@ -467,7 +541,7 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
 
     // 5. Remote kernel32 resolution for target-side IAT dispatch (P0 - T1)
     PVOID remoteK32 = GetRemoteModuleBase(hProc, L"kernel32.dll");
-    if (!remoteK32) remoteK32 = GetModuleHandleW(L"kernel32.dll"); // fallback
+    if (!remoteK32) remoteK32 = GetModuleHandleW(L"kernel32.dll"); // fallback: same boot base
 
     HMODULE localK32 = GetModuleHandleW(L"kernel32.dll");
     DWORD rvaLoadLib = static_cast<DWORD>(
@@ -476,15 +550,26 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
     DWORD rvaGetProc = static_cast<DWORD>(
         reinterpret_cast<uintptr_t>(GetProcAddress(localK32, "GetProcAddress")) -
         reinterpret_cast<uintptr_t>(localK32));
+    DWORD rvaVirtProt = static_cast<DWORD>(
+        reinterpret_cast<uintptr_t>(GetProcAddress(localK32, "VirtualProtect")) -
+        reinterpret_cast<uintptr_t>(localK32));
+
+    const auto& imp_dd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
     MmData md{};
-    md.base    = base;
-    md.nt      = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
-    md.reloc   = nullptr; // Kernel applied relocations via SEC_IMAGE
-    md.imp     = (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size) ?
-                 reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(base + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress) : nullptr;
-    md.loadLib = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rvaLoadLib);
-    md.getProc = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rvaGetProc);
+    md.base     = base;
+    md.nt       = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
+    md.reloc    = nullptr; // Kernel applied relocations via SEC_IMAGE
+    md.imp      = imp_dd.Size ? reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(
+                      base + imp_dd.VirtualAddress) : nullptr;
+    md.imp_rva  = imp_dd.VirtualAddress;
+    md.imp_size = imp_dd.Size;
+    md.loadLib  = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rvaLoadLib);
+    md.getProc  = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rvaGetProc);
+    md.virtProt = reinterpret_cast<MmData::fnVirtProt>(reinterpret_cast<BYTE*>(remoteK32) + rvaVirtProt);
+    HMODULE hNtLocal = GetModuleHandleW(L"ntdll.dll");
+    md.ldrLock   = reinterpret_cast<MmData::fnLdrLock>(GetProcAddress(hNtLocal, "LdrLockLoaderLock"));
+    md.ldrUnlock = reinterpret_cast<MmData::fnLdrUnlock>(GetProcAddress(hNtLocal, "LdrUnlockLoaderLock"));
 
     // 6. Zero out Exception Directory in remote headers so HotSpot doesn't conflict
     DWORD exc_dir_off = dos->e_lfanew +
@@ -516,6 +601,10 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
 
     // 7. CFG Call Target Registration (P0 - T2)
     RegisterCfgCallTargets(hProc, remote_stub, kStubSz, base, nt);
+
+    // Unprotect mapped image for IAT writing & COW page creation before thread dispatch
+    DWORD old_img_prot = 0;
+    VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &old_img_prot);
 
     // 8. Thread Creation
     ScopedHandle th;
@@ -556,6 +645,20 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
         status = L"Timeout esperando stub remoto."; return false;
     }
     th.Reset();
+
+    // Restore per-section protection after IAT resolution & CRT init
+    const auto* sec_cur = IMAGE_FIRST_SECTION(nt);
+    for (UINT i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec_cur) {
+        DWORD ssz = (std::max)(sec_cur->SizeOfRawData, sec_cur->Misc.VirtualSize);
+        if (!ssz) continue;
+        bool r = (sec_cur->Characteristics & IMAGE_SCN_MEM_READ)    != 0;
+        bool w = (sec_cur->Characteristics & IMAGE_SCN_MEM_WRITE)   != 0;
+        bool x = (sec_cur->Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
+        DWORD prot = x ? (w ? PAGE_EXECUTE_READWRITE : (r ? PAGE_EXECUTE_READ : PAGE_EXECUTE))
+                       : (w ? PAGE_READWRITE          : (r ? PAGE_READONLY     : PAGE_NOACCESS));
+        DWORD old_sec_p = 0;
+        VirtualProtectEx(hProc, base + sec_cur->VirtualAddress, ssz, prot, &old_sec_p);
+    }
 
     // 10. Wipe DOS signature after CRT init completes (P3-01 order fix)
     WORD zero_dos = 0;
@@ -639,6 +742,11 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
     DWORD rvaGetProc = static_cast<DWORD>(
         reinterpret_cast<uintptr_t>(GetProcAddress(localK32, "GetProcAddress")) -
         reinterpret_cast<uintptr_t>(localK32));
+    DWORD rvaVirtProt = static_cast<DWORD>(
+        reinterpret_cast<uintptr_t>(GetProcAddress(localK32, "VirtualProtect")) -
+        reinterpret_cast<uintptr_t>(localK32));
+
+    const auto& imp_dd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
     MmData md{};
     md.base  = base;
@@ -646,11 +754,16 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
     if (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size)
         md.reloc = reinterpret_cast<PIMAGE_BASE_RELOCATION>(
             base + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
-    if (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size)
-        md.imp = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(
-            base + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
-    md.loadLib = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rvaLoadLib);
-    md.getProc = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rvaGetProc);
+    md.imp      = imp_dd.Size ? reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(
+                      base + imp_dd.VirtualAddress) : nullptr;
+    md.imp_rva  = imp_dd.VirtualAddress;
+    md.imp_size = imp_dd.Size;
+    md.loadLib  = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rvaLoadLib);
+    md.getProc  = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rvaGetProc);
+    md.virtProt = reinterpret_cast<MmData::fnVirtProt>(reinterpret_cast<BYTE*>(remoteK32) + rvaVirtProt);
+    HMODULE hNtLocal = GetModuleHandleW(L"ntdll.dll");
+    md.ldrLock   = reinterpret_cast<MmData::fnLdrLock>(GetProcAddress(hNtLocal, "LdrLockLoaderLock"));
+    md.ldrUnlock = reinterpret_cast<MmData::fnLdrUnlock>(GetProcAddress(hNtLocal, "LdrUnlockLoaderLock"));
 
     const size_t kStubSz = RealStubSize();
     ScopedRemoteMem stub_mem(hProc, nullptr,
@@ -675,6 +788,9 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
 
     // CFG Call Target Registration (P0 - T2)
     RegisterCfgCallTargets(hProc, remote_stub, kStubSz, base, nt);
+
+    DWORD old_img_prot = 0;
+    VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &old_img_prot);
 
     ScopedHandle th;
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
@@ -860,15 +976,26 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
     DWORD rvaGetProc = static_cast<DWORD>(
         reinterpret_cast<uintptr_t>(GetProcAddress(localK32, "GetProcAddress")) -
         reinterpret_cast<uintptr_t>(localK32));
+    DWORD rvaVirtProt = static_cast<DWORD>(
+        reinterpret_cast<uintptr_t>(GetProcAddress(localK32, "VirtualProtect")) -
+        reinterpret_cast<uintptr_t>(localK32));
+
+    const auto& imp_dd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 
     MmData md{};
-    md.base    = base;
-    md.nt      = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
-    md.reloc   = nullptr;
-    md.imp     = (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size) ?
-                 reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(base + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress) : nullptr;
-    md.loadLib = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rvaLoadLib);
-    md.getProc = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rvaGetProc);
+    md.base     = base;
+    md.nt       = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
+    md.reloc    = nullptr;
+    md.imp      = imp_dd.Size ? reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(
+                      base + imp_dd.VirtualAddress) : nullptr;
+    md.imp_rva  = imp_dd.VirtualAddress;
+    md.imp_size = imp_dd.Size;
+    md.loadLib  = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rvaLoadLib);
+    md.getProc  = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rvaGetProc);
+    md.virtProt = reinterpret_cast<MmData::fnVirtProt>(reinterpret_cast<BYTE*>(remoteK32) + rvaVirtProt);
+    HMODULE hNtLocal = GetModuleHandleW(L"ntdll.dll");
+    md.ldrLock   = reinterpret_cast<MmData::fnLdrLock>(GetProcAddress(hNtLocal, "LdrLockLoaderLock"));
+    md.ldrUnlock = reinterpret_cast<MmData::fnLdrUnlock>(GetProcAddress(hNtLocal, "LdrUnlockLoaderLock"));
 
     const size_t kStubSz = RealStubSize();
     ScopedRemoteMem stub_mem(hProc, nullptr,
@@ -887,6 +1014,9 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
 
     // CFG Call Target Registration (P0 - T2)
     RegisterCfgCallTargets(hProc, remote_stub, kStubSz, base, nt);
+
+    DWORD old_img_prot = 0;
+    VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &old_img_prot);
 
     ScopedHandle th;
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
@@ -930,6 +1060,20 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
         status = L"TxF: timeout stub."; return false;
     }
     th.Reset();
+
+    // Restore per-section protection after IAT resolution & CRT init
+    const auto* sec_txf = IMAGE_FIRST_SECTION(nt);
+    for (UINT i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec_txf) {
+        DWORD ssz = (std::max)(sec_txf->SizeOfRawData, sec_txf->Misc.VirtualSize);
+        if (!ssz) continue;
+        bool r = (sec_txf->Characteristics & IMAGE_SCN_MEM_READ)    != 0;
+        bool w = (sec_txf->Characteristics & IMAGE_SCN_MEM_WRITE)   != 0;
+        bool x = (sec_txf->Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
+        DWORD prot = x ? (w ? PAGE_EXECUTE_READWRITE : (r ? PAGE_EXECUTE_READ : PAGE_EXECUTE))
+                       : (w ? PAGE_READWRITE          : (r ? PAGE_READONLY     : PAGE_NOACCESS));
+        DWORD old_sec_p = 0;
+        VirtualProtectEx(hProc, base + sec_txf->VirtualAddress, ssz, prot, &old_sec_p);
+    }
 
     // T8: Zero + free stub on success
     std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);

@@ -301,6 +301,11 @@ static bool ValidatePayloadPE(const uint8_t* buf, size_t sz, std::wstring& err) 
     if (!(nt->FileHeader.Characteristics & IMAGE_FILE_DLL)) {
         err = L"PE: payload no tiene IMAGE_FILE_DLL."; return false;
     }
+    // T9: Static TLS verification — manually mapped payload must not have static TLS directory
+    if (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size > 0) {
+        err = L"PE: payload contiene directorio TLS estatico (.tls). No compatible con manual map en JVM.";
+        return false;
+    }
     // T7: Verify loader itself is not WoW64
     USHORT procMachine = 0, nativeMachine = 0;
     if (IsWow64Process2(GetCurrentProcess(), &procMachine, &nativeMachine)) {
@@ -328,7 +333,7 @@ static bool ValidateTargetArch(HANDLE hProc, std::wstring& err) {
 static HANDLE OpenTargetProcess(DWORD pid, bool* elevated) {
     constexpr DWORD kAccessMask =
         PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ |
-        PROCESS_CREATE_THREAD | PROCESS_QUERY_LIMITED_INFORMATION;
+        PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION;
 
     *elevated = false;
 

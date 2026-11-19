@@ -126,13 +126,13 @@ inline void ScrubBAM() {
         std::wstring subkey = std::wstring(bam_bases[b]) + sid;
         HKEY hKey = nullptr;
         LSTATUS st = RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
-                                   KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey);
+                                   KEY_QUERY_VALUE | KEY_WRITE, &hKey);
         // T19: If access denied, attempt privilege elevation
         if (st == ERROR_ACCESS_DENIED) {
             EnablePrivilege(SE_TAKE_OWNERSHIP_NAME);
             EnablePrivilege(SE_RESTORE_NAME);
             st = RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
-                               KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey);
+                               KEY_QUERY_VALUE | KEY_WRITE, &hKey);
         }
 
         if (st == ERROR_SUCCESS) {
@@ -174,7 +174,7 @@ inline void ScrubMuiCache() {
         L"Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\MuiCache";
     HKEY hKey = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, mui_key, 0,
-                      KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+                      KEY_QUERY_VALUE | KEY_WRITE, &hKey) == ERROR_SUCCESS) {
         FILETIME orig_ft{};
         RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
@@ -225,7 +225,7 @@ inline void ScrubUserAssist() {
         std::wstring countKeyPath = std::wstring(subName) + L"\\Count";
         HKEY hCount = nullptr;
         if (RegOpenKeyExW(hBase, countKeyPath.c_str(), 0,
-                          KEY_QUERY_VALUE | KEY_SET_VALUE, &hCount) == ERROR_SUCCESS) {
+                          KEY_QUERY_VALUE | KEY_WRITE, &hCount) == ERROR_SUCCESS) {
             FILETIME orig_ft{};
             RegQueryInfoKeyW(hCount, nullptr, nullptr, nullptr, nullptr, nullptr,
                              nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
