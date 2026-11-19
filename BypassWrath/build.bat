@@ -1,27 +1,24 @@
 @echo off
-:: build.bat -- configura CMake y compila BypassWrath (Release x64).
-:: Requiere: Visual Studio 2022 (cualquier edicion), CMake en PATH.
+:: build.bat -- configura CMake y compila BypassWrath (Release x64, VS18).
 setlocal
 
 set ROOT=%~dp0
 set BUILD=%ROOT%build
-set BIN=%ROOT%bin
+set BIN=%ROOT%bin\Release
 
-echo [*] Configurando CMake...
-cmake -B "%BUILD%" -S "%ROOT%" -G "Visual Studio 18 2026" -A x64 -DCMAKE_BUILD_TYPE=Release
-if errorlevel 1 (
-    echo [!] cmake configure fallo.
-    exit /b 1
+if exist "%BUILD%\CMakeCache.txt" (
+    echo [*] Cache existente, usando build incremental.
+) else (
+    echo [*] Configurando CMake...
+    cmake -B "%BUILD%" -S "%ROOT%" -G "Visual Studio 18 2026" -A x64
+    if errorlevel 1 ( echo [!] cmake configure fallo. & exit /b 1 )
 )
 
 echo [*] Compilando...
 cmake --build "%BUILD%" --config Release --parallel
-if errorlevel 1 (
-    echo [!] cmake build fallo.
-    exit /b 1
-)
+if errorlevel 1 ( echo [!] cmake build fallo. & exit /b 1 )
 
 echo.
-echo [+] Build completo. Archivos en: %BIN%
+echo [+] Build completo:
 dir "%BIN%\*.exe" "%BIN%\*.dll" 2>nul
 endlocal

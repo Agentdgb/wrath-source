@@ -1,34 +1,30 @@
-// DllMain.cpp -- bypass_payload.dll entry point (BypassWrath payload).
-// Manual-mapped into javaw.exe: CRT initialized by _DllMainCRTStartup
-// (called by RemoteStub via AddressOfEntryPoint).
-// DllMain spawns a thread that calls PayloadMain; no JNI, no game modules.
+// DllMain.cpp -- P1-01: g_hSelfBase, P1-04: TlsThreadCreate for PayloadThread.
 
 #include <windows.h>
+#include <new>
+#include "TlsThread.h"
 
-// Forward declaration -- defined in Payload.cpp
-void PayloadMain();
+HMODULE g_hSelfBase = nullptr;
+
+void PayloadMain(HMODULE hBase);
 
 namespace {
 
 DWORD WINAPI PayloadThread(LPVOID) {
-    // Brief yield: let JVM finish any pending safepoint before we touch GL.
-    // 500ms is enough for Zulu 21 HotSpot to settle after attach.
     Sleep(500);
     __try {
-        PayloadMain();
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        // Swallow -- never let an unhandled exception propagate into JVM.
-    }
+        PayloadMain(g_hSelfBase);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
     return 0;
 }
 
 } // namespace
 
-BOOL APIENTRY DllMain(HMODULE /*hMod*/, DWORD reason, LPVOID /*reserved*/) {
+BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID /*reserved*/) {
     if (reason == DLL_PROCESS_ATTACH) {
-        // Raw CreateThread -- safe under loader lock (thread is queued, not
-        // dispatched until loader lock releases).
-        HANDLE t = CreateThread(nullptr, 0, PayloadThread, nullptr, 0, nullptr);
+        g_hSelfBase = hMod;
+        // P1-04: use TlsThreadCreate so PayloadThread gets DLL_THREAD_ATTACH/DETACH
+        HANDLE t = payload::TlsThreadCreate(PayloadThread, nullptr);
         if (t) CloseHandle(t);
     }
     return TRUE;

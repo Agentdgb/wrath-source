@@ -1,7 +1,9 @@
 #pragma once
 // StealthDefs.h -- NT typedefs for the injection pipeline.
-// THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER=0x4 hides the thread from debugger
-// enumeration and from most screenshare scanner thread-list walks.
+// THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER=0x4: hides the remote thread from
+// debugger enumeration and from most screenshare scanner thread-list walks.
+// NtCreateThreadEx is called with this flag in ManualMap.h (both RAM and TxF
+// paths). The flag is set in the CreateFlags parameter (not DesiredAccess).
 
 #include <windows.h>
 #include <cstdint>

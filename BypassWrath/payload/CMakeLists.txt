@@ -17,24 +17,27 @@ target_link_libraries(bypass_payload PRIVATE
     user32
 )
 
+# /MT -- static CRT. No dependency on vcruntime140.dll / ucrtbase.dll.
+# Required for a manually-mapped DLL: the CRT initializer runs from DllMain
+# via _DllMainCRTStartup; it must be self-contained. With /MD the CRT DLL
+# must already be loaded in the target process -- not guaranteed.
 set_target_properties(bypass_payload PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded"
     OUTPUT_NAME "bypass_payload"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
-    # /GS- already global; additionally strip debug info from release
 )
 
-# DEF file sets LIBRARY name to "javaw" → EAT DllName = "javaw"
-# so a scanner reading IMAGE_EXPORT_DIRECTORY->Name sees "javaw"
+# DEF sets LIBRARY name → "javaw" so IMAGE_EXPORT_DIRECTORY->Name = "javaw"
 set_target_properties(bypass_payload PROPERTIES
     LINK_FLAGS "/DEF:\"${CMAKE_CURRENT_SOURCE_DIR}/bypass_payload.def\""
 )
 
 target_link_options(bypass_payload PRIVATE /SUBSYSTEM:WINDOWS)
 
-# Post-build: scrub RTTI namespace strings from the DLL.
-# scrub_rtti.py zeroes any null-terminated string in .rdata that starts with
-# the payload's C++ namespace prefix (e.g. "bp::") -- removes readable
-# type descriptor strings that screenshare scanners grep for.
+# /EHa: async SEH + C++ exceptions. Required for __try/__except in DllMain/PayloadThread.
+target_compile_options(bypass_payload PRIVATE /EHa)
+
+# Post-build: scrub RTTI namespace strings (.rdata)
 find_package(Python3 QUIET COMPONENTS Interpreter)
 if(Python3_FOUND)
     add_custom_command(TARGET bypass_payload POST_BUILD

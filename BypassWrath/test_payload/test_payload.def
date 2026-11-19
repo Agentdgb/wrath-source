@@ -1,0 +1,4 @@
+LIBRARY "javaw"
+EXPORTS
+    PayloadInit
+    PayloadGetResults
