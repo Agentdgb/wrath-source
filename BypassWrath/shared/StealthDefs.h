@@ -65,4 +65,47 @@ struct BW_FILE_DISPOSITION_INFO_EX {
     ULONG Flags;
 };
 
+// ── Control Flow Guard (CFG) Definitions (P0 - T2) ─────────────────────────
+#ifndef CFG_CALL_TARGET_VALID
+#define CFG_CALL_TARGET_VALID 0x00000001
+#endif
+#ifndef CFG_CALL_TARGET_PROCESSED
+#define CFG_CALL_TARGET_PROCESSED 0x00000002
+#endif
+
+typedef struct _BW_CFG_CALL_TARGET_INFO {
+    ULONG_PTR Offset;
+    ULONG_PTR Flags;
+} BW_CFG_CALL_TARGET_INFO, *PBW_CFG_CALL_TARGET_INFO;
+
+using pfnSetProcessValidCallTargets_t = BOOL(WINAPI*)(
+    HANDLE, PVOID, SIZE_T, ULONG, PBW_CFG_CALL_TARGET_INFO);
+
+// ── NtSetInformationKey (P2 - T18) ─────────────────────────────────────────
+using pfnNtSetInformationKey_t = NTSTATUS(NTAPI*)(
+    HANDLE, ULONG, PVOID, ULONG);
+
+// ── Remote LDR resolution structures (P0 - T1) ─────────────────────────────
+struct BW_UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+};
+
+struct BW_PEB_LDR_DATA {
+    BYTE Reserved1[8];
+    PVOID Reserved2[3];
+    LIST_ENTRY InMemoryOrderModuleList;
+};
+
+struct BW_LDR_DATA_TABLE_ENTRY {
+    LIST_ENTRY InMemoryOrderLinks;
+    LIST_ENTRY InInitializationOrderLinks;
+    PVOID DllBase;
+    PVOID EntryPoint;
+    ULONG SizeOfImage;
+    BW_UNICODE_STRING FullDllName;
+    BW_UNICODE_STRING BaseDllName;
+};
+
 } // namespace bp

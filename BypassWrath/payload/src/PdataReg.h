@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 
 namespace bp {
 
@@ -41,6 +42,12 @@ inline DynamicPdata RegisterOwnPdata(HMODULE hBase) {
     }
 
     if (res.table && res.count) {
+        // T12: Ensure .pdata RUNTIME_FUNCTION entries are strictly ordered by BeginAddress
+        std::sort(res.table, res.table + res.count,
+                  [](const RUNTIME_FUNCTION& a, const RUNTIME_FUNCTION& b) {
+                      return a.BeginAddress < b.BeginAddress;
+                  });
+
         using pfnRtlAddFunctionTable_t =
             BOOLEAN(NTAPI*)(PRUNTIME_FUNCTION, DWORD, DWORD64);
         HMODULE hNt = GetModuleHandleW(L"ntdll.dll");

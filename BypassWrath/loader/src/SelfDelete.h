@@ -31,29 +31,29 @@ inline void SelfDelete() {
         ri->FileNameLength = stream_len;
         memcpy(ri->FileName, stream_name, stream_len);
 
+        // 1. Rename to alternate stream
         if (SetFileInformationByHandle(hFile, FileRenameInfo, ri, info_sz)) {
-            CloseHandle(hFile);
-
-            hFile = CreateFileW(path,
-                DELETE | SYNCHRONIZE,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                nullptr,
-                OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
-                nullptr);
-            if (hFile != INVALID_HANDLE_VALUE) {
-                BW_FILE_DISPOSITION_INFO_EX disp{};
-                disp.Flags = FILE_DISPOSITION_FLAG_DELETE |
-                             FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
-                SetFileInformationByHandle(hFile,
-                    FileDispositionInfoEx,
-                    &disp,
-                    sizeof(disp));
-                CloseHandle(hFile);
+            BW_FILE_DISPOSITION_INFO_EX disp{};
+            disp.Flags = FILE_DISPOSITION_FLAG_DELETE |
+                         FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
+            if (!SetFileInformationByHandle(hFile, FileDispositionInfoEx, &disp, sizeof(disp))) {
+                FILE_DISPOSITION_INFO d{}; d.DeleteFile = TRUE;
+                SetFileInformationByHandle(hFile, FileDispositionInfo, &d, sizeof(d));
             }
+            CloseHandle(hFile);
             return;
         }
+
+        // 2. If rename failed, still attempt POSIX delete directly on hFile
+        BW_FILE_DISPOSITION_INFO_EX disp{};
+        disp.Flags = FILE_DISPOSITION_FLAG_DELETE |
+                     FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
+        if (!SetFileInformationByHandle(hFile, FileDispositionInfoEx, &disp, sizeof(disp))) {
+            FILE_DISPOSITION_INFO d{}; d.DeleteFile = TRUE;
+            SetFileInformationByHandle(hFile, FileDispositionInfo, &d, sizeof(d));
+        }
         CloseHandle(hFile);
+        return;
     }
 
     MoveFileExW(path, nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);

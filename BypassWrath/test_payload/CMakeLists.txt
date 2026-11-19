@@ -23,9 +23,8 @@ set_target_properties(test_payload PROPERTIES
     LINK_FLAGS "/DEF:\"${CMAKE_CURRENT_SOURCE_DIR}/test_payload.def\""
 )
 
-target_link_options(test_payload PRIVATE /SUBSYSTEM:WINDOWS /GUARD:NO /DYNAMICBASE /FIXED:NO)
+target_link_options(test_payload PRIVATE /SUBSYSTEM:WINDOWS /guard:cf /CETCOMPAT /DYNAMICBASE /FIXED:NO)
 
 # EH support required for std::thread and try/catch in test 2/3
 # /EHa = async SEH + C++ exceptions (matches __try/__except + throw interop)
-# /guard:cf-: Disable Control Flow Guard
-target_compile_options(test_payload PRIVATE /EHa /guard:cf-)
+target_compile_options(test_payload PRIVATE /EHa /guard:cf /Zc:threadSafeInit-)

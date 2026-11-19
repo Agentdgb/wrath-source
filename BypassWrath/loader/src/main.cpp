@@ -1,13 +1,17 @@
 // main.cpp -- BypassWrath loader.
 //
 // Compile-time variant:
-//   BP_SILENT=1 → SUBSYSTEM:WINDOWS, no console, no output  (deploy)
-//   BP_SILENT=0 → SUBSYSTEM:CONSOLE, wprintf to stdout       (debug)
+//   BP_SILENT=1 -> SUBSYSTEM:WINDOWS, no console, no output  (deploy)
+//   BP_SILENT=0 -> SUBSYSTEM:CONSOLE, wprintf to stdout       (debug)
 //
-// CLI flags (debug variant only; silent variant ignores argv):
-//   [path]   Path to payload DLL. Default: bypass_payload.dll next to exe.
-//   --txf    Use TxF (SEC_IMAGE) path instead of RAM path.
-//            TxF is NOT the automatic fallback; it must be requested explicitly.
+// CLI flags (both variants, parsed via GetCommandLineW):
+//   --scrub <pid>   Child-scrub mode: wait for <pid> to exit, then scrub
+//                   Prefetch/WER/BAM/MuiCache/UserAssist and self-delete.
+//   --log           Write operational log to %TEMP%\wrath_<ownpid>.log
+//                   (cleaned up by ScrubberMain).
+//   [path]          (debug only) Path to payload DLL.
+//   --txf           (debug only) Force TxF path.
+//   --ram           (debug only) Force in-memory path.
 //
 // Deploy name: RuntimeBroker.exe  (OriginalFilename in version resource must match)
 
@@ -49,18 +53,34 @@ static void InitWerSuppression() {
 static constexpr const wchar_t* kTargetProcess  = L"javaw.exe";
 static constexpr const wchar_t* kDefaultPayload = L"bypass_payload.dll";
 static constexpr DWORD           kPollMs         = 500;
-static constexpr DWORD           kMaxWaitMs      = 60000;
+static constexpr DWORD           kMaxWaitMs      = 60'000;
 
-// Minecraft command-line markers (case-insensitive wcsstr search).
-// A javaw.exe that has neither is not a Minecraft instance.
-static constexpr const wchar_t* kMcMarker1 = L"-Djava.class.path";
-static constexpr const wchar_t* kMcMarker2 = L"minecraft";
+// ── T22: Optional file log (populated only if --log is present) ─────────────
+static std::wstring g_log_path;
 
-// ── Output (no-ops in silent build) ────────────────────────────────────────
+static void LogLine(const wchar_t* fmt, ...) {
+    if (g_log_path.empty()) return;
+    wchar_t buf[1024]{};
+    va_list va;
+    va_start(va, fmt);
+    _vsnwprintf_s(buf, _countof(buf), _TRUNCATE, fmt, va);
+    va_end(va);
+    // Append to file
+    HANDLE h = CreateFileW(g_log_path.c_str(),
+        FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(h, buf, static_cast<DWORD>(wcslen(buf) * sizeof(wchar_t)), &written, nullptr);
+        CloseHandle(h);
+    }
+}
+
+// Output: debug console (silent build: no-ops)
 #if BP_SILENT
-#  define LOG(fmt, ...) (void)0
+#  define LOG(fmt, ...) LogLine(fmt, ##__VA_ARGS__)
 #else
-#  define LOG(fmt, ...) wprintf(fmt, ##__VA_ARGS__)
+#  define LOG(fmt, ...) do { wprintf(fmt, ##__VA_ARGS__); LogLine(fmt, ##__VA_ARGS__); } while(0)
 #endif
 
 // ── NT types needed for PEB/cmdline read (P3-04) ───────────────────────────
@@ -84,15 +104,14 @@ struct BW_PEB {
     PVOID Reserved3[2];
     PVOID Ldr;
     BW_RTL_USER_PROCESS_PARAMETERS* ProcessParameters;
-    // rest not needed
 };
 
 struct BW_PROCESS_BASIC_INFORMATION {
-    PVOID  Reserved1;
-    BW_PEB* PebBaseAddress;
-    PVOID  Reserved2[2];
+    PVOID     Reserved1;
+    BW_PEB*   PebBaseAddress;
+    PVOID     Reserved2[2];
     ULONG_PTR UniqueProcessId;
-    PVOID  Reserved3;
+    PVOID     Reserved3;
 };
 
 using pfnNtQIP_t = LONG(NTAPI*)(HANDLE, DWORD, PVOID, ULONG, PULONG);
@@ -106,8 +125,8 @@ static void EnableDebugPrivilege() {
     TOKEN_PRIVILEGES tp{};
     if (LookupPrivilegeValueW(nullptr, L"SeDebugPrivilege",
                                &tp.Privileges[0].Luid)) {
-        tp.PrivilegeCount              = 1;
-        tp.Privileges[0].Attributes   = SE_PRIVILEGE_ENABLED;
+        tp.PrivilegeCount             = 1;
+        tp.Privileges[0].Attributes  = SE_PRIVILEGE_ENABLED;
         AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr);
     }
     CloseHandle(hToken);
@@ -121,19 +140,38 @@ static void DropDebugPrivilege() {
     TOKEN_PRIVILEGES tp{};
     if (LookupPrivilegeValueW(nullptr, L"SeDebugPrivilege",
                                &tp.Privileges[0].Luid)) {
-        tp.PrivilegeCount              = 1;
-        tp.Privileges[0].Attributes   = SE_PRIVILEGE_REMOVED;
+        tp.PrivilegeCount             = 1;
+        tp.Privileges[0].Attributes  = SE_PRIVILEGE_REMOVED;
         AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr);
     }
     CloseHandle(hToken);
 }
 
-// ── P3-04: FindPid with Minecraft command-line filter ───────────────────────
-// Reads PEB.ProcessParameters.CommandLine for every javaw.exe via
-// NtQueryInformationProcess + ReadProcessMemory.
-// Returns 0 on 0 or >1 candidates (logs them).
-struct McCandidate { DWORD pid; std::wstring cmdline_fragment; };
+// ── T6: Scoring heuristics for Minecraft javaw.exe candidates ───────────────
+// Highest score wins. Abort only on tie at top score among 2+ candidates.
+struct McCandidate {
+    DWORD        pid;
+    int          score;
+    std::wstring cmdline_fragment;
+};
 
+static int ScoreMinecraftCmdLine(const std::wstring& lower) {
+    int s = 0;
+    // Strong marker: actual Minecraft main class
+    if (lower.find(L"net.minecraft.client.main.main") != std::wstring::npos) s += 3;
+    // Native library path indicates game, not launcher JVM
+    if (lower.find(L"-djava.library.path") != std::wstring::npos &&
+        lower.find(L"natives") != std::wstring::npos) s += 2;
+    // .minecraft in cmdline
+    if (lower.find(L".minecraft") != std::wstring::npos) s += 2;
+    // class path marker (weaker — launchers set this too)
+    if (lower.find(L"-djava.class.path") != std::wstring::npos) s += 1;
+    // Generic minecraft string as fallback
+    if (s == 0 && lower.find(L"minecraft") != std::wstring::npos) s += 1;
+    return s;
+}
+
+// ── P3-04 + T6: FindMinecraftPids with scoring ──────────────────────────────
 static std::vector<McCandidate> FindMinecraftPids() {
     HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
     if (!hNt) return {};
@@ -153,7 +191,6 @@ static std::vector<McCandidate> FindMinecraftPids() {
         if (_wcsicmp(pe.szExeFile, L"javaw.exe") != 0) continue;
         DWORD pid = pe.th32ProcessID;
 
-        // Open with minimal rights for PEB read
         HANDLE hProc = OpenProcess(
             PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
             FALSE, pid);
@@ -165,7 +202,6 @@ static std::vector<McCandidate> FindMinecraftPids() {
                         &pbi, sizeof(pbi), &ret_len);
         if (st < 0 || !pbi.PebBaseAddress) { CloseHandle(hProc); continue; }
 
-        // Read PEB
         BW_PEB peb{};
         SIZE_T rd = 0;
         if (!ReadProcessMemory(hProc, pbi.PebBaseAddress,
@@ -173,7 +209,6 @@ static std::vector<McCandidate> FindMinecraftPids() {
             CloseHandle(hProc); continue;
         }
 
-        // Read RTL_USER_PROCESS_PARAMETERS pointer
         BW_RTL_USER_PROCESS_PARAMETERS params{};
         if (!peb.ProcessParameters ||
             !ReadProcessMemory(hProc, peb.ProcessParameters,
@@ -181,8 +216,7 @@ static std::vector<McCandidate> FindMinecraftPids() {
             CloseHandle(hProc); continue;
         }
 
-        // Read CommandLine buffer (cap at 4096 wchars)
-        USHORT cmd_len = params.CommandLine.Length; // bytes
+        USHORT cmd_len = params.CommandLine.Length;
         if (!params.CommandLine.Buffer || cmd_len == 0) {
             CloseHandle(hProc); continue;
         }
@@ -196,16 +230,14 @@ static std::vector<McCandidate> FindMinecraftPids() {
         }
         CloseHandle(hProc);
 
-        // Case-insensitive check: either marker must appear
         std::wstring lower = cmdline;
         for (auto& c : lower) c = towlower(c);
-        bool is_mc = (lower.find(L"-djava.class.path") != std::wstring::npos)
-                  || (lower.find(L"minecraft")         != std::wstring::npos);
-        if (!is_mc) continue;
 
-        // Keep first 120 chars as fragment for disambiguation log
+        int score = ScoreMinecraftCmdLine(lower);
+        if (score == 0) continue; // not a Minecraft JVM
+
         std::wstring frag = cmdline.substr(0, (std::min)((size_t)120, cmdline.size()));
-        results.push_back({ pid, std::move(frag) });
+        results.push_back({ pid, score, std::move(frag) });
 
     } while (Process32NextW(snap, &pe));
 
@@ -213,6 +245,25 @@ static std::vector<McCandidate> FindMinecraftPids() {
     return results;
 }
 
+// Returns the single best candidate, or {0,0,""} on failure.
+// Tie-break: if two candidates share the max score, abort.
+static McCandidate PickBestCandidate(std::vector<McCandidate>& candidates) {
+    if (candidates.empty()) return { 0, 0, L"" };
+    if (candidates.size() == 1) return candidates[0];
+
+    // Sort descending by score
+    std::sort(candidates.begin(), candidates.end(),
+              [](const McCandidate& a, const McCandidate& b) {
+                  return a.score > b.score;
+              });
+
+    // Tie at top score → ambiguous
+    if (candidates[0].score == candidates[1].score) return { 0, 0, L"" };
+
+    return candidates[0];
+}
+
+// ── File helpers ─────────────────────────────────────────────────────────────
 static std::vector<uint8_t> LoadFile(const std::wstring& path) {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f) return {};
@@ -230,21 +281,27 @@ static std::wstring ExeDir() {
     return (sep != std::wstring::npos) ? p.substr(0, sep) : L".";
 }
 
+static std::wstring ExePath() {
+    wchar_t buf[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    return std::wstring(buf);
+}
+
 // ── P3-06: PE validation ─────────────────────────────────────────────────────
 static bool ValidatePayloadPE(const uint8_t* buf, size_t sz, std::wstring& err) {
-    if (sz < sizeof(IMAGE_DOS_HEADER)) { err = L"PE: demasiado pequeño."; return false; }
+    if (sz < sizeof(IMAGE_DOS_HEADER)) { err = L"PE: demasiado pequeno."; return false; }
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) { err = L"PE: firma DOS invalida."; return false; }
     if (dos->e_lfanew + sizeof(IMAGE_NT_HEADERS) > sz) { err = L"PE: e_lfanew fuera de rango."; return false; }
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) { err = L"PE: firma NT invalida."; return false; }
     if (nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) {
-        err = L"PE: payload no es x64 (Machine mismatch)."; return false;
+        err = L"PE: payload no es x64."; return false;
     }
     if (!(nt->FileHeader.Characteristics & IMAGE_FILE_DLL)) {
         err = L"PE: payload no tiene IMAGE_FILE_DLL."; return false;
     }
-    // Loader must NOT be WoW64 (would fail to open an x64 process)
+    // T7: Verify loader itself is not WoW64
     USHORT procMachine = 0, nativeMachine = 0;
     if (IsWow64Process2(GetCurrentProcess(), &procMachine, &nativeMachine)) {
         if (procMachine != IMAGE_FILE_MACHINE_UNKNOWN) {
@@ -254,157 +311,192 @@ static bool ValidatePayloadPE(const uint8_t* buf, size_t sz, std::wstring& err) 
     return true;
 }
 
-// ── Entry ────────────────────────────────────────────────────────────────────
-
-#if BP_SILENT
-// Silent variant: WinMain, no console, no argv parsing.
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
-    InitWerSuppression();
-
-    // P4-01: Load encrypted payload directly from RCDATA resource (zero disk touch)
-    std::vector<uint8_t> dll_bytes;
-    HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
-    if (hRes) {
-        HGLOBAL hGlob = LoadResource(nullptr, hRes);
-        if (hGlob) {
-            LPVOID pData = LockResource(hGlob);
-            DWORD resSz = SizeofResource(nullptr, hRes);
-            if (pData && resSz > 0) {
-                dll_bytes.resize(resSz);
-                memcpy(dll_bytes.data(), pData, resSz);
-                bp::DecryptPayload(dll_bytes.data(), dll_bytes.size());
-            }
+// ── T7: Validate target is native x64, not WoW64 ─────────────────────────────
+static bool ValidateTargetArch(HANDLE hProc, std::wstring& err) {
+    USHORT procMachine = 0, nativeMachine = 0;
+    if (IsWow64Process2(hProc, &procMachine, &nativeMachine)) {
+        if (procMachine != IMAGE_FILE_MACHINE_UNKNOWN) {
+            err = L"Target es WoW64 (32-bit) -- no compatible con loader x64.";
+            return false;
         }
     }
-
-    // Fallback: load from disk if resource absent
-    if (dll_bytes.empty()) {
-        std::wstring payload_path = ExeDir() + L"\\" + kDefaultPayload;
-        if (std::filesystem::exists(payload_path)) {
-            dll_bytes = LoadFile(payload_path);
-        }
-    }
-    if (dll_bytes.empty()) return 1;
-
-    std::wstring pe_err;
-    if (!ValidatePayloadPE(dll_bytes.data(), dll_bytes.size(), pe_err)) return 1;
-
-    // P3-05
-    EnableDebugPrivilege();
-
-    // P3-04: find exactly one Minecraft javaw.exe
-    auto candidates = FindMinecraftPids();
-    if (candidates.size() != 1) { DropDebugPrivilege(); return 1; }
-    DWORD pid = candidates[0].pid;
-
-    HANDLE hProc = OpenProcess(
-        PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ |
-        PROCESS_CREATE_THREAD | PROCESS_QUERY_LIMITED_INFORMATION,
-        FALSE, pid);
-    if (!hProc) { DropDebugPrivilege(); return 1; }
-
-    std::wstring status;
-    bool ok = bp::ManualMapFileBacked(hProc, dll_bytes.data(), dll_bytes.size(), status);
-    CloseHandle(hProc);
-
-    // P4-02: Scrub execution artifacts before exiting
-    bp::ScrubAllTraces();
-
-    // P3-05: drop privilege immediately after inject
-    DropDebugPrivilege();
-
-    // P4-03: Self-delete the loader executable from disk
-    bp::SelfDelete();
-
-    return ok ? 0 : 1;
+    return true;
 }
 
-#else
-// Debug variant: wmain, console, full output, --txf flag.
-int wmain(int argc, wchar_t** argv) {
-    InitWerSuppression();
-    std::wstring payload_path;
-    bool use_txf = false;
-    bool use_ram = false;
+// ── T15: Try OpenProcess without SeDebug first ───────────────────────────────
+// Returns valid handle or nullptr. Sets *elevated if SeDebug was needed.
+static HANDLE OpenTargetProcess(DWORD pid, bool* elevated) {
+    constexpr DWORD kAccessMask =
+        PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ |
+        PROCESS_CREATE_THREAD | PROCESS_QUERY_LIMITED_INFORMATION;
 
-    for (int i = 1; i < argc; ++i) {
-        if (_wcsicmp(argv[i], L"--txf") == 0) {
-            use_txf = true;
-        } else if (_wcsicmp(argv[i], L"--ram") == 0) {
-            use_ram = true;
-        } else {
-            payload_path = argv[i];
-        }
+    *elevated = false;
+
+    // First attempt: without SeDebug
+    HANDLE h = OpenProcess(kAccessMask, FALSE, pid);
+    if (h) return h;
+
+    DWORD err = GetLastError();
+    if (err != ERROR_ACCESS_DENIED) return nullptr; // some other error
+
+    // Second attempt: with SeDebug
+    EnableDebugPrivilege();
+    *elevated = true;
+    h = OpenProcess(kAccessMask, FALSE, pid);
+    return h; // nullptr if still fails
+}
+
+// ── T4: Scrub child launcher ─────────────────────────────────────────────────
+// Spawns a detached child process with --scrub <own_pid> [--log <path>].
+// The child waits for us to exit, then scrubs Prefetch and self-deletes.
+static void LaunchScrubChild(const std::wstring& log_path) {
+    wchar_t own_path[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, own_path, MAX_PATH);
+
+    DWORD own_pid = GetCurrentProcessId();
+
+    std::wstring cmdline = L"\"";
+    cmdline += own_path;
+    cmdline += L"\" --scrub ";
+    cmdline += std::to_wstring(own_pid);
+    if (!log_path.empty()) {
+        cmdline += L" --log \"";
+        cmdline += log_path;
+        cmdline += L"\"";
     }
-    if (payload_path.empty())
-        payload_path = ExeDir() + L"\\" + kDefaultPayload;
 
-    std::vector<uint8_t> dll_bytes;
-    if (std::filesystem::exists(payload_path)) {
-        dll_bytes = LoadFile(payload_path);
-        LOG(L"[+] Payload cargado desde disco: %s (%zu bytes)\n", payload_path.c_str(), dll_bytes.size());
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+
+    // CREATE_NO_WINDOW + DETACHED_PROCESS: child survives our exit
+    if (CreateProcessW(own_path, cmdline.data(),
+                       nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW | DETACHED_PROCESS,
+                       nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
+// ── T4: Parse --scrub <pid> and optional --log <path> from cmdline ───────────
+// Returns true if --scrub was found; sets out_pid and out_log.
+static bool ParseScrubArgs(const wchar_t* cmdline, DWORD* out_pid, std::wstring* out_log) {
+    if (!cmdline) return false;
+    *out_pid = 0;
+    out_log->clear();
+
+    // Simple linear scan; not using CommandLineToArgvW to avoid shell32 load
+    const wchar_t* p = cmdline;
+
+    // skip executable token (may be quoted)
+    if (*p == L'"') {
+        ++p;
+        while (*p && *p != L'"') ++p;
+        if (*p) ++p;
     } else {
-        HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
-        if (hRes) {
-            HGLOBAL hGlob = LoadResource(nullptr, hRes);
-            if (hGlob) {
-                LPVOID pData = LockResource(hGlob);
-                DWORD resSz = SizeofResource(nullptr, hRes);
-                if (pData && resSz > 0) {
-                    dll_bytes.resize(resSz);
-                    memcpy(dll_bytes.data(), pData, resSz);
-                    bp::DecryptPayload(dll_bytes.data(), dll_bytes.size());
-                    LOG(L"[+] Payload extraido de RCDATA embebido (%zu bytes)\n", dll_bytes.size());
-                }
+        while (*p && *p != L' ') ++p;
+    }
+
+    while (*p == L' ') ++p;
+
+    // tokenise rest
+    std::vector<std::wstring> tokens;
+    while (*p) {
+        std::wstring tok;
+        bool quoted = (*p == L'"');
+        if (quoted) ++p;
+        while (*p && (quoted ? *p != L'"' : *p != L' ')) tok += *p++;
+        if (quoted && *p) ++p;
+        while (*p == L' ') ++p;
+        tokens.push_back(std::move(tok));
+    }
+
+    bool found_scrub = false;
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (_wcsicmp(tokens[i].c_str(), L"--scrub") == 0) {
+            if (i + 1 < tokens.size()) {
+                *out_pid = static_cast<DWORD>(_wtoi(tokens[i + 1].c_str()));
+                ++i;
+                found_scrub = true;
+            }
+        } else if (_wcsicmp(tokens[i].c_str(), L"--log") == 0) {
+            if (i + 1 < tokens.size()) {
+                *out_log = tokens[i + 1];
+                ++i;
             }
         }
     }
+    return found_scrub && (*out_pid != 0);
+}
 
-    if (dll_bytes.empty()) {
-        LOG(L"[!] Payload no encontrado ni en disco ni en RCDATA: %s\n", payload_path.c_str());
-        LOG(L"    Uso: BypassLoaderDbg.exe [ruta_dll] [--txf] [--ram]\n");
-        return 1;
-    }
+// ── T22: Build log path from %TEMP%\wrath_<pid>.log ──────────────────────────
+static std::wstring BuildLogPath() {
+    wchar_t temp[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp);
+    std::wstring path(temp);
+    path += L"wrath_";
+    path += std::to_wstring(GetCurrentProcessId());
+    path += L".log";
+    return path;
+}
 
-    // P3-06: validate PE before touching any process
+// ── T22: Check if --log flag present in cmdline ──────────────────────────────
+static bool ParseLogFlag(const wchar_t* cmdline) {
+    if (!cmdline) return false;
+    return (wcsstr(cmdline, L"--log") != nullptr);
+}
+
+// ── Core injection flow (shared by both variants) ────────────────────────────
+// Returns 0 on success, non-zero on failure.
+static int RunInject(std::vector<uint8_t>& dll_bytes, bool use_txf, bool use_ram) {
+    // P3-06: validate PE
     std::wstring pe_err;
     if (!ValidatePayloadPE(dll_bytes.data(), dll_bytes.size(), pe_err)) {
         LOG(L"[!] %s\n", pe_err.c_str());
         return 1;
     }
 
-    LOG(L"[*] Ruta de inyeccion: %s\n",
-        use_txf ? L"TxF (SEC_IMAGE)" : (use_ram ? L"RAM (ManualMap)" : L"SEC_IMAGE + POSIX delete"));
-
-    // P3-05: elevate before OpenProcess
-    EnableDebugPrivilege();
-
-    // P3-04: find Minecraft javaw.exe by command line
+    // T5: polling loop — wait up to kMaxWaitMs for Minecraft to appear
     LOG(L"[*] Buscando javaw.exe con Minecraft...\n");
-    auto candidates = FindMinecraftPids();
-
-    if (candidates.empty()) {
-        LOG(L"[!] No se encontro javaw.exe con Minecraft en cmdline.\n");
-        DropDebugPrivilege();
-        return 1;
+    std::vector<McCandidate> candidates;
+    DWORD waited = 0;
+    while (true) {
+        candidates = FindMinecraftPids();
+        if (!candidates.empty()) break;
+        if (waited >= kMaxWaitMs) {
+            LOG(L"[!] Timeout: no se encontro javaw.exe con Minecraft en %u ms.\n", kMaxWaitMs);
+            return 1;
+        }
+        Sleep(kPollMs);
+        waited += kPollMs;
     }
-    if (candidates.size() > 1) {
-        LOG(L"[!] Multiples instancias de Minecraft -- ambiguo:\n");
+
+    // T6: pick best candidate by score
+    McCandidate best = PickBestCandidate(candidates);
+    if (best.pid == 0) {
+        LOG(L"[!] Multiples instancias ambiguas (empate de score):\n");
         for (auto& c : candidates)
-            LOG(L"    PID=%u  %s\n", c.pid, c.cmdline_fragment.c_str());
-        DropDebugPrivilege();
+            LOG(L"    PID=%u  score=%d  %s\n", c.pid, c.score, c.cmdline_fragment.c_str());
         return 1;
     }
-    DWORD pid = candidates[0].pid;
-    LOG(L"[+] Objetivo: javaw.exe PID=%u\n", pid);
+    LOG(L"[+] Objetivo: javaw.exe PID=%u (score=%d)\n", best.pid, best.score);
 
-    HANDLE hProc = OpenProcess(
-        PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ |
-        PROCESS_CREATE_THREAD | PROCESS_QUERY_LIMITED_INFORMATION,
-        FALSE, pid);
+    // T15: try without SeDebug first
+    bool elevated = false;
+    HANDLE hProc = OpenTargetProcess(best.pid, &elevated);
     if (!hProc) {
         LOG(L"[!] OpenProcess fallo (error=%u). Ejecuta como Admin.\n", GetLastError());
-        DropDebugPrivilege();
+        return 1;
+    }
+    LOG(L"[*] SeDebug: %s\n", elevated ? L"elevado" : L"no necesario");
+
+    // T7: verify target is native x64
+    std::wstring arch_err;
+    if (!ValidateTargetArch(hProc, arch_err)) {
+        LOG(L"[!] %s\n", arch_err.c_str());
+        CloseHandle(hProc);
+        if (elevated) DropDebugPrivilege();
         return 1;
     }
 
@@ -424,22 +516,153 @@ int wmain(int argc, wchar_t** argv) {
 
     CloseHandle(hProc);
 
-    // P4-02: Scrub execution artifacts before exiting
-    bp::ScrubAllTraces();
+    // P3-05: drop privilege immediately after inject
+    if (elevated) DropDebugPrivilege();
 
-    // P3-05: drop privilege after inject
-    DropDebugPrivilege();
+    LOG(L"[%s] %s\n", ok ? L"+" : L"!", status.c_str());
+    return ok ? 0 : 2;
+}
 
-    if (ok) {
-        LOG(L"[+] %s\n", status.c_str());
-        LOG(L"[+] Listo. Presiona Enter para salir.\n");
-        getchar();
+// ═══════════════════════════════════════════════════════════════════════════════
+// Entry points
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#if BP_SILENT
+// ── Silent variant (RuntimeBroker.exe) ──────────────────────────────────────
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
+    InitWerSuppression();
+
+    const wchar_t* cmdline = GetCommandLineW();
+
+    // T4: --scrub child mode — handle before anything else
+    DWORD scrub_pid = 0;
+    std::wstring scrub_log;
+    if (ParseScrubArgs(cmdline, &scrub_pid, &scrub_log)) {
+        bp::ScrubberMain(scrub_pid, scrub_log);
         return 0;
-    } else {
-        LOG(L"[!] Fallo: %s\n", status.c_str());
-        LOG(L"    Presiona Enter para salir.\n");
-        getchar();
-        return 2;
     }
+
+    // T22: --log flag
+    if (ParseLogFlag(cmdline)) {
+        g_log_path = BuildLogPath();
+    }
+
+    // Load encrypted payload from RCDATA resource (zero disk touch)
+    std::vector<uint8_t> dll_bytes;
+    HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
+    if (hRes) {
+        HGLOBAL hGlob = LoadResource(nullptr, hRes);
+        if (hGlob) {
+            LPVOID pData = LockResource(hGlob);
+            DWORD resSz  = SizeofResource(nullptr, hRes);
+            if (pData && resSz > 0) {
+                dll_bytes.resize(resSz);
+                memcpy(dll_bytes.data(), pData, resSz);
+                bp::DecryptPayload(dll_bytes.data(), dll_bytes.size());
+            }
+        }
+    }
+
+    // Fallback: load from disk if resource absent
+    if (dll_bytes.empty()) {
+        std::wstring p = ExeDir() + L"\\" + kDefaultPayload;
+        if (std::filesystem::exists(p))
+            dll_bytes = LoadFile(p);
+    }
+    if (dll_bytes.empty()) return 1;
+
+    int result = RunInject(dll_bytes, false, false);
+
+    // T4: launch scrub child to handle Prefetch after our exit
+    LaunchScrubChild(g_log_path);
+
+    // Child handles SelfDelete as well; we just exit cleanly.
+    // Zero our payload bytes before exit.
+    SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
+
+    return result;
+}
+
+#else
+// ── Debug variant (BypassLoaderDbg.exe) ─────────────────────────────────────
+int wmain(int argc, wchar_t** argv) {
+    InitWerSuppression();
+
+    const wchar_t* cmdline = GetCommandLineW();
+
+    // T4: --scrub child mode — handle before anything else
+    DWORD scrub_pid = 0;
+    std::wstring scrub_log;
+    if (ParseScrubArgs(cmdline, &scrub_pid, &scrub_log)) {
+        bp::ScrubberMain(scrub_pid, scrub_log);
+        return 0;
+    }
+
+    // T22: --log flag
+    if (ParseLogFlag(cmdline)) {
+        g_log_path = BuildLogPath();
+        LOG(L"[*] Log: %s\n", g_log_path.c_str());
+    }
+
+    std::wstring payload_path;
+    bool use_txf = false;
+    bool use_ram = false;
+
+    for (int i = 1; i < argc; ++i) {
+        if      (_wcsicmp(argv[i], L"--txf") == 0) use_txf = true;
+        else if (_wcsicmp(argv[i], L"--ram") == 0) use_ram = true;
+        else if (_wcsicmp(argv[i], L"--log") == 0) { ++i; /* already handled */ }
+        else if (_wcsicmp(argv[i], L"--scrub") == 0) { ++i; /* already handled */ }
+        else payload_path = argv[i];
+    }
+
+    if (payload_path.empty())
+        payload_path = ExeDir() + L"\\" + kDefaultPayload;
+
+    std::vector<uint8_t> dll_bytes;
+    if (std::filesystem::exists(payload_path)) {
+        dll_bytes = LoadFile(payload_path);
+        LOG(L"[+] Payload desde disco: %s (%zu bytes)\n",
+            payload_path.c_str(), dll_bytes.size());
+    } else {
+        HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
+        if (hRes) {
+            HGLOBAL hGlob = LoadResource(nullptr, hRes);
+            if (hGlob) {
+                LPVOID pData = LockResource(hGlob);
+                DWORD resSz  = SizeofResource(nullptr, hRes);
+                if (pData && resSz > 0) {
+                    dll_bytes.resize(resSz);
+                    memcpy(dll_bytes.data(), pData, resSz);
+                    bp::DecryptPayload(dll_bytes.data(), dll_bytes.size());
+                    LOG(L"[+] Payload desde RCDATA (%zu bytes)\n", dll_bytes.size());
+                }
+            }
+        }
+    }
+
+    if (dll_bytes.empty()) {
+        LOG(L"[!] Payload no encontrado: %s\n", payload_path.c_str());
+        LOG(L"    Uso: BypassLoaderDbg.exe [ruta_dll] [--txf] [--ram] [--log]\n");
+        return 1;
+    }
+
+    LOG(L"[*] Ruta de inyeccion: %s\n",
+        use_txf ? L"TxF (SEC_IMAGE)" : (use_ram ? L"RAM (ManualMap)" : L"SEC_IMAGE + POSIX delete"));
+
+    int result = RunInject(dll_bytes, use_txf, use_ram);
+
+    // T4: launch scrub child to handle Prefetch after our exit
+    LaunchScrubChild(g_log_path);
+
+    SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
+
+    if (result == 0) {
+        LOG(L"[+] Listo. Presiona Enter para salir.\n");
+    } else {
+        LOG(L"[!] Fallo (codigo=%d). Presiona Enter para salir.\n", result);
+    }
+    getchar();
+    return result;
 }
 #endif
