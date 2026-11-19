@@ -43,6 +43,9 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include "../../payload/src/PdataReg.h"
+
+static bp::DynamicPdata g_testPdata{};
 
 // ── Result block (matches what the loader reads) ───────────────────────────
 #pragma pack(push, 1)
@@ -82,24 +85,27 @@ static void OpenResultsSection() {
     }
 }
 
-// ── Test 1: thread_local ───────────────────────────────────────────────────
-thread_local int32_t tls_value = 0;
+// ── Test 1: thread isolation (target-allocated TLS) ───────────────────────
+static DWORD g_tlsSlot = TLS_OUT_OF_INDEXES;
 
 static bool RunTest1_ThreadLocal() {
+    if (g_tlsSlot == TLS_OUT_OF_INDEXES) g_tlsSlot = TlsAlloc();
+    if (g_tlsSlot == TLS_OUT_OF_INDEXES) return false;
+
     // Write on current thread
-    tls_value = 0xDEAD;
-    if (tls_value != 0xDEAD) return false;
+    TlsSetValue(g_tlsSlot, reinterpret_cast<LPVOID>(0xDEAD));
+    if (reinterpret_cast<uintptr_t>(TlsGetValue(g_tlsSlot)) != 0xDEAD) return false;
 
     // Write on a new thread, verify isolation
     std::atomic<bool> ok{false};
     std::thread t([&] {
-        tls_value = 0xBEEF;
-        ok = (tls_value == 0xBEEF);
+        TlsSetValue(g_tlsSlot, reinterpret_cast<LPVOID>(0xBEEF));
+        ok = (reinterpret_cast<uintptr_t>(TlsGetValue(g_tlsSlot)) == 0xBEEF);
     });
     t.join();
 
     // Original thread value must be unchanged
-    return ok.load() && (tls_value == 0xDEAD);
+    return ok.load() && (reinterpret_cast<uintptr_t>(TlsGetValue(g_tlsSlot)) == 0xDEAD);
 }
 
 // ── Test 2: throw caught by __try/__except ─────────────────────────────────
@@ -246,10 +252,17 @@ extern "C" __declspec(dllexport) const TestResults* PayloadGetResults() {
 }
 
 // ── DllMain ─────────────────────────────────────────────────────────────────
-BOOL APIENTRY DllMain(HMODULE /*hMod*/, DWORD reason, LPVOID /*reserved*/) {
+BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID /*reserved*/) {
     if (reason == DLL_PROCESS_ATTACH) {
+        g_testPdata = bp::RegisterOwnPdata(hMod);
         HANDLE t = CreateThread(nullptr, 0, RunTests, nullptr, 0, nullptr);
         if (t) CloseHandle(t);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        bp::UnregisterOwnPdata(g_testPdata);
+        if (g_tlsSlot != TLS_OUT_OF_INDEXES) {
+            TlsFree(g_tlsSlot);
+            g_tlsSlot = TLS_OUT_OF_INDEXES;
+        }
     }
     return TRUE;
 }

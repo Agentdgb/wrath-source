@@ -1,21 +1,23 @@
 #pragma once
 // ManualMap.h -- Manual-Map injection engine for BypassWrath.
-// Primary path : ManualMapInMemory  (plain VirtualAllocEx + WPM)
-// Secondary    : ManualMapViaTxf    (TxF-backed SEC_IMAGE -- VAD shows MEM_IMAGE)
 //
-// Both paths:
-//   - DLL never in PEB->Ldr / EnumProcessModules / TH32CS_SNAPMODULE
-//   - Thread hidden: NtCreateThreadEx(HIDE_FROM_DEBUGGER=0x4)
-//   - Win32StartAddress spoofed to ntdll!TppWorkerThread (resolved by DJB2 hash)
-//     via NtSetInformationThread(ThreadQuerySetWin32StartAddress=9) on the
-//     NtCreateThreadEx handle before the stub runs. Requires THREAD_SET_INFORMATION
-//     in DesiredAccess (added in P3-08).
-//   - RtlAddFunctionTable implemented but gated by use_rtl_pdata parameter.
-//     Default=false for HotSpot JVM (javaw.exe) -- see P1-02 comment.
-//     Set true only for non-JVM targets (e.g. test_payload -> notepad.exe).
+// Primary path   : ManualMapFileBacked (SEC_IMAGE + POSIX delete -- VAD shows MEM_IMAGE)
+// Secondary path : ManualMapInMemory   (plain VirtualAllocEx + WPM)
+// Tertiary path  : ManualMapViaTxf     (TxF-backed SEC_IMAGE, explicit --txf flag)
 //
-// TxF path is NOT called automatically. Caller must pass use_txf=true
-// explicitly (--txf flag). Keeps phase-1 debugging single-path.
+// Forensics & Stealth architecture:
+//   - Primary path uses file-backed SEC_IMAGE with POSIX semantics unlinking:
+//     Target VAD shows MEM_IMAGE (identical to standard LoadLibrary).
+//     MemoryMappedFilenameInformation returns legit device path, not pagefile.sys.
+//     File is immediately unlinked upon handle close (invisible in directory listings).
+//   - DLL never in PEB->Ldr / EnumProcessModules / TH32CS_SNAPMODULE.
+//   - Remote thread hidden: NtCreateThreadEx(HIDE_FROM_DEBUGGER=0x4).
+//   - Win32StartAddress spoofed to ntdll!TppWorkerThread (DJB2 hash resolved)
+//     via NtSetInformationThread(ThreadQuerySetWin32StartAddress=9).
+//   - Exception directory in remote PE header is zeroed to prevent HotSpot safepoint
+//     collisions; payload dynamically registers its own isolated .pdata range inside
+//     the target via RtlAddFunctionTable in DLL_PROCESS_ATTACH.
+//   - DOS magic wipe occurs AFTER CRT initialization has completed.
 
 #include <windows.h>
 #include <tlhelp32.h>
@@ -81,39 +83,15 @@ private:
     HANDLE m_h = nullptr;
 };
 
-// ── RtlAddFunctionTable / RtlDeleteFunctionTable by hash ──────────────────
-// P1-02: Resolved from ntdll by export hash (DJB2) so the string
-// "RtlAddFunctionTable" never appears as a plain literal.
-// Called after the DLL is mapped and before the stub thread runs.
-// Registers the .pdata RUNTIME_FUNCTION table so the SEH unwind chain
-// (and C++ EH on MSVC x64) works correctly inside the mapped image.
-// RtlDeleteFunctionTable called in every release/failure path.
-//
-// NOTE: This is NOT called for HotSpot JVM targets by default.
-// HotSpot x64 uses hardware safepoints (page-fault based). Registering
-// an external RUNTIME_FUNCTION table over a manually-mapped region that
-// overlaps any JIT-compiled page corrupts the kernel's DYNAMIC_FUNCTION_TABLE
-// chain because HotSpot registers its own tables covering the same VA range
-// via RtlInstallFunctionTableCallback. The two tables create an ambiguous
-// lookup for the exception dispatcher.
-// Use only for non-JVM targets (e.g. notepad.exe for test_payload).
-// Controlled by the use_rtl_pdata parameter in ManualMapInMemory.
+// ── DJB2 & Hash Resolver ────────────────────────────────────────────────────
 
-using pfnRtlAddFunctionTable_t =
-    BOOLEAN(NTAPI*)(PRUNTIME_FUNCTION, DWORD, DWORD64);
-using pfnRtlDeleteFunctionTable_t =
-    BOOLEAN(NTAPI*)(PRUNTIME_FUNCTION);
-
-// DJB2 hash over a null-terminated ASCII string.
 static constexpr uint32_t Djb2(const char* s, uint32_t h = 5381) {
     return *s ? Djb2(s + 1, h * 33u ^ (unsigned char)*s) : h;
 }
 
-// Hash constants (computed at compile time).
-static constexpr uint32_t kHashRtlAdd    = Djb2("RtlAddFunctionTable");
-static constexpr uint32_t kHashRtlDelete = Djb2("RtlDeleteFunctionTable");
+static constexpr uint32_t kHashTppWorker = Djb2("TppWorkerThread");
+static constexpr uint32_t kHashRtlUser   = Djb2("RtlUserThreadStart");
 
-// Resolve an ntdll export by DJB2 hash of the name.
 inline FARPROC ResolveByHash(HMODULE hNtdll, uint32_t target_hash) {
     if (!hNtdll) return nullptr;
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(hNtdll);
@@ -143,61 +121,7 @@ inline FARPROC ResolveByHash(HMODULE hNtdll, uint32_t target_hash) {
     return nullptr;
 }
 
-struct PdataReg {
-    PRUNTIME_FUNCTION            table = nullptr;
-    DWORD                        count = 0;
-    pfnRtlDeleteFunctionTable_t  del   = nullptr;
-
-    bool Valid() const { return table && count && del; }
-
-    void Unregister() {
-        if (Valid()) { del(table); table = nullptr; }
-    }
-};
-
-// Register .pdata for a manually-mapped image.
-// base_remote: remote VA of the mapped image.
-// nt: local copy of NT headers (file bytes).
-// Returns a PdataReg; call .Unregister() in every release path.
-inline PdataReg RegisterPdata(const IMAGE_NT_HEADERS* nt,
-                               BYTE* base_remote,
-                               bool  enable)
-{
-    PdataReg reg{};
-    if (!enable) return reg;
-
-    const auto& pd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
-    if (!pd.VirtualAddress || !pd.Size) return reg;
-
-    HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
-    auto pfnAdd = reinterpret_cast<pfnRtlAddFunctionTable_t>(
-        ResolveByHash(hNt, kHashRtlAdd));
-    auto pfnDel = reinterpret_cast<pfnRtlDeleteFunctionTable_t>(
-        ResolveByHash(hNt, kHashRtlDelete));
-    if (!pfnAdd || !pfnDel) return reg;
-
-    reg.table = reinterpret_cast<PRUNTIME_FUNCTION>(base_remote + pd.VirtualAddress);
-    reg.count = pd.Size / sizeof(RUNTIME_FUNCTION);
-    reg.del   = pfnDel;
-
-    if (!pfnAdd(reg.table, reg.count,
-                reinterpret_cast<DWORD64>(base_remote))) {
-        reg.table = nullptr; // Add failed; mark invalid so Unregister is no-op
-    }
-    return reg;
-}
-
 // ── Win32StartAddress spoof ────────────────────────────────────────────────
-// P3-02: NtSetInformationThread(ThreadQuerySetWin32StartAddress=9) overwrites
-// Win32StartAddress in ETHREAD. Target VA: ntdll!TppWorkerThread -- a worker
-// pool thread that is legitimately spawned in every process, making the start
-// address blend with normal thread activity. Resolved by hash (DJB2) so the
-// string "TppWorkerThread" never appears as a plain literal.
-// Falls back to RtlUserThreadStart if TppWorkerThread is not found.
-
-static constexpr uint32_t kHashTppWorker = Djb2("TppWorkerThread");
-static constexpr uint32_t kHashRtlUser   = Djb2("RtlUserThreadStart");
-
 using pfnNtSetInfoThread_t = bp::NTSTATUS(NTAPI*)(HANDLE, DWORD, PVOID, ULONG);
 
 inline void SpoofWin32StartAddress(HANDLE hThread) {
@@ -208,7 +132,6 @@ inline void SpoofWin32StartAddress(HANDLE hThread) {
         GetProcAddress(hNt, "NtSetInformationThread"));
     if (!NtSIT) return;
 
-    // Prefer TppWorkerThread; fall back to RtlUserThreadStart
     FARPROC spoof_va = ResolveByHash(hNt, kHashTppWorker);
     if (!spoof_va)    spoof_va = ResolveByHash(hNt, kHashRtlUser);
     if (!spoof_va)    return;
@@ -248,17 +171,14 @@ inline DWORD ResolveExportRva(const BYTE* bytes, const char* name) {
     return 0;
 }
 
-// ── Remote loader stub (PIC, runs inside javaw.exe) ───────────────────────
-// Steps: relocations → IAT → TLS callbacks → DllMain (CRT init).
-// NEVER calls RtlAddFunctionTable -- HotSpot safepoint handler chain must
-// not be touched.
+// ── Remote loader stub (PIC, runs inside target) ───────────────────────────
 
 struct MmData {
     BYTE*                   base;
     PIMAGE_NT_HEADERS       nt;
     PIMAGE_BASE_RELOCATION  reloc;
     PIMAGE_IMPORT_DESCRIPTOR imp;
-    DWORD                   _pad;   // bootstrap_rva kept for struct compat but unused by stub
+    DWORD                   _pad;
 
     using fnLoadLibA    = HMODULE(WINAPI*)(LPCSTR);
     using fnGetProc     = FARPROC(WINAPI*)(HMODULE, LPCSTR);
@@ -279,7 +199,7 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
     auto                     loadLib = d->loadLib;
     auto                     getProc = d->getProc;
 
-    // 1. Base relocations
+    // 1. Base relocations (if reloc non-null)
     const uintptr_t delta = reinterpret_cast<uintptr_t>(loc)
                           - nt->OptionalHeader.ImageBase;
     if (delta && reloc) {
@@ -301,8 +221,8 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
         }
     }
 
-    // 2. IAT
-    if (imp) {
+    // 2. IAT (if imp non-null)
+    if (imp && loadLib && getProc) {
         while (imp->Characteristics || imp->Name) {
             const char* mod = reinterpret_cast<const char*>(loc + imp->Name);
             HMODULE h = loadLib(mod);
@@ -325,18 +245,7 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
         }
     }
 
-    // 3. TLS callbacks (safe: fires before CRT, payload must handle gracefully)
-    if (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size) {
-        auto* tls = reinterpret_cast<PIMAGE_TLS_DIRECTORY>(
-            loc + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
-        if (tls && tls->AddressOfCallBacks) {
-            auto* cb = reinterpret_cast<PIMAGE_TLS_CALLBACK*>(tls->AddressOfCallBacks);
-            while (cb && *cb) { (*cb)(loc, DLL_PROCESS_ATTACH, nullptr); ++cb; }
-        }
-    }
-
-    // 4. CRT init + DllMain via AddressOfEntryPoint (_DllMainCRTStartup)
-    //    CRT MUST be initialized before any static constructors / heap alloc.
+    // 3. CRT init + DllMain via AddressOfEntryPoint (_DllMainCRTStartup)
     if (nt->OptionalHeader.AddressOfEntryPoint) {
         auto ep = reinterpret_cast<MmData::fnDllMain>(
             loc + nt->OptionalHeader.AddressOfEntryPoint);
@@ -346,39 +255,36 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
 #pragma runtime_checks("", restore)
 #pragma check_stack()
 
-// ── P1-05: Stub size sentinel ──────────────────────────────────────────────
-// Empty noinline function placed immediately after RemoteStub in the binary.
-// kRealStubSize = &RemoteStubSentinel - &RemoteStub (clamped to 0x1000).
-// static_assert guards the allocation.
 #pragma check_stack(off)
 #pragma runtime_checks("", off)
 __declspec(noinline) inline void WINAPI RemoteStubSentinel() {}
 #pragma runtime_checks("", restore)
 #pragma check_stack()
 
-// Real stub size in bytes (measured at link time via pointer arithmetic).
-// MSVC guarantees noinline functions are contiguous in Release with /Gy.
-// If the measurement exceeds 0x1000, the static_assert fires at build time.
 inline size_t RealStubSize() {
     const size_t sz = static_cast<size_t>(
         reinterpret_cast<const BYTE*>(&RemoteStubSentinel) -
         reinterpret_cast<const BYTE*>(&RemoteStub));
-    // Guard: sentinel pointer must be strictly after stub pointer.
-    // If not (e.g. COMDAT folding or reorder), fall back to 0x1000.
     return (sz > 0 && sz <= 0x1000) ? sz : 0x1000;
 }
 
-// ── ManualMapInMemory -- primary path ──────────────────────────────────────
-// DLL bytes in RAM → VirtualAllocEx → WPM sections → RemoteStub thread.
-// Invisible to PEB->Ldr, EnumProcessModules, TH32CS_SNAPMODULE.
-//
-// use_rtl_pdata: register .pdata with RtlAddFunctionTable. Set true for
-// non-JVM targets (e.g. test_payload → notepad.exe). Leave false for HotSpot
-// (javaw.exe) -- see P1-02 comment above.
+// ── P4-01: ManualMapFileBacked (SEC_IMAGE + POSIX delete) ──────────────────
+// Primary injection path:
+// 1. Drops DLL buffer into a temporary file in %TEMP%.
+// 2. Creates section with NtCreateSection(SEC_IMAGE).
+// 3. Maps section view into target process via NtMapViewOfSection:
+//    - Target process VAD shows MEM_IMAGE (identical to standard LoadLibrary).
+//    - MemoryMappedFilenameInformation points to legit device path, not pagefile.sys.
+// 4. Applies POSIX delete (FILE_DISPOSITION_FLAG_POSIX_SEMANTICS) to file handle:
+//    - The file is immediately unlinked upon handle close (invisible in directory listings).
+//    - The kernel Memory Manager retains section reference until target exits or unmaps.
+// 5. Resolves IAT across process boundary from loader side.
+// 6. Zeroes Exception Directory in remote headers so HotSpot exception chains don't conflict.
+// 7. Executes remote stub with spoofed Win32StartAddress (ntdll!TppWorkerThread).
+// 8. Wipes DOS magic ("MZ") after CRT initialization has completed.
 
-inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
-                               std::wstring& status,
-                               bool use_rtl_pdata = false)
+inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
+                                std::wstring& status)
 {
     if (!buf || sz < sizeof(IMAGE_DOS_HEADER)) {
         status = L"Buffer invalido."; return false;
@@ -392,7 +298,259 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
         status = L"Firma NT invalida."; return false;
     }
 
-    // Alloc at preferred base, fallback anywhere
+    HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
+    if (!hNt) { status = L"ntdll no disponible."; return false; }
+
+    auto NtCreateSection = reinterpret_cast<bp::pfnNtCreateSection_t>(
+        GetProcAddress(hNt, "NtCreateSection"));
+    auto NtMapView = reinterpret_cast<bp::pfnNtMapViewOfSection_t>(
+        GetProcAddress(hNt, "NtMapViewOfSection"));
+    auto NtUnmap = reinterpret_cast<bp::pfnNtUnmapViewOfSection_t>(
+        GetProcAddress(hNt, "NtUnmapViewOfSection"));
+
+    if (!NtCreateSection || !NtMapView || !NtUnmap) {
+        status = L"No se resolvieron APIs NT."; return false;
+    }
+
+    // 1. Temporary decoy file in %TEMP%
+    wchar_t temp_dir[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp_dir);
+    wchar_t temp_file[MAX_PATH]{};
+    if (!GetTempFileNameW(temp_dir, L"tmp", 0, temp_file)) {
+        status = L"Fallo al generar archivo temporal."; return false;
+    }
+
+    HANDLE hFile = CreateFileW(temp_file,
+        GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | DELETE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_TEMPORARY,
+        nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        DeleteFileW(temp_file);
+        status = L"Fallo al crear archivo temporal."; return false;
+    }
+
+    DWORD written = 0;
+    if (!WriteFile(hFile, buf, static_cast<DWORD>(sz), &written, nullptr) || written != sz) {
+        CloseHandle(hFile);
+        DeleteFileW(temp_file);
+        status = L"Fallo al escribir archivo temporal."; return false;
+    }
+    FlushFileBuffers(hFile);
+
+    // 2. NtCreateSection(SEC_IMAGE)
+    HANDLE hSec = nullptr;
+    NTSTATUS st = NtCreateSection(&hSec,
+                                  SECTION_ALL_ACCESS,
+                                  nullptr,
+                                  nullptr,
+                                  PAGE_EXECUTE_READ,
+                                  SEC_IMAGE,
+                                  hFile);
+    if (!NT_SUCCESS(st) || !hSec) {
+        CloseHandle(hFile);
+        DeleteFileW(temp_file);
+        status = L"NtCreateSection(SEC_IMAGE) fallo."; return false;
+    }
+
+    // 3. NtMapViewOfSection into target process
+    PVOID remote_base = nullptr;
+    SIZE_T remote_sz = 0;
+    st = NtMapView(hSec,
+                   hProc,
+                   &remote_base,
+                   0,
+                   0,
+                   nullptr,
+                   &remote_sz,
+                   1, /* ViewShare */
+                   0,
+                   PAGE_EXECUTE_READ);
+    if (!NT_SUCCESS(st) || !remote_base) {
+        CloseHandle(hSec);
+        CloseHandle(hFile);
+        DeleteFileW(temp_file);
+        status = L"NtMapViewOfSection fallo."; return false;
+    }
+
+    // 4. POSIX delete immediately unlinks the file from directory
+    BW_FILE_DISPOSITION_INFO_EX disp_ex{};
+    disp_ex.Flags = FILE_DISPOSITION_FLAG_DELETE |
+                    FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
+    if (!SetFileInformationByHandle(hFile,
+                                    FileDispositionInfoEx,
+                                    &disp_ex,
+                                    sizeof(disp_ex))) {
+        FILE_DISPOSITION_INFO disp{};
+        disp.DeleteFile = TRUE;
+        SetFileInformationByHandle(hFile, FileDispositionInfo, &disp, sizeof(disp));
+    }
+    CloseHandle(hFile);
+    CloseHandle(hSec);
+
+    BYTE* base = reinterpret_cast<BYTE*>(remote_base);
+
+    // 5. Resolve IAT across process boundary from loader side
+    auto rva_to_raw = [&](DWORD rva) -> const BYTE* {
+        DWORD off = RvaToFileOff(nt, rva);
+        return (off < sz) ? buf + off : nullptr;
+    };
+
+    if (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size) {
+        DWORD imp_rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+        const BYTE* irp = rva_to_raw(imp_rva);
+        if (irp) {
+            const auto* imp_desc = reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR*>(irp);
+            while (imp_desc->Characteristics || imp_desc->Name) {
+                const BYTE* mn = rva_to_raw(imp_desc->Name);
+                if (mn) {
+                    HMODULE hMod = LoadLibraryA(reinterpret_cast<const char*>(mn));
+                    if (hMod) {
+                        DWORD oft_rva = imp_desc->OriginalFirstThunk
+                            ? imp_desc->OriginalFirstThunk : imp_desc->FirstThunk;
+                        const BYTE* oft_raw = rva_to_raw(oft_rva);
+                        const BYTE* ft_raw  = rva_to_raw(imp_desc->FirstThunk);
+                        if (oft_raw && ft_raw) {
+                            const auto* thunk = reinterpret_cast<const IMAGE_THUNK_DATA*>(oft_raw);
+                            DWORD idx = 0;
+                            while (thunk->u1.AddressOfData) {
+                                FARPROC fn = nullptr;
+                                if (IMAGE_SNAP_BY_ORDINAL(thunk->u1.Ordinal))
+                                    fn = GetProcAddress(hMod,
+                                        reinterpret_cast<LPCSTR>(IMAGE_ORDINAL(thunk->u1.Ordinal)));
+                                else {
+                                    const BYTE* ibn_raw = rva_to_raw(static_cast<DWORD>(thunk->u1.AddressOfData));
+                                    if (ibn_raw) {
+                                        const auto* ibn = reinterpret_cast<const IMAGE_IMPORT_BY_NAME*>(ibn_raw);
+                                        fn = GetProcAddress(hMod, ibn->Name);
+                                    }
+                                }
+                                if (fn) {
+                                    DWORD ft_entry_rva = imp_desc->FirstThunk + idx * sizeof(IMAGE_THUNK_DATA);
+                                    uintptr_t fptr = reinterpret_cast<uintptr_t>(fn);
+                                    WriteProcessMemory(hProc,
+                                        base + ft_entry_rva,
+                                        &fptr, sizeof(fptr), nullptr);
+                                }
+                                ++thunk; ++idx;
+                            }
+                        }
+                    }
+                }
+                ++imp_desc;
+            }
+        }
+    }
+
+    // 6. Zero out Exception Directory in remote headers so HotSpot doesn't conflict
+    DWORD exc_dir_off = dos->e_lfanew +
+        static_cast<DWORD>(offsetof(IMAGE_NT_HEADERS, OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION]));
+    IMAGE_DATA_DIRECTORY zero_dir{};
+    DWORD old_p = 0;
+    if (VirtualProtectEx(hProc, base + exc_dir_off, sizeof(zero_dir), PAGE_READWRITE, &old_p)) {
+        WriteProcessMemory(hProc, base + exc_dir_off, &zero_dir, sizeof(zero_dir), nullptr);
+        VirtualProtectEx(hProc, base + exc_dir_off, sizeof(zero_dir), old_p, &old_p);
+    }
+
+    // 7. Execute remote stub to call AddressOfEntryPoint (_DllMainCRTStartup)
+    MmData md{};
+    md.base    = base;
+    md.nt      = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
+    md.reloc   = nullptr; // Kernel applied relocations via SEC_IMAGE
+    md.imp     = nullptr; // IAT already resolved from loader side
+    md.loadLib = nullptr;
+    md.getProc = nullptr;
+    md._pad    = 0;
+
+    const size_t kStubSz = RealStubSize();
+    ScopedRemoteMem stub_mem(hProc, nullptr,
+        kStubSz + sizeof(MmData), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!stub_mem.IsValid()) {
+        NtUnmap(hProc, remote_base);
+        status = L"Alloc stub fallo."; return false;
+    }
+
+    BYTE* remote_stub = stub_mem.Get();
+    BYTE* remote_data = remote_stub + kStubSz;
+
+    if (!WriteProcessMemory(hProc, remote_data, &md, sizeof(MmData), nullptr) ||
+        !WriteProcessMemory(hProc, remote_stub, reinterpret_cast<LPCVOID>(&RemoteStub), kStubSz, nullptr)) {
+        stub_mem.Release();
+        NtUnmap(hProc, remote_base);
+        status = L"WPM stub fallo."; return false;
+    }
+
+    ScopedHandle th;
+    auto NtCTE = reinterpret_cast<bp::pfnNtCreateThreadEx>(
+        GetProcAddress(hNt, "NtCreateThreadEx"));
+    if (NtCTE) {
+        HANDLE raw = nullptr;
+        NTSTATUS st_th = NtCTE(&raw,
+            SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION | THREAD_SET_INFORMATION,
+            nullptr, hProc,
+            reinterpret_cast<LPTHREAD_START_ROUTINE>(remote_stub),
+            remote_data,
+            bp::kHideThread,
+            0, 0, 0, nullptr);
+        if (NT_SUCCESS(st_th) && raw) th.Reset(raw);
+    }
+    if (!th.IsValid()) {
+        th.Reset(CreateRemoteThread(hProc, nullptr, 0,
+            reinterpret_cast<LPTHREAD_START_ROUTINE>(remote_stub),
+            remote_data, 0, nullptr));
+    }
+    if (!th.IsValid()) {
+        stub_mem.Release();
+        NtUnmap(hProc, remote_base);
+        status = L"CreateRemoteThread fallo."; return false;
+    }
+
+    SpoofWin32StartAddress(th.Get());
+
+    if (WaitForSingleObject(th.Get(), 15000) != WAIT_OBJECT_0) {
+        th.Reset();
+        stub_mem.Release();
+        NtUnmap(hProc, remote_base);
+        status = L"Timeout esperando stub remoto."; return false;
+    }
+    th.Reset();
+
+    // 8. Wipe DOS signature after CRT init completes (P3-01 order fix)
+    WORD zero_dos = 0;
+    DWORD old_dos_p = 0;
+    if (VirtualProtectEx(hProc, base, sizeof(zero_dos), PAGE_READWRITE, &old_dos_p)) {
+        WriteProcessMemory(hProc, base, &zero_dos, sizeof(zero_dos), nullptr);
+        VirtualProtectEx(hProc, base, sizeof(zero_dos), old_dos_p, &old_dos_p);
+    }
+
+    // Zero + free stub
+    std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
+    WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
+    stub_mem.Release();
+
+    status = L"Inyectado OK (SEC_IMAGE + POSIX delete).";
+    return true;
+}
+
+// ── ManualMapInMemory -- secondary RAM path ────────────────────────────────
+
+inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
+                               std::wstring& status)
+{
+    if (!buf || sz < sizeof(IMAGE_DOS_HEADER)) {
+        status = L"Buffer invalido."; return false;
+    }
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        status = L"Firma DOS invalida."; return false;
+    }
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        status = L"Firma NT invalida."; return false;
+    }
+
     ScopedRemoteMem mem(hProc,
         reinterpret_cast<LPVOID>(nt->OptionalHeader.ImageBase),
         nt->OptionalHeader.SizeOfImage,
@@ -411,6 +569,12 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
     if (!WriteProcessMemory(hProc, base, buf, nt->OptionalHeader.SizeOfHeaders, nullptr)) {
         status = L"WPM headers fallo."; return false;
     }
+
+    // Zero out Exception Directory in remote headers to eliminate HotSpot conflict
+    DWORD exc_dir_off = dos->e_lfanew +
+        static_cast<DWORD>(offsetof(IMAGE_NT_HEADERS, OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION]));
+    IMAGE_DATA_DIRECTORY zero_dir{};
+    WriteProcessMemory(hProc, base + exc_dir_off, &zero_dir, sizeof(zero_dir), nullptr);
 
     // Sections
     const auto* sec = IMAGE_FIRST_SECTION(nt);
@@ -435,51 +599,12 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
     md.loadLib = reinterpret_cast<MmData::fnLoadLibA>(GetProcAddress(k32, "LoadLibraryA"));
     md.getProc = reinterpret_cast<MmData::fnGetProc>(GetProcAddress(k32, "GetProcAddress"));
-    md._pad    = ResolveExportRva(buf, "PayloadInit"); // diagnostic only
+    md._pad    = ResolveExportRva(buf, "PayloadInit");
 
-    // P1-03: TLS patch ─────────────────────────────────────────────────────
-    // Manual-mapped DLLs skip the loader TLS init path. Allocate a real slot
-    // with TlsAlloc and patch IMAGE_TLS_DIRECTORY.AddressOfIndex in the mapped
-    // remote image so the stub's TLS callback dispatch uses the right slot.
-    // Without this, thread_local in the payload reads TLS slot 0 → wrong value.
-    // TlsFree in every failure path and in unload (FASE 2).
-    DWORD tls_index = TLS_OUT_OF_INDEXES;
-    {
-        const auto& tls_dir_e =
-            nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
-        if (tls_dir_e.Size >= sizeof(IMAGE_TLS_DIRECTORY)) {
-            DWORD tls_file_off = RvaToFileOff(nt, tls_dir_e.VirtualAddress);
-            if (tls_file_off + sizeof(IMAGE_TLS_DIRECTORY) <= sz) {
-                const auto* tls_hdr =
-                    reinterpret_cast<const IMAGE_TLS_DIRECTORY*>(buf + tls_file_off);
-                uintptr_t preferred = nt->OptionalHeader.ImageBase;
-                uintptr_t idx_va   = tls_hdr->AddressOfIndex;
-                if (idx_va >= preferred) {
-                    DWORD idx_rva = static_cast<DWORD>(idx_va - preferred);
-                    BYTE* remote_idx = base + idx_rva;
-                    tls_index = TlsAlloc();
-                    if (tls_index != TLS_OUT_OF_INDEXES) {
-                        SIZE_T wr = 0;
-                        WriteProcessMemory(hProc, remote_idx,
-                            &tls_index, sizeof(DWORD), &wr);
-                        // Non-fatal if WPM fails: slot allocated but not patched
-                    }
-                }
-            }
-        }
-    }
-
-    // P1-02: Register .pdata before stub runs (non-JVM targets only).
-    PdataReg pdata_reg = RegisterPdata(nt, base, use_rtl_pdata);
-
-    // P1-05: Real stub size from sentinel pointer arithmetic.
     const size_t kStubSz = RealStubSize();
-
     ScopedRemoteMem stub_mem(hProc, nullptr,
         kStubSz + sizeof(MmData), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!stub_mem.IsValid()) {
-        if (tls_index != TLS_OUT_OF_INDEXES) TlsFree(tls_index);
-        pdata_reg.Unregister();
         mem.Release();
         status = L"Alloc stub fallo."; return false;
     }
@@ -487,23 +612,16 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
     BYTE* remote_stub = stub_mem.Get();
     BYTE* remote_data = remote_stub + kStubSz;
 
-    // P1-06: Check all WriteProcessMemory returns.
     SIZE_T written = 0;
-    if (!WriteProcessMemory(hProc, remote_data, &md, sizeof(MmData), &written)
-        || written != sizeof(MmData)) {
-        if (tls_index != TLS_OUT_OF_INDEXES) TlsFree(tls_index);
-        pdata_reg.Unregister(); stub_mem.Release(); mem.Release();
+    if (!WriteProcessMemory(hProc, remote_data, &md, sizeof(MmData), &written) || written != sizeof(MmData)) {
+        stub_mem.Release(); mem.Release();
         status = L"WPM MmData fallo."; return false;
     }
-    if (!WriteProcessMemory(hProc, remote_stub,
-            reinterpret_cast<LPCVOID>(&RemoteStub), kStubSz, &written)
-        || written != kStubSz) {
-        if (tls_index != TLS_OUT_OF_INDEXES) TlsFree(tls_index);
-        pdata_reg.Unregister(); stub_mem.Release(); mem.Release();
+    if (!WriteProcessMemory(hProc, remote_stub, reinterpret_cast<LPCVOID>(&RemoteStub), kStubSz, &written) || written != kStubSz) {
+        stub_mem.Release(); mem.Release();
         status = L"WPM stub fallo."; return false;
     }
 
-    // Spawn thread hidden from debugger/scanner
     ScopedHandle th;
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (ntdll) {
@@ -527,27 +645,23 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
             remote_data, 0, nullptr));
     }
     if (!th.IsValid()) {
-        if (tls_index != TLS_OUT_OF_INDEXES) TlsFree(tls_index);
-        pdata_reg.Unregister(); stub_mem.Release(); mem.Release();
+        stub_mem.Release(); mem.Release();
         status = L"CreateRemoteThread fallo."; return false;
     }
 
     SpoofWin32StartAddress(th.Get());
 
-    // P1-07: If wait expires, free remote memory before returning false.
     if (WaitForSingleObject(th.Get(), 15000) != WAIT_OBJECT_0) {
         th.Reset();
         std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
         WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
         stub_mem.Release();
         mem.Release();
-        if (tls_index != TLS_OUT_OF_INDEXES) TlsFree(tls_index);
-        pdata_reg.Unregister();
         status = L"Timeout esperando stub remoto."; return false;
     }
     th.Reset();
 
-    // Restore per-section protection (remove full-image RWX footprint)
+    // Restore per-section protection
     sec = IMAGE_FIRST_SECTION(nt);
     for (UINT i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
         DWORD ssz = (std::max)(sec->SizeOfRawData, sec->Misc.VirtualSize);
@@ -560,18 +674,13 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
         DWORD old = 0;
         VirtualProtectEx(hProc, base + sec->VirtualAddress, ssz, prot, &old);
     }
-    // Headers read-only (CRT SEH needs them readable)
     DWORD old = 0;
     VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfHeaders, PAGE_READONLY, &old);
 
-    // P3-01: SecureZeroMemory of PE header bytes (MZ/PE signature + section table).
-    // Removes the readable "MZ" / "PE\0\0" signatures from the mapped region.
-    // After zero: VirtualQueryEx sees no MZ; scanner grep for DOS/NT magic fails.
-    // The page stays PAGE_READONLY -- zero is written via a temporary RW window.
+    // Wipe PE headers after CRT initialization
     {
         const DWORD hdr_sz = nt->OptionalHeader.SizeOfHeaders;
         std::vector<BYTE> zero_hdr(hdr_sz, 0);
-        // Lift to RW, zero, restore to RO
         DWORD hdr_old = 0;
         if (VirtualProtectEx(hProc, base, hdr_sz, PAGE_READWRITE, &hdr_old)) {
             WriteProcessMemory(hProc, base, zero_hdr.data(), hdr_sz, nullptr);
@@ -579,28 +688,17 @@ inline bool ManualMapInMemory(HANDLE hProc, const uint8_t* buf, size_t sz,
         }
     }
 
-    // Zero + free stub (removes injection artifact from remote address space)
-    // P1-06: check WPM return (zeroing -- non-fatal if it fails, DLL already running)
+    // Zero + free stub
     std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
     WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
     stub_mem.Release();
 
-    // pdata_reg: intentionally NOT unregistered here.
-    // The .pdata table must remain registered for the lifetime of the mapped
-    // image so that SEH/CXX unwinding works inside the payload.
-    // Caller is responsible for calling pdata_reg.Unregister() when
-    // the payload is unloaded. For now we leak it (acceptable for one-shot inject).
-
-    // Detach RAII -- DLL lives in target from here
     mem.Detach();
     status = L"Inyectado OK (ManualMap RAM).";
     return true;
 }
 
-// ── TxF sacrifices ─────────────────────────────────────────────────────────
-// VAD entry shows MEM_IMAGE (not MEM_PRIVATE) -- scanners that check VAD type
-// see a "legitimate" mapped image region. The on-disk DLL bytes are rolled back
-// by the transaction; nothing is written to disk.
+// ── ManualMapViaTxf -- tertiary path ───────────────────────────────────────
 
 static constexpr const wchar_t* kTxfTargets[] = {
     L"winmm.dll",
@@ -611,13 +709,8 @@ static constexpr const wchar_t* kTxfTargets[] = {
     nullptr
 };
 
-// ManualMapViaTxf -- secondary path
-// Builds a TxF SEC_IMAGE section from dll_bytes, maps into target, resolves
-// relocs+IAT from loader side (session-wide ASLR: local VA == remote VA for
-// system DLLs), then spawns a hidden thread to run TLS + DllMain.
-
 inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
-                              std::wstring& status)
+                            std::wstring& status)
 {
     if (!buf || sz < sizeof(IMAGE_DOS_HEADER)) {
         status = L"TxF: buffer invalido."; return false;
@@ -625,7 +718,6 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
     const auto* nt  = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
 
-    // Load KTM + ntdll functions
     HMODULE hKtm  = LoadLibraryW(L"ktmw32.dll");
     HMODULE hNt   = GetModuleHandleW(L"ntdll.dll");
     if (!hKtm || !hNt) {
@@ -691,7 +783,6 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
         status = L"TxF: ningun candidato genero seccion SEC_IMAGE."; return false;
     }
 
-    // Map into target
     PVOID remote_base = nullptr; SIZE_T remote_sz = 0;
     NTSTATUS st = NtMapView(hSec, hProc, &remote_base,
         0, 0, nullptr, &remote_sz, 1, 0, PAGE_EXECUTE_READ);
@@ -701,7 +792,6 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
         status = L"TxF: NtMapViewOfSection fallo."; return false;
     }
 
-    // Resolve relocations via WPM from loader side
     const uintptr_t rbase = reinterpret_cast<uintptr_t>(remote_base);
     const intptr_t  delta = static_cast<intptr_t>(rbase - nt->OptionalHeader.ImageBase);
 
@@ -743,7 +833,6 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
         }
     }
 
-    // Resolve IAT from loader side (session-wide ASLR: same VA in loader + target)
     if (nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size) {
         DWORD imp_rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
         const BYTE* irp = rva_to_raw(imp_rva);
@@ -790,13 +879,10 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
         }
     }
 
-    // TLS + DllMain via hidden thread (re-use RemoteStub logic)
-    // Build a minimal MmData pointing at the already-mapped remote region
     MmData md{};
     md.base = reinterpret_cast<BYTE*>(remote_base);
     md.nt   = reinterpret_cast<PIMAGE_NT_HEADERS>(
         reinterpret_cast<BYTE*>(remote_base) + dos->e_lfanew);
-    // reloc/IAT already resolved by loader; pass null so stub skips them
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
     md.loadLib = reinterpret_cast<MmData::fnLoadLibA>(GetProcAddress(k32, "LoadLibraryA"));
     md.getProc = reinterpret_cast<MmData::fnGetProc>(GetProcAddress(k32, "GetProcAddress"));
@@ -851,12 +937,10 @@ inline bool ManualMapViaTxf(HANDLE hProc, const uint8_t* buf, size_t sz,
     }
     th.Reset();
 
-    // Zero + free stub
     std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
     WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
     stub_mem.Release();
 
-    // Rollback transaction (removes on-disk write -- DLL bytes never persisted)
     pRollback(hTx);
     CloseHandle(hFile);
     CloseHandle(hTx);

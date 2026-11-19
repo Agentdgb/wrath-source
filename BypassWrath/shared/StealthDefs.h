@@ -50,4 +50,19 @@ using pfnCreateTransaction_t =
                     DWORD, DWORD, LPWSTR);
 using pfnRollbackTransaction_t = BOOL(WINAPI*)(HANDLE);
 
+#ifndef FILE_DISPOSITION_FLAG_DELETE
+#define FILE_DISPOSITION_FLAG_DELETE 0x00000001
+#endif
+#ifndef FILE_DISPOSITION_FLAG_POSIX_SEMANTICS
+#define FILE_DISPOSITION_FLAG_POSIX_SEMANTICS 0x00000002
+#endif
+
+#ifndef FileDispositionInfoEx
+#define FileDispositionInfoEx static_cast<FILE_INFO_BY_HANDLE_CLASS>(21)
+#endif
+
+struct BW_FILE_DISPOSITION_INFO_EX {
+    ULONG Flags;
+};
+
 } // namespace bp

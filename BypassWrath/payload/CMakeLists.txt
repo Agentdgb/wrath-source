@@ -32,10 +32,11 @@ set_target_properties(bypass_payload PROPERTIES
     LINK_FLAGS "/DEF:\"${CMAKE_CURRENT_SOURCE_DIR}/bypass_payload.def\""
 )
 
-target_link_options(bypass_payload PRIVATE /SUBSYSTEM:WINDOWS)
+target_link_options(bypass_payload PRIVATE /SUBSYSTEM:WINDOWS /GUARD:NO /DYNAMICBASE /FIXED:NO)
 
 # /EHa: async SEH + C++ exceptions. Required for __try/__except in DllMain/PayloadThread.
-target_compile_options(bypass_payload PRIVATE /EHa)
+# /guard:cf-: Disable Control Flow Guard on payload (avoids JVM CFG bitmap rejection)
+target_compile_options(bypass_payload PRIVATE /EHa /guard:cf-)
 
 # Post-build: scrub RTTI namespace strings (.rdata)
 find_package(Python3 QUIET COMPONENTS Interpreter)

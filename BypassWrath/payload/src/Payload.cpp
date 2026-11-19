@@ -4,62 +4,56 @@
 //   1. Sets g_running=false → main loop exits, all payload threads join.
 //   2. Calls ep(base, DLL_PROCESS_DETACH, nullptr) for CRT shutdown.
 //   3. Fires TLS callbacks with DLL_THREAD_DETACH on the unload thread.
-//   4. Calls RtlDeleteFunctionTable (if pdata was registered).
-//   5. TlsFree for the TLS slot.
-//   6. Unmaps via NtUnmapViewOfSection OR VirtualFree from a continuation
-//      thread that runs in kernel32 address space (so it doesn't free itself).
-//
-// NO SecureZeroMemory of the base region (removed per FASE 2 spec --
-// zeroing the mapped image while threads may still execute in it is unsafe).
-// NO FreeLibraryAndExitThread (removed per FASE 2 spec).
+//   4. Calls RtlDeleteFunctionTable (UnregisterOwnPdata) in target process.
+//   5. Unmaps via NtUnmapViewOfSection (primary for SEC_IMAGE) or VirtualFree
+//      from a continuation thread that runs in kernel32 address space.
 
 #include <windows.h>
 #include <new>
 #include "TlsThread.h"
+#include "PdataReg.h"
 
-// Shared with loader-patched TLS index (FASE 1).
-// Payload tracks it via g_tls_index; loader patches _tls_index in .data.
 extern HMODULE g_hSelfBase;
+extern bp::DynamicPdata g_pdata;
 
 // Globals the unload sequence reads.
-static bool           g_running   = false;
-static HANDLE         g_mainThread = nullptr;  // PayloadThread handle (joined before free)
+static bool           g_running    = false;
+static HANDLE         g_mainThread = nullptr;
 
 // NtUnmapViewOfSection typedef (ntdll, no import needed)
 using pfnNtUnmapViewOfSection_t = LONG(NTAPI*)(HANDLE, PVOID);
 
 // ── Continuation-thread free ────────────────────────────────────────────────
 // Runs in a thread whose start address is inside kernel32 (not inside the
-// payload image). By the time VirtualFree fires, the payload image is not
-// on any call stack.
+// payload image). By the time unmap fires, the payload image is not on any stack.
 struct FreeCtx {
     HANDLE hProc;
     PVOID  base;
-    bool   use_unmap;   // true = NtUnmapViewOfSection, false = VirtualFree
 };
 
 static DWORD WINAPI FreeThread(LPVOID raw) {
     auto* ctx = reinterpret_cast<FreeCtx*>(raw);
-    Sleep(20); // let the unload thread fully return from UnmapSelf()
-    if (ctx->use_unmap) {
-        HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
-        if (hNt) {
-            auto NtUnmap = reinterpret_cast<pfnNtUnmapViewOfSection_t>(
-                GetProcAddress(hNt, "NtUnmapViewOfSection"));
-            if (NtUnmap) NtUnmap(ctx->hProc, ctx->base);
-            else VirtualFree(ctx->base, 0, MEM_RELEASE);
+    Sleep(30); // let the unload thread fully return from UnmapSelf()
+
+    bool unmapped = false;
+    HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
+    if (hNt) {
+        auto NtUnmap = reinterpret_cast<pfnNtUnmapViewOfSection_t>(
+            GetProcAddress(hNt, "NtUnmapViewOfSection"));
+        if (NtUnmap) {
+            LONG st = NtUnmap(ctx->hProc, ctx->base);
+            if (st >= 0) unmapped = true;
         }
-    } else {
+    }
+    if (!unmapped) {
         VirtualFree(ctx->base, 0, MEM_RELEASE);
     }
+
     delete ctx;
     return 0;
 }
 
 // ── UnmapSelf helpers ────────────────────────────────────────────────────────
-
-// Calls DLL_PROCESS_DETACH via entry point. Isolated function: __try cannot
-// coexist with C++ objects with destructors in the same scope (MSVC C2712).
 static void CallEntryDetach(HMODULE base) {
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
@@ -93,10 +87,11 @@ static void UnmapSelf() {
     // 3. TLS callbacks DLL_THREAD_DETACH.
     payload::FireTlsCallbacks(DLL_THREAD_DETACH);
 
-    // 4. Free from continuation thread (not running in image).
-    auto* ctx = new (std::nothrow) FreeCtx{
-        GetCurrentProcess(), base, false
-    };
+    // 4. Delete dynamic function table from target process
+    bp::UnregisterOwnPdata(g_pdata);
+
+    // 5. Free from continuation thread (not running in image).
+    auto* ctx = new (std::nothrow) FreeCtx{ GetCurrentProcess(), base };
     if (ctx) {
         HANDLE t = CreateThread(nullptr, 0, FreeThread, ctx, 0, nullptr);
         if (t) CloseHandle(t);
@@ -105,7 +100,6 @@ static void UnmapSelf() {
 }
 
 // ── Main loop thread ─────────────────────────────────────────────────────────
-// Runs inside the payload. Loop exits when g_running=false (from UnmapSelf).
 static DWORD WINAPI MainLoop(LPVOID) {
     while (g_running) {
         if (GetAsyncKeyState(VK_F8) & 1) {
@@ -119,7 +113,6 @@ static DWORD WINAPI MainLoop(LPVOID) {
 
 void PayloadMain(HMODULE /*hBase*/) {
     g_running = true;
-    // P2-04: track the main thread handle so UnmapSelf can join it.
     g_mainThread = payload::TlsThreadCreate(MainLoop, nullptr);
     if (g_mainThread) {
         WaitForSingleObject(g_mainThread, INFINITE);
