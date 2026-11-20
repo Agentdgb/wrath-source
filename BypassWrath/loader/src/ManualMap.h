@@ -498,7 +498,27 @@ inline bool InsertModuleInLdr(HANDLE hProc, BYTE* remote_base,
     BW_PEB_LDR_DATA ldr{};
     if (!ReadProcessMemory(hProc, pLdr, &ldr, sizeof(ldr), nullptr)) return false;
 
-    // 2. Allocate remote storage: LDR entry + FullDllName buffer + BaseDllName buffer
+    // 2a. Dedup guard (Bug 65): walk InMemoryOrderModuleList before allocating.
+    //     If DllBase == remote_base already exists the module is registered -- return true.
+    {
+        LIST_ENTRY* remote_mem_head_check = reinterpret_cast<LIST_ENTRY*>(
+            reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InMemoryOrderModuleList));
+        LIST_ENTRY mem_head_check{};
+        ReadProcessMemory(hProc, remote_mem_head_check, &mem_head_check, sizeof(mem_head_check), nullptr);
+        LIST_ENTRY* curr = mem_head_check.Flink;
+        for (int i = 0; i < 256 && curr && curr != remote_mem_head_check; ++i) {
+            if (reinterpret_cast<ULONG_PTR>(curr) < 0x10000 ||
+                reinterpret_cast<ULONG_PTR>(curr) > 0x7FFFFFFFFFFFull) break;
+            BYTE* ea = reinterpret_cast<BYTE*>(curr)
+                     - offsetof(BW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+            BW_LDR_DATA_TABLE_ENTRY existing{};
+            if (!ReadProcessMemory(hProc, ea, &existing, sizeof(existing), nullptr)) break;
+            if (existing.DllBase == remote_base) return true; // already registered
+            curr = existing.InMemoryOrderLinks.Flink;
+        }
+    }
+
+    // 2b. Allocate remote storage: LDR entry + FullDllName buffer + BaseDllName buffer
     const std::wstring base_name = [&]() -> std::wstring {
         auto sep = spoof_name.rfind(L'\\');
         return (sep != std::wstring::npos) ? spoof_name.substr(sep + 1) : spoof_name;

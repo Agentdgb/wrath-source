@@ -512,6 +512,11 @@ inline bool ScrubAmcache() {
 
     constexpr wchar_t kMount[] = L"TMP_BWAMC";
 
+    // Bug 63/64: Evict any stale mount from a previous aborted run or double-inject.
+    // RegLoadKeyW returns ERROR_KEY_HAS_CHILDREN if the mount point already exists.
+    // A silent RegUnLoadKeyW here clears it; benign if nothing is mounted.
+    RegUnLoadKeyW(HKEY_LOCAL_MACHINE, kMount);
+
     // Retry on sharing violation (e.g. AppIDSvc or AV holding hive open)
     LSTATUS lst = ERROR_SHARING_VIOLATION;
     for (int retry = 0; retry < 5 && (lst == ERROR_SHARING_VIOLATION || lst == ERROR_ACCESS_DENIED); ++retry) {
