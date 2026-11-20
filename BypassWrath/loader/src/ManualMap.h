@@ -153,10 +153,17 @@ inline PVOID GetRemoteModuleBase(HANDLE hProc, const wchar_t* target_mod_name) {
     if (!ReadProcessMemory(hProc, pLdr, &ldr, sizeof(ldr), nullptr))
         return nullptr;
 
-    LIST_ENTRY* head = &reinterpret_cast<BW_PEB_LDR_DATA*>(pLdr)->InMemoryOrderModuleList;
+    // P0-[2]: remoteHead must be the address of the field *inside the remote process*,
+    // not a local stack pointer. Comparing curr != &local_struct caused infinite walk.
+    LIST_ENTRY* remoteHead = reinterpret_cast<LIST_ENTRY*>(
+        reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InMemoryOrderModuleList));
     LIST_ENTRY* curr = ldr.InMemoryOrderModuleList.Flink;
 
-    for (int i = 0; i < 256 && curr != head; ++i) {
+    for (int i = 0; i < 256 && curr && curr != remoteHead; ++i) {
+        // Validate curr is a user-mode address before RPM
+        const uintptr_t currva = reinterpret_cast<uintptr_t>(curr);
+        if (currva < 0x10000 || currva > 0x7FFFFFFFFFFEull || (currva & 0x7) != 0) break;
+
         BW_LDR_DATA_TABLE_ENTRY entry{};
         BYTE* entry_addr = reinterpret_cast<BYTE*>(curr) - offsetof(BW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
         if (!ReadProcessMemory(hProc, entry_addr, &entry, sizeof(entry), nullptr)) break;
@@ -199,10 +206,23 @@ inline void RegisterCfgCallTargets(HANDLE hProc, PVOID remote_stub, size_t stub_
     BW_CFG_CALL_TARGET_INFO stub_target{ 0, CFG_CALL_TARGET_VALID };
     pfnSetCfg(hProc, remote_stub, stub_sz, 1, &stub_target);
 
-    // 2. Payload AddressOfEntryPoint offset
-    if (nt && nt->OptionalHeader.AddressOfEntryPoint) {
-        BW_CFG_CALL_TARGET_INFO ep_target{ nt->OptionalHeader.AddressOfEntryPoint, CFG_CALL_TARGET_VALID };
-        pfnSetCfg(hProc, base, nt->OptionalHeader.SizeOfImage, 1, &ep_target);
+    // 2. P1-[9]: Register all executable sections in the payload, not just EP.
+    // Every indirect call site in .text needs to be in the CFG bitmap; registering
+    // only the EP causes 0xC0000409 on the first indirect call inside a non-EP section.
+    if (nt && base) {
+        const auto* sec = IMAGE_FIRST_SECTION(nt);
+        for (UINT i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+            if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+            DWORD sec_sz = (std::max)(sec->SizeOfRawData, sec->Misc.VirtualSize);
+            if (!sec_sz) continue;
+            BW_CFG_CALL_TARGET_INFO ti{ sec->VirtualAddress, CFG_CALL_TARGET_VALID };
+            pfnSetCfg(hProc, base, nt->OptionalHeader.SizeOfImage, 1, &ti);
+        }
+        // Also mark EP explicitly (may be in a thunk stub outside named sections)
+        if (nt->OptionalHeader.AddressOfEntryPoint) {
+            BW_CFG_CALL_TARGET_INFO ep_target{ nt->OptionalHeader.AddressOfEntryPoint, CFG_CALL_TARGET_VALID };
+            pfnSetCfg(hProc, base, nt->OptionalHeader.SizeOfImage, 1, &ep_target);
+        }
     }
     FreeLibrary(hKb);
 }
@@ -372,12 +392,22 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
                     loc + (imp->OriginalFirstThunk ? imp->OriginalFirstThunk : imp->FirstThunk));
                 auto* func  = reinterpret_cast<PIMAGE_THUNK_DATA>(loc + imp->FirstThunk);
 
-                // Also unprotect FirstThunk array (may be in a different section)
+                // Also unprotect FirstThunk array (may be in a different section).
+                // P0-[5]: compute real thunk span instead of assuming 2 pages.
                 DWORD old_ft = 0;
+                auto* ft_first = reinterpret_cast<PIMAGE_THUNK_DATA>(loc + imp->FirstThunk);
+                PIMAGE_THUNK_DATA ft_scan = ft_first;
+                while (ft_scan->u1.AddressOfData) ++ft_scan;
+                size_t thunk_span = static_cast<size_t>(
+                    reinterpret_cast<BYTE*>(ft_scan + 1) - reinterpret_cast<BYTE*>(ft_first));
                 BYTE* ft_page = reinterpret_cast<BYTE*>(
-                    reinterpret_cast<uintptr_t>(func) & ~static_cast<uintptr_t>(0xFFF));
+                    reinterpret_cast<uintptr_t>(ft_first) & ~static_cast<uintptr_t>(0xFFF));
+                size_t ft_protect_sz = thunk_span +
+                    static_cast<size_t>(reinterpret_cast<BYTE*>(ft_first) - ft_page);
+                // Align up to page boundary
+                ft_protect_sz = (ft_protect_sz + 0xFFF) & ~static_cast<size_t>(0xFFF);
                 if (virtProt)
-                    virtProt(ft_page, 0x2000, PAGE_EXECUTE_READWRITE, &old_ft);
+                    virtProt(ft_page, ft_protect_sz, PAGE_EXECUTE_READWRITE, &old_ft);
 
                 while (thunk->u1.AddressOfData) {
                     if (IMAGE_SNAP_BY_ORDINAL(thunk->u1.Ordinal))
@@ -391,7 +421,7 @@ __declspec(noinline) inline void WINAPI RemoteStub(MmData* d) {
                 }
 
                 if (virtProt && old_ft)
-                    virtProt(ft_page, 0x2000, old_ft, &old_ft);
+                    virtProt(ft_page, ft_protect_sz, old_ft, &old_ft);
             }
             ++imp;
         }
@@ -425,7 +455,145 @@ inline size_t RealStubSize() {
     const size_t sz = static_cast<size_t>(
         reinterpret_cast<const BYTE*>(&RemoteStubSentinel) -
         reinterpret_cast<const BYTE*>(&RemoteStub));
-    return (sz > 0 && sz <= 0x1000) ? sz : 0x1000;
+    return sz; // No clamp — caller validates
+}
+
+// ── P1-[7]: Insert module into PEB->Ldr ──────────────────────────────────────
+// A MEM_IMAGE region absent from PEB->Ldr is an orphan — trivially flagged by
+// pe-sieve, Process Hacker, and any screenshare tool that calls EnumProcessModules.
+// This inserts a full LDR_DATA_TABLE_ENTRY into all three Ldr lists so the
+// mapped image looks like a legitimately loaded DLL.
+//
+// Call AFTER the thread join (payload already initialized so DllBase is live).
+// base       : remote image base (from NtMapViewOfSection)
+// nt_local   : pointer to local copy of IMAGE_NT_HEADERS (SizeOfImage, EP, timestamp)
+// hProc      : target process handle (VM_OPERATION|VM_WRITE|VM_READ)
+// spoof_name : plausible FullDllName, e.g. L"%APPDATA%\\.minecraft\\natives\\lwjgl_opengl.dll"
+inline bool InsertModuleInLdr(HANDLE hProc, BYTE* remote_base,
+                               const IMAGE_NT_HEADERS* nt_local,
+                               const std::wstring& spoof_name)
+{
+    if (!hProc || !remote_base || !nt_local) return false;
+
+    // 1. Read PEB->Ldr address from remote process
+    HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
+    if (!hNtDll) return false;
+    using pfnNtQIP = LONG(NTAPI*)(HANDLE, DWORD, PVOID, ULONG, PULONG);
+    auto NtQIP = reinterpret_cast<pfnNtQIP>(GetProcAddress(hNtDll, "NtQueryInformationProcess"));
+    if (!NtQIP) return false;
+
+    struct { PVOID r1; PVOID PebBase; PVOID r2[2]; ULONG_PTR pid; PVOID r3; } pbi{};
+    ULONG rlen = 0;
+    if (NtQIP(hProc, 0, &pbi, sizeof(pbi), &rlen) < 0 || !pbi.PebBase) return false;
+
+    PVOID pLdr = nullptr;
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(pbi.PebBase) + 0x18,
+                           &pLdr, sizeof(pLdr), nullptr) || !pLdr) return false;
+
+    BW_PEB_LDR_DATA ldr{};
+    if (!ReadProcessMemory(hProc, pLdr, &ldr, sizeof(ldr), nullptr)) return false;
+
+    // 2. Allocate remote storage: LDR entry + FullDllName buffer + BaseDllName buffer
+    const std::wstring base_name = [&]() -> std::wstring {
+        auto sep = spoof_name.rfind(L'\\');
+        return (sep != std::wstring::npos) ? spoof_name.substr(sep + 1) : spoof_name;
+    }();
+
+    const size_t full_buf_sz = (spoof_name.size() + 1) * sizeof(wchar_t);
+    const size_t base_buf_sz = (base_name.size()  + 1) * sizeof(wchar_t);
+    const size_t alloc_sz    = sizeof(BW_LDR_DATA_TABLE_ENTRY) + full_buf_sz + base_buf_sz;
+
+    PVOID remote_ldr_mem = VirtualAllocEx(hProc, nullptr, alloc_sz,
+                                          MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!remote_ldr_mem) return false;
+
+    BYTE* r_entry    = reinterpret_cast<BYTE*>(remote_ldr_mem);
+    BYTE* r_full_buf = r_entry + sizeof(BW_LDR_DATA_TABLE_ENTRY);
+    BYTE* r_base_buf = r_full_buf + full_buf_sz;
+
+    // 3. Write name buffers
+    if (!WriteProcessMemory(hProc, r_full_buf, spoof_name.c_str(), full_buf_sz, nullptr) ||
+        !WriteProcessMemory(hProc, r_base_buf, base_name.c_str(),  base_buf_sz, nullptr)) {
+        VirtualFreeEx(hProc, remote_ldr_mem, 0, MEM_RELEASE);
+        return false;
+    }
+
+    // 4. Build LDR entry — read all three list heads from the remote Ldr
+    BW_LDR_DATA_TABLE_ENTRY ldr_entry{};
+
+    LIST_ENTRY* remote_load_head = reinterpret_cast<LIST_ENTRY*>(
+        reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InLoadOrderModuleList));
+    LIST_ENTRY  load_head_remote{};
+    ReadProcessMemory(hProc, remote_load_head, &load_head_remote, sizeof(load_head_remote), nullptr);
+
+    LIST_ENTRY* remote_mem_head = reinterpret_cast<LIST_ENTRY*>(
+        reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InMemoryOrderModuleList));
+    LIST_ENTRY  mem_head_remote{};
+    ReadProcessMemory(hProc, remote_mem_head, &mem_head_remote, sizeof(mem_head_remote), nullptr);
+
+    LIST_ENTRY* remote_init_head = reinterpret_cast<LIST_ENTRY*>(
+        reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InInitializationOrderModuleList));
+    LIST_ENTRY  init_head_remote{};
+    ReadProcessMemory(hProc, remote_init_head, &init_head_remote, sizeof(init_head_remote), nullptr);
+
+    // Insert at tail of each list
+    LIST_ENTRY* old_load_blink = load_head_remote.Blink;
+    ldr_entry.InLoadOrderLinks.Flink  = remote_load_head;
+    ldr_entry.InLoadOrderLinks.Blink  = old_load_blink;
+
+    LIST_ENTRY* old_mem_blink = mem_head_remote.Blink;
+    ldr_entry.InMemoryOrderLinks.Flink = remote_mem_head;
+    ldr_entry.InMemoryOrderLinks.Blink = old_mem_blink;
+
+    LIST_ENTRY* old_init_blink = init_head_remote.Blink;
+    ldr_entry.InInitializationOrderLinks.Flink = remote_init_head;
+    ldr_entry.InInitializationOrderLinks.Blink = old_init_blink;
+
+    ldr_entry.DllBase        = remote_base;
+    ldr_entry.EntryPoint     = remote_base + nt_local->OptionalHeader.AddressOfEntryPoint;
+    ldr_entry.SizeOfImage    = nt_local->OptionalHeader.SizeOfImage;
+    ldr_entry.TimeDateStamp  = nt_local->FileHeader.TimeDateStamp;
+    ldr_entry.LoadCount      = 0xFFFF; // pinned
+    ldr_entry.TlsIndex       = 0;
+
+    ldr_entry.FullDllName.Length        = static_cast<USHORT>(spoof_name.size() * sizeof(wchar_t));
+    ldr_entry.FullDllName.MaximumLength = static_cast<USHORT>(full_buf_sz);
+    ldr_entry.FullDllName.Buffer        = reinterpret_cast<PWSTR>(r_full_buf);
+
+    ldr_entry.BaseDllName.Length        = static_cast<USHORT>(base_name.size() * sizeof(wchar_t));
+    ldr_entry.BaseDllName.MaximumLength = static_cast<USHORT>(base_buf_sz);
+    ldr_entry.BaseDllName.Buffer        = reinterpret_cast<PWSTR>(r_base_buf);
+
+    // 5. Write LDR entry
+    if (!WriteProcessMemory(hProc, r_entry, &ldr_entry, sizeof(ldr_entry), nullptr)) {
+        VirtualFreeEx(hProc, remote_ldr_mem, 0, MEM_RELEASE);
+        return false;
+    }
+
+    // 6. Splice into all three doubly-linked lists (append at tail)
+    auto splice_tail = [&](LIST_ENTRY* remote_head, LIST_ENTRY* old_blink,
+                           size_t links_offset) -> bool {
+        LIST_ENTRY* r_links = reinterpret_cast<LIST_ENTRY*>(r_entry + links_offset);
+        LIST_ENTRY* flink_ptr = reinterpret_cast<LIST_ENTRY*>(
+            reinterpret_cast<BYTE*>(old_blink) + offsetof(LIST_ENTRY, Flink));
+        if (!WriteProcessMemory(hProc, flink_ptr, &r_links, sizeof(r_links), nullptr)) return false;
+        LIST_ENTRY* blink_ptr = reinterpret_cast<LIST_ENTRY*>(
+            reinterpret_cast<BYTE*>(remote_head) + offsetof(LIST_ENTRY, Blink));
+        return WriteProcessMemory(hProc, blink_ptr, &r_links, sizeof(r_links), nullptr) != FALSE;
+    };
+
+    if (!splice_tail(remote_load_head, old_load_blink,
+                     offsetof(BW_LDR_DATA_TABLE_ENTRY, InLoadOrderLinks))) {
+        VirtualFreeEx(hProc, remote_ldr_mem, 0, MEM_RELEASE);
+        return false;
+    }
+    splice_tail(remote_mem_head,  old_mem_blink,
+                offsetof(BW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks));
+    splice_tail(remote_init_head, old_init_blink,
+                offsetof(BW_LDR_DATA_TABLE_ENTRY, InInitializationOrderLinks));
+
+    // remote_ldr_mem intentionally NOT freed — must remain live in the Ldr list.
+    return true;
 }
 
 // ── P4-01: ManualMapFileBacked (SEC_IMAGE + POSIX delete) ──────────────────
@@ -581,6 +749,11 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
     }
 
     const size_t kStubSz = RealStubSize();
+    // P0-[2]: Hard fail — a zero or oversized stub means the sentinel measurement is broken.
+    if (kStubSz == 0 || kStubSz > 0x1000) {
+        status = L"Stub size invalido (0 o >4KB). Verificar /OPT:NOICF y sentinel.";
+        return false;
+    }
     ScopedRemoteMem stub_mem(hProc, nullptr,
         kStubSz + sizeof(MmData), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!stub_mem.IsValid()) {
@@ -601,9 +774,14 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
     // 7. CFG Call Target Registration (P0 - T2)
     RegisterCfgCallTargets(hProc, remote_stub, kStubSz, base, nt);
 
-    // Unprotect mapped image for IAT writing & COW page creation before thread dispatch
-    DWORD old_img_prot = 0;
-    VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfImage, PAGE_EXECUTE_READWRITE, &old_img_prot);
+    // P1-[6]: Instead of RWX across the entire image (which makes the VAD look hybrid),
+    // only unprotect the PE headers and .idata section. SEC_IMAGE applies the correct
+    // per-section protection from PE characteristics; touching only these two ranges
+    // creates COW pages only where needed — identical to what LoadLibrary does.
+    DWORD old_hdr_p = 0, old_imp_p = 0;
+    VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfHeaders, PAGE_READWRITE, &old_hdr_p);
+    if (imp_dd.Size)
+        VirtualProtectEx(hProc, base + imp_dd.VirtualAddress, imp_dd.Size, PAGE_READWRITE, &old_imp_p);
 
     // 8. Thread Creation
     ScopedHandle th;
@@ -645,32 +823,39 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
     }
     th.Reset();
 
-    // Restore per-section protection after IAT resolution & CRT init
-    const auto* sec_cur = IMAGE_FIRST_SECTION(nt);
-    for (UINT i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec_cur) {
-        DWORD ssz = (std::max)(sec_cur->SizeOfRawData, sec_cur->Misc.VirtualSize);
-        if (!ssz) continue;
-        bool r = (sec_cur->Characteristics & IMAGE_SCN_MEM_READ)    != 0;
-        bool w = (sec_cur->Characteristics & IMAGE_SCN_MEM_WRITE)   != 0;
-        bool x = (sec_cur->Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
-        DWORD prot = x ? (w ? PAGE_EXECUTE_READWRITE : (r ? PAGE_EXECUTE_READ : PAGE_EXECUTE))
-                       : (w ? PAGE_READWRITE          : (r ? PAGE_READONLY     : PAGE_NOACCESS));
-        DWORD old_sec_p = 0;
-        VirtualProtectEx(hProc, base + sec_cur->VirtualAddress, ssz, prot, &old_sec_p);
-    }
+    // Restore PE headers to read-only. .idata stays PAGE_READWRITE — a real loaded DLL
+    // has writable .idata. All other sections keep their SEC_IMAGE-assigned protection.
+    if (old_hdr_p)
+        VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfHeaders, PAGE_READONLY, &old_hdr_p);
+    // .idata left writable intentionally (no restore).
 
-    // 10. Wipe DOS signature after CRT init completes (P3-01 order fix)
-    WORD zero_dos = 0;
-    DWORD old_dos_p = 0;
-    if (VirtualProtectEx(hProc, base, sizeof(zero_dos), PAGE_READWRITE, &old_dos_p)) {
-        WriteProcessMemory(hProc, base, &zero_dos, sizeof(zero_dos), nullptr);
-        VirtualProtectEx(hProc, base, sizeof(zero_dos), old_dos_p, &old_dos_p);
+    // 10. P1-[8]: Wipe complete PE header (SizeOfHeaders), not just MZ signature.
+    // Zeroing only the WORD left the DOS stub, NT signature, section table, and all
+    // metadata readable — a 2-byte wipe is cosmetic. Full header wipe matches what
+    // production manual-mappers do and closes the plaintext PE fingerprint.
+    {
+        const DWORD hdr_sz = nt->OptionalHeader.SizeOfHeaders;
+        std::vector<BYTE> zero_hdr(hdr_sz, 0);
+        DWORD old_wipe_p = 0;
+        if (VirtualProtectEx(hProc, base, hdr_sz, PAGE_READWRITE, &old_wipe_p)) {
+            WriteProcessMemory(hProc, base, zero_hdr.data(), hdr_sz, nullptr);
+            VirtualProtectEx(hProc, base, hdr_sz, PAGE_READONLY, &old_wipe_p);
+        }
     }
 
     // T8: Zero + free stub on success
     std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
     WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
     stub_mem.Release();
+
+    // P1-[7]: Insert into PEB->Ldr so the mapped region is not a VAD orphan.
+    // Spoof name: pick a plausible .minecraft native path that exists on most installs.
+    {
+        wchar_t appdata[MAX_PATH]{};
+        GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
+        std::wstring spoof = std::wstring(appdata) + L"\\.minecraft\\natives\\lwjgl_opengl.dll";
+        InsertModuleInLdr(hProc, base, nt, spoof);
+    }
 
     status = L"Inyectado OK (SEC_IMAGE + POSIX delete).";
     return true;

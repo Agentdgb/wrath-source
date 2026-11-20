@@ -81,27 +81,38 @@ using pfnSetProcessValidCallTargets_t = BOOL(WINAPI*)(
 using pfnNtSetInformationKey_t = NTSTATUS(NTAPI*)(
     HANDLE, ULONG, PVOID, ULONG);
 
-// ── Remote LDR resolution structures (P0 - T1) ─────────────────────────────
+// ── Remote LDR resolution structures (P0 - T1, P1-[7]) ─────────────────────
 struct BW_UNICODE_STRING {
     USHORT Length;
     USHORT MaximumLength;
     PWSTR  Buffer;
 };
 
+// Full x64 PEB_LDR_DATA layout (all three list heads needed for LDR insertion)
 struct BW_PEB_LDR_DATA {
-    BYTE Reserved1[8];
-    PVOID Reserved2[3];
+    ULONG     Length;
+    BOOLEAN   Initialized;
+    PVOID     SsHandle;
+    LIST_ENTRY InLoadOrderModuleList;
     LIST_ENTRY InMemoryOrderModuleList;
+    LIST_ENTRY InInitializationOrderModuleList;
 };
 
+// Extended LDR_DATA_TABLE_ENTRY for PEB->Ldr manipulation
 struct BW_LDR_DATA_TABLE_ENTRY {
-    LIST_ENTRY InMemoryOrderLinks;
-    LIST_ENTRY InInitializationOrderLinks;
-    PVOID DllBase;
-    PVOID EntryPoint;
-    ULONG SizeOfImage;
+    LIST_ENTRY        InLoadOrderLinks;
+    LIST_ENTRY        InMemoryOrderLinks;
+    LIST_ENTRY        InInitializationOrderLinks;
+    PVOID             DllBase;
+    PVOID             EntryPoint;
+    ULONG             SizeOfImage;
     BW_UNICODE_STRING FullDllName;
     BW_UNICODE_STRING BaseDllName;
+    ULONG             Flags;
+    USHORT            LoadCount;        // ObsoleteLoadCount on 8+, still present
+    USHORT            TlsIndex;
+    LIST_ENTRY        HashLinks;        // in module hash table
+    ULONG             TimeDateStamp;
 };
 
 } // namespace bp

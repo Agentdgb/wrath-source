@@ -537,6 +537,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         return 0;
     }
 
+    // P3-[15]: Clean up any orphaned log files from previous crashed runs.
+    {
+        wchar_t tmp_dir[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, tmp_dir);
+        std::wstring pattern = std::wstring(tmp_dir) + L"wrath_*.log";
+        WIN32_FIND_DATAW fd{};
+        HANDLE hFind = FindFirstFileW(pattern.c_str(), &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do { DeleteFileW((std::wstring(tmp_dir) + fd.cFileName).c_str()); }
+            while (FindNextFileW(hFind, &fd));
+            FindClose(hFind);
+        }
+    }
+
     // T22: --log flag
     if (ParseLogFlag(cmdline)) {
         g_log_path = BuildLogPath();
@@ -561,12 +575,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     // In silent deploy, payload must come from encrypted RCDATA resource
     if (dll_bytes.empty()) return 1;
 
-    int result = RunInject(dll_bytes);
-
-    // T4: launch scrub child to handle Prefetch after our exit
+    // P3-[13]: Launch scrub child BEFORE inject. The child waits for our PID to die,
+    // so the timing is identical from the child's perspective — but if inject crashes
+    // mid-flight, cleanup still runs regardless.
     LaunchScrubChild(g_log_path);
 
-    // Child handles SelfDelete as well; we just exit cleanly.
+    int result = RunInject(dll_bytes);
+
     // Zero our payload bytes before exit.
     SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
 
@@ -633,13 +648,12 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
-    int result = RunInject(dll_bytes);
-
-    // T4: launch scrub child to handle Prefetch after our exit
+    // P3-[13]: Launch scrub child before inject (same logic as silent variant)
     LaunchScrubChild(g_log_path);
 
-    SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
+    int result = RunInject(dll_bytes);
 
+    SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
     if (result == 0) {
         LOG(L"[+] Listo. Presiona Enter para salir.\n");
     } else {
