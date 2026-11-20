@@ -45,10 +45,6 @@ using pfnNtMapViewOfSection_t =
                      PLARGE_INTEGER, PSIZE_T, DWORD, ULONG, ULONG);
 using pfnNtUnmapViewOfSection_t =
     NTSTATUS(NTAPI*)(HANDLE, PVOID);
-using pfnCreateTransaction_t =
-    HANDLE(WINAPI*)(LPSECURITY_ATTRIBUTES, LPGUID, DWORD, DWORD,
-                    DWORD, DWORD, LPWSTR);
-using pfnRollbackTransaction_t = BOOL(WINAPI*)(HANDLE);
 
 #ifndef FILE_DISPOSITION_FLAG_DELETE
 #define FILE_DISPOSITION_FLAG_DELETE 0x00000001

