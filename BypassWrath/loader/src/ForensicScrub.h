@@ -3,7 +3,9 @@
 //
 // Rules enforced (per forensic-bypass-audit & implementation brief):
 //   1. CERO detención de servicios (DPS, SysMain, EventLog, etc. intactos).
-//   2. CERO truncado de USN Journal (evita flag USNshrink).
+//   2. CERO truncado de USN Journal: truncar o recrear el journal genera flags evidentes
+//      (USNshrink / journal recreation) en scanners forenses (Echo, Paladin, USNJournalParser).
+//      El rastro transitorio del ejecutable se asume como trade-off menor frente a journal tampering.
 //   3. CERO borrado masivo de Prefetch (solo se elimina el .pf específico del loader).
 //   4. Restauración de LastWriteTime de claves de registro modificadas (T18).
 //   5. Limpieza quirúrgica de BAM (T19), MuiCache, UserAssist y reportes WER (T17).

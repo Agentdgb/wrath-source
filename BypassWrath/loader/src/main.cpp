@@ -246,19 +246,18 @@ static std::vector<McCandidate> FindMinecraftPids() {
 }
 
 // Returns the single best candidate, or {0,0,""} on failure.
-// Tie-break: if two candidates share the max score, abort.
+// P3-[18]: If two candidates share the max score, break tie by lower PID (oldest process)
+// instead of aborting.
 static McCandidate PickBestCandidate(std::vector<McCandidate>& candidates) {
     if (candidates.empty()) return { 0, 0, L"" };
     if (candidates.size() == 1) return candidates[0];
 
-    // Sort descending by score
+    // Sort descending by score; on tie, sort ascending by pid (oldest process first)
     std::sort(candidates.begin(), candidates.end(),
               [](const McCandidate& a, const McCandidate& b) {
-                  return a.score > b.score;
+                  if (a.score != b.score) return a.score > b.score;
+                  return a.pid < b.pid;
               });
-
-    // Tie at top score → ambiguous
-    if (candidates[0].score == candidates[1].score) return { 0, 0, L"" };
 
     return candidates[0];
 }
@@ -452,9 +451,19 @@ static bool ParseLogFlag(const wchar_t* cmdline) {
     return (wcsstr(cmdline, L"--log") != nullptr);
 }
 
+// ── P3-[18]: Parse --pid <n> flag ───────────────────────────────────────────
+static DWORD ParsePidFlag(const wchar_t* cmdline) {
+    if (!cmdline) return 0;
+    const wchar_t* p = wcsstr(cmdline, L"--pid");
+    if (!p) return 0;
+    p += 5;
+    while (*p == L' ' || *p == L'=') ++p;
+    return static_cast<DWORD>(_wtoi(p));
+}
+
 // ── Core injection flow (shared by both variants) ────────────────────────────
 // Returns 0 on success, non-zero on failure.
-static int RunInject(std::vector<uint8_t>& dll_bytes) {
+static int RunInject(std::vector<uint8_t>& dll_bytes, DWORD explicit_pid = 0) {
     // P3-06: validate PE
     std::wstring pe_err;
     if (!ValidatePayloadPE(dll_bytes.data(), dll_bytes.size(), pe_err)) {
@@ -462,30 +471,35 @@ static int RunInject(std::vector<uint8_t>& dll_bytes) {
         return 1;
     }
 
-    // T5: polling loop — wait up to kMaxWaitMs for Minecraft to appear
-    LOG(L"[*] Buscando javaw.exe con Minecraft...\n");
-    std::vector<McCandidate> candidates;
-    DWORD waited = 0;
-    while (true) {
-        candidates = FindMinecraftPids();
-        if (!candidates.empty()) break;
-        if (waited >= kMaxWaitMs) {
-            LOG(L"[!] Timeout: no se encontro javaw.exe con Minecraft en %u ms.\n", kMaxWaitMs);
+    McCandidate best{ 0, 0, L"" };
+    if (explicit_pid != 0) {
+        best.pid = explicit_pid;
+        best.score = 100;
+        LOG(L"[*] Objetivo explicito via --pid: PID=%u\n", explicit_pid);
+    } else {
+        // T5: polling loop — wait up to kMaxWaitMs for Minecraft to appear
+        LOG(L"[*] Buscando javaw.exe con Minecraft...\n");
+        std::vector<McCandidate> candidates;
+        DWORD waited = 0;
+        while (true) {
+            candidates = FindMinecraftPids();
+            if (!candidates.empty()) break;
+            if (waited >= kMaxWaitMs) {
+                LOG(L"[!] Timeout: no se encontro javaw.exe con Minecraft en %u ms.\n", kMaxWaitMs);
+                return 1;
+            }
+            Sleep(kPollMs);
+            waited += kPollMs;
+        }
+
+        // T6: pick best candidate by score (P3-[18]: tie broken by lower PID)
+        best = PickBestCandidate(candidates);
+        if (best.pid == 0) {
+            LOG(L"[!] No se encontro un javaw.exe valido con Minecraft.\n");
             return 1;
         }
-        Sleep(kPollMs);
-        waited += kPollMs;
+        LOG(L"[+] Objetivo: javaw.exe PID=%u (score=%d)\n", best.pid, best.score);
     }
-
-    // T6: pick best candidate by score
-    McCandidate best = PickBestCandidate(candidates);
-    if (best.pid == 0) {
-        LOG(L"[!] Multiples instancias ambiguas (empate de score):\n");
-        for (auto& c : candidates)
-            LOG(L"    PID=%u  score=%d  %s\n", c.pid, c.score, c.cmdline_fragment.c_str());
-        return 1;
-    }
-    LOG(L"[+] Objetivo: javaw.exe PID=%u (score=%d)\n", best.pid, best.score);
 
     // T15: try without SeDebug first
     bool elevated = false;
@@ -556,6 +570,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         g_log_path = BuildLogPath();
     }
 
+    // P3-[18]: --pid <n> flag
+    DWORD explicit_pid = ParsePidFlag(cmdline);
+
     // Load encrypted payload from RCDATA resource (zero disk touch)
     std::vector<uint8_t> dll_bytes;
     HRSRC hRes = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_PAYLOAD_BIN), MAKEINTRESOURCEW(10));
@@ -580,7 +597,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     // mid-flight, cleanup still runs regardless.
     LaunchScrubChild(g_log_path);
 
-    int result = RunInject(dll_bytes);
+    int result = RunInject(dll_bytes, explicit_pid);
 
     // Zero our payload bytes before exit.
     SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
@@ -611,9 +628,13 @@ int wmain(int argc, wchar_t** argv) {
 
     std::wstring payload_path;
 
+    // P3-[18]: --pid <n> flag
+    DWORD explicit_pid = ParsePidFlag(cmdline);
+
     for (int i = 1; i < argc; ++i) {
-        if      (_wcsicmp(argv[i], L"--log") == 0)   { ++i; /* already handled */ }
+        if      (_wcsicmp(argv[i], L"--log") == 0)   { /* already handled */ }
         else if (_wcsicmp(argv[i], L"--scrub") == 0) { ++i; /* already handled */ }
+        else if (_wcsicmp(argv[i], L"--pid") == 0)   { ++i; /* already handled */ }
         else payload_path = argv[i];
     }
 
@@ -651,7 +672,7 @@ int wmain(int argc, wchar_t** argv) {
     // P3-[13]: Launch scrub child before inject (same logic as silent variant)
     LaunchScrubChild(g_log_path);
 
-    int result = RunInject(dll_bytes);
+    int result = RunInject(dll_bytes, explicit_pid);
 
     SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
     if (result == 0) {

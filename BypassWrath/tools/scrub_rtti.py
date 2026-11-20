@@ -34,43 +34,35 @@ def scrub_rtti(dll_path: str) -> None:
     opt_hdr_size  = struct.unpack_from("<H", data, coff_off + 16)[0]
     sec_table_off = coff_off + 20 + opt_hdr_size
 
-    rdata_raw_off  = None
-    rdata_raw_size = 0
+    # Locate target sections (.rdata, .data, .text)
+    target_sections = [b".rdata", b".data", b".text"]
+    scrubbed = 0
 
     for i in range(num_sections):
         sec_off  = sec_table_off + i * 40
         name     = data[sec_off:sec_off+8].rstrip(b"\x00")
         raw_sz   = struct.unpack_from("<I", data, sec_off + 16)[0]
         raw_off  = struct.unpack_from("<I", data, sec_off + 20)[0]
-        if name == b".rdata":
-            rdata_raw_off  = raw_off
-            rdata_raw_size = raw_sz
-            break
 
-    if rdata_raw_off is None:
-        print("[scrub_rtti] .rdata section not found -- skipping")
-        return
-
-    rdata = data[rdata_raw_off: rdata_raw_off + rdata_raw_size]
-    scrubbed = 0
-
-    for prefix in SCRUB_PREFIXES:
-        pos = 0
-        while True:
-            idx = rdata.find(prefix, pos)
-            if idx == -1:
-                break
-            # Zero until next null byte
-            end = rdata.index(b"\x00", idx) if b"\x00" in rdata[idx:] else len(rdata)
-            for j in range(idx, end):
-                data[rdata_raw_off + j] = 0
-            scrubbed += 1
-            pos = end
+        if name in target_sections and raw_sz > 0:
+            sec_data = data[raw_off: raw_off + raw_sz]
+            for prefix in SCRUB_PREFIXES:
+                pos = 0
+                while True:
+                    idx = sec_data.find(prefix, pos)
+                    if idx == -1:
+                        break
+                    # Zero until next null byte
+                    end = sec_data.index(b"\x00", idx) if b"\x00" in sec_data[idx:] else len(sec_data)
+                    for j in range(idx, end):
+                        data[raw_off + j] = 0
+                    scrubbed += 1
+                    pos = end
 
     with open(dll_path, "wb") as f:
         f.write(data)
 
-    print(f"[scrub_rtti] Scrubbed {scrubbed} RTTI strings in {dll_path}")
+    print(f"[scrub_rtti] Scrubbed {scrubbed} RTTI/ident strings in {dll_path}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
