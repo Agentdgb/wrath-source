@@ -206,22 +206,27 @@ inline void RegisterCfgCallTargets(HANDLE hProc, PVOID remote_stub, size_t stub_
     BW_CFG_CALL_TARGET_INFO stub_target{ 0, CFG_CALL_TARGET_VALID };
     pfnSetCfg(hProc, remote_stub, stub_sz, 1, &stub_target);
 
-    // 2. P1-[9]: Register all executable sections in the payload, not just EP.
-    // Every indirect call site in .text needs to be in the CFG bitmap; registering
-    // only the EP causes 0xC0000409 on the first indirect call inside a non-EP section.
+    // 2. P1-[9]: Register all executable pages in the payload, not just section base or EP.
+    // CFG bitmap is granular per page/call target. Registering only sec->VirtualAddress leaves
+    // the rest of the executable section invalid, causing 0xC0000409 on indirect calls outside page 0.
     if (nt && base) {
+        std::vector<BW_CFG_CALL_TARGET_INFO> targets;
         const auto* sec = IMAGE_FIRST_SECTION(nt);
         for (UINT i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
             if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
             DWORD sec_sz = (std::max)(sec->SizeOfRawData, sec->Misc.VirtualSize);
             if (!sec_sz) continue;
-            BW_CFG_CALL_TARGET_INFO ti{ sec->VirtualAddress, CFG_CALL_TARGET_VALID };
-            pfnSetCfg(hProc, base, nt->OptionalHeader.SizeOfImage, 1, &ti);
+            for (DWORD off = 0; off < sec_sz; off += 0x1000) {
+                targets.push_back({ sec->VirtualAddress + off, CFG_CALL_TARGET_VALID });
+            }
         }
-        // Also mark EP explicitly (may be in a thunk stub outside named sections)
+        // Also mark EP explicitly
         if (nt->OptionalHeader.AddressOfEntryPoint) {
-            BW_CFG_CALL_TARGET_INFO ep_target{ nt->OptionalHeader.AddressOfEntryPoint, CFG_CALL_TARGET_VALID };
-            pfnSetCfg(hProc, base, nt->OptionalHeader.SizeOfImage, 1, &ep_target);
+            targets.push_back({ nt->OptionalHeader.AddressOfEntryPoint, CFG_CALL_TARGET_VALID });
+        }
+        if (!targets.empty()) {
+            pfnSetCfg(hProc, base, nt->OptionalHeader.SizeOfImage,
+                      static_cast<ULONG>(targets.size()), targets.data());
         }
     }
     FreeLibrary(hKb);
@@ -452,10 +457,10 @@ __declspec(noinline) inline void WINAPI RemoteStubSentinel() {}
 #pragma check_stack()
 
 inline size_t RealStubSize() {
-    const size_t sz = static_cast<size_t>(
-        reinterpret_cast<const BYTE*>(&RemoteStubSentinel) -
-        reinterpret_cast<const BYTE*>(&RemoteStub));
-    return sz; // No clamp — caller validates
+    const auto pSentinel = reinterpret_cast<const BYTE*>(&RemoteStubSentinel);
+    const auto pStub     = reinterpret_cast<const BYTE*>(&RemoteStub);
+    if (pSentinel <= pStub) return 0; // Sentinel must follow stub; inverted layout or folding
+    return static_cast<size_t>(pSentinel - pStub);
 }
 
 // ── P1-[7]: Insert module into PEB->Ldr ──────────────────────────────────────
@@ -553,8 +558,13 @@ inline bool InsertModuleInLdr(HANDLE hProc, BYTE* remote_base,
     ldr_entry.EntryPoint     = remote_base + nt_local->OptionalHeader.AddressOfEntryPoint;
     ldr_entry.SizeOfImage    = nt_local->OptionalHeader.SizeOfImage;
     ldr_entry.TimeDateStamp  = nt_local->FileHeader.TimeDateStamp;
-    ldr_entry.LoadCount      = 0xFFFF; // pinned
+    ldr_entry.Flags          = 0x00004004; // LDRP_IMAGE_DLL | LDRP_ENTRY_PROCESSED (Bug 54)
+    ldr_entry.LoadCount      = 0xFFFF;     // pinned
     ldr_entry.TlsIndex       = 0;
+    // Valid self-loop for HashLinks (Bug 54: avoid null pointers in module hash table)
+    ldr_entry.HashLinks.Flink = reinterpret_cast<LIST_ENTRY*>(
+        reinterpret_cast<BYTE*>(r_entry) + offsetof(BW_LDR_DATA_TABLE_ENTRY, HashLinks));
+    ldr_entry.HashLinks.Blink = ldr_entry.HashLinks.Flink;
 
     ldr_entry.FullDllName.Length        = static_cast<USHORT>(spoof_name.size() * sizeof(wchar_t));
     ldr_entry.FullDllName.MaximumLength = static_cast<USHORT>(full_buf_sz);
@@ -594,6 +604,62 @@ inline bool InsertModuleInLdr(HANDLE hProc, BYTE* remote_base,
 
     // remote_ldr_mem intentionally NOT freed — must remain live in the Ldr list.
     return true;
+}
+
+// ── Bug 55: Find an existing native directory from the target process ───────
+inline std::wstring GetTargetNativeSpoofPath(HANDLE hProc) {
+    HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
+    if (hNtDll) {
+        using pfnNtQIP = LONG(NTAPI*)(HANDLE, DWORD, PVOID, ULONG, PULONG);
+        auto NtQIP = reinterpret_cast<pfnNtQIP>(GetProcAddress(hNtDll, "NtQueryInformationProcess"));
+        if (NtQIP) {
+            struct { PVOID r1; PVOID PebBase; PVOID r2[2]; ULONG_PTR pid; PVOID r3; } pbi{};
+            ULONG rlen = 0;
+            if (NtQIP(hProc, 0, &pbi, sizeof(pbi), &rlen) >= 0 && pbi.PebBase) {
+                PVOID pLdr = nullptr;
+                if (ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(pbi.PebBase) + 0x18, &pLdr, sizeof(pLdr), nullptr) && pLdr) {
+                    BW_PEB_LDR_DATA ldr{};
+                    if (ReadProcessMemory(hProc, pLdr, &ldr, sizeof(ldr), nullptr)) {
+                        LIST_ENTRY* remoteHead = reinterpret_cast<LIST_ENTRY*>(
+                            reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InMemoryOrderModuleList));
+                        LIST_ENTRY* curr = ldr.InMemoryOrderModuleList.Flink;
+                        for (int i = 0; i < 128 && curr && curr != remoteHead; ++i) {
+                            BW_LDR_DATA_TABLE_ENTRY entry{};
+                            BYTE* entry_addr = reinterpret_cast<BYTE*>(curr) - offsetof(BW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+                            if (!ReadProcessMemory(hProc, entry_addr, &entry, sizeof(entry), nullptr)) break;
+                            if (entry.FullDllName.Buffer && entry.FullDllName.Length > 0) {
+                                USHORT wchars = entry.FullDllName.Length / sizeof(wchar_t);
+                                std::wstring fullPath(wchars, L'\0');
+                                if (ReadProcessMemory(hProc, entry.FullDllName.Buffer, fullPath.data(), entry.FullDllName.Length, nullptr)) {
+                                    std::wstring lower = fullPath;
+                                    for (auto& c : lower) c = towlower(c);
+                                    if (lower.find(L"natives") != std::wstring::npos ||
+                                        lower.find(L"lwjgl") != std::wstring::npos) {
+                                        auto sep = fullPath.rfind(L'\\');
+                                        if (sep != std::wstring::npos) {
+                                            std::wstring dir = fullPath.substr(0, sep);
+                                            return dir + L"\\lwjgl_opengl.dll";
+                                        }
+                                    }
+                                }
+                            }
+                            curr = entry.InMemoryOrderLinks.Flink;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: check %APPDATA%\.minecraft\natives or %TEMP%
+    wchar_t appdata[MAX_PATH]{};
+    GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
+    std::wstring p1 = std::wstring(appdata) + L"\\.minecraft\\natives\\lwjgl_opengl.dll";
+    if (GetFileAttributesW((std::wstring(appdata) + L"\\.minecraft\\natives").c_str()) != INVALID_FILE_ATTRIBUTES)
+        return p1;
+
+    wchar_t temp_dir[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp_dir);
+    return std::wstring(temp_dir) + L"jna_native.dll";
 }
 
 // ── P4-01: ManualMapFileBacked (SEC_IMAGE + POSIX delete) ──────────────────
@@ -829,17 +895,21 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
         VirtualProtectEx(hProc, base, nt->OptionalHeader.SizeOfHeaders, PAGE_READONLY, &old_hdr_p);
     // .idata left writable intentionally (no restore).
 
-    // 10. P1-[8]: Wipe complete PE header (SizeOfHeaders), not just MZ signature.
-    // Zeroing only the WORD left the DOS stub, NT signature, section table, and all
-    // metadata readable — a 2-byte wipe is cosmetic. Full header wipe matches what
-    // production manual-mappers do and closes the plaintext PE fingerprint.
+    // 10. Bug 53: Selective header sanitization.
+    // Preserves DOS header + PE signature + FileHeader so that PEB->Ldr and
+    // EnumProcessModules recognize it as a valid module image, but zeroes out
+    // the OptionalHeader (DataDirectories, sections) to prevent carving/dumping.
     {
+        const DWORD keep = dos->e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
         const DWORD hdr_sz = nt->OptionalHeader.SizeOfHeaders;
-        std::vector<BYTE> zero_hdr(hdr_sz, 0);
-        DWORD old_wipe_p = 0;
-        if (VirtualProtectEx(hProc, base, hdr_sz, PAGE_READWRITE, &old_wipe_p)) {
-            WriteProcessMemory(hProc, base, zero_hdr.data(), hdr_sz, nullptr);
-            VirtualProtectEx(hProc, base, hdr_sz, PAGE_READONLY, &old_wipe_p);
+        if (hdr_sz > keep) {
+            const DWORD wipe_sz = hdr_sz - keep;
+            std::vector<BYTE> zero_buf(wipe_sz, 0);
+            DWORD old_wipe_p = 0;
+            if (VirtualProtectEx(hProc, base + keep, wipe_sz, PAGE_READWRITE, &old_wipe_p)) {
+                WriteProcessMemory(hProc, base + keep, zero_buf.data(), wipe_sz, nullptr);
+                VirtualProtectEx(hProc, base + keep, wipe_sz, PAGE_READONLY, &old_wipe_p);
+            }
         }
     }
 
@@ -848,13 +918,11 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
     WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
     stub_mem.Release();
 
-    // P1-[7]: Insert into PEB->Ldr so the mapped region is not a VAD orphan.
-    // Spoof name: pick a plausible .minecraft native path that exists on most installs.
-    {
-        wchar_t appdata[MAX_PATH]{};
-        GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-        std::wstring spoof = std::wstring(appdata) + L"\\.minecraft\\natives\\lwjgl_opengl.dll";
-        InsertModuleInLdr(hProc, base, nt, spoof);
+    // P1-[7] & Bug 55/56: Insert into PEB->Ldr with plausible/existing native path
+    std::wstring spoof = GetTargetNativeSpoofPath(hProc);
+    if (!InsertModuleInLdr(hProc, base, nt, spoof)) {
+        status = L"Fallo al registrar modulo en PEB->Ldr.";
+        return false;
     }
 
     status = L"Inyectado OK (SEC_IMAGE + POSIX delete).";

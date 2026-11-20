@@ -246,13 +246,13 @@ static std::vector<McCandidate> FindMinecraftPids() {
 }
 
 // Returns the single best candidate, or {0,0,""} on failure.
-// P3-[18]: If two candidates share the max score, break tie by lower PID (oldest process)
-// instead of aborting.
+// P3-[18]: If two candidates share the max score, break tie by lower PID
+// (heuristic tie-breaker to avoid aborting on multiple processes)
 static McCandidate PickBestCandidate(std::vector<McCandidate>& candidates) {
     if (candidates.empty()) return { 0, 0, L"" };
     if (candidates.size() == 1) return candidates[0];
 
-    // Sort descending by score; on tie, sort ascending by pid (oldest process first)
+    // Sort descending by score; on tie, sort ascending by pid
     std::sort(candidates.begin(), candidates.end(),
               [](const McCandidate& a, const McCandidate& b) {
                   if (a.score != b.score) return a.score > b.score;
@@ -473,9 +473,29 @@ static int RunInject(std::vector<uint8_t>& dll_bytes, DWORD explicit_pid = 0) {
 
     McCandidate best{ 0, 0, L"" };
     if (explicit_pid != 0) {
+        // Bug 57: Validate that explicit_pid actually belongs to javaw.exe
+        HANDLE hCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, explicit_pid);
+        if (!hCheck) {
+            LOG(L"[!] --pid %u: no se pudo abrir el proceso (error=%u).\n", explicit_pid, GetLastError());
+            return 1;
+        }
+        wchar_t img_path[MAX_PATH]{};
+        DWORD sz = MAX_PATH;
+        bool is_javaw = false;
+        if (QueryFullProcessImageNameW(hCheck, 0, img_path, &sz)) {
+            std::wstring lower = img_path;
+            for (auto& c : lower) c = towlower(c);
+            if (lower.size() >= 9 && lower.compare(lower.size() - 9, 9, L"javaw.exe") == 0)
+                is_javaw = true;
+        }
+        CloseHandle(hCheck);
+        if (!is_javaw) {
+            LOG(L"[!] --pid %u no corresponde a javaw.exe (proceso: %s). Abortando.\n", explicit_pid, img_path);
+            return 1;
+        }
         best.pid = explicit_pid;
         best.score = 100;
-        LOG(L"[*] Objetivo explicito via --pid: PID=%u\n", explicit_pid);
+        LOG(L"[*] Objetivo verificado via --pid: javaw.exe PID=%u\n", explicit_pid);
     } else {
         // T5: polling loop — wait up to kMaxWaitMs for Minecraft to appear
         LOG(L"[*] Buscando javaw.exe con Minecraft...\n");
@@ -494,8 +514,9 @@ static int RunInject(std::vector<uint8_t>& dll_bytes, DWORD explicit_pid = 0) {
 
         // T6: pick best candidate by score (P3-[18]: tie broken by lower PID)
         best = PickBestCandidate(candidates);
-        if (best.pid == 0) {
-            LOG(L"[!] No se encontro un javaw.exe valido con Minecraft.\n");
+        // Bug 58: Require minimum score of 3 Minecraft markers to prevent injecting into bare JVM
+        if (best.pid == 0 || best.score < 3) {
+            LOG(L"[!] No se encontro un javaw.exe con suficientes marcadores de Minecraft (score=%d < 3).\n", best.score);
             return 1;
         }
         LOG(L"[+] Objetivo: javaw.exe PID=%u (score=%d)\n", best.pid, best.score);

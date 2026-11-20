@@ -34,8 +34,10 @@ def scrub_rtti(dll_path: str) -> None:
     opt_hdr_size  = struct.unpack_from("<H", data, coff_off + 16)[0]
     sec_table_off = coff_off + 20 + opt_hdr_size
 
-    # Locate target sections (.rdata, .data, .text)
-    target_sections = [b".rdata", b".data", b".text"]
+    # Locate target sections (.rdata, .data)
+    # Note: .text is excluded to prevent accidental opcode corruption if mangled
+    # prefix bytes happen to appear inside x86-64 instructions.
+    target_sections = [b".rdata", b".data"]
     scrubbed = 0
 
     for i in range(num_sections):
@@ -52,8 +54,9 @@ def scrub_rtti(dll_path: str) -> None:
                     idx = sec_data.find(prefix, pos)
                     if idx == -1:
                         break
-                    # Zero until next null byte
-                    end = sec_data.index(b"\x00", idx) if b"\x00" in sec_data[idx:] else len(sec_data)
+                    # Zero until next null byte (O(n) via find)
+                    null_idx = sec_data.find(b"\x00", idx)
+                    end = null_idx if null_idx != -1 else len(sec_data)
                     for j in range(idx, end):
                         data[raw_off + j] = 0
                     scrubbed += 1

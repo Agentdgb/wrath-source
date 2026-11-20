@@ -56,7 +56,7 @@ set_target_properties(BypassLoader PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
 )
 target_compile_options(BypassLoader PRIVATE /guard:cf)
-target_link_options(BypassLoader PRIVATE /SUBSYSTEM:WINDOWS /guard:cf /CETCOMPAT /DYNAMICBASE /OPT:NOICF)
+target_link_options(BypassLoader PRIVATE /SUBSYSTEM:WINDOWS /guard:cf /CETCOMPAT /DYNAMICBASE /OPT:NOICF "/PDBALTPATH:%_PDB%")
 
 # ── Target 2: BypassLoaderDbg (debug, console, SUBSYSTEM:CONSOLE) ──────────
 # --txf flag supported. Full wprintf output. getchar() pause on exit.
@@ -75,4 +75,4 @@ set_target_properties(BypassLoaderDbg PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
 )
 target_compile_options(BypassLoaderDbg PRIVATE /guard:cf)
-target_link_options(BypassLoaderDbg PRIVATE /SUBSYSTEM:CONSOLE /guard:cf /CETCOMPAT /DYNAMICBASE /OPT:NOICF)
+target_link_options(BypassLoaderDbg PRIVATE /SUBSYSTEM:CONSOLE /guard:cf /CETCOMPAT /DYNAMICBASE /OPT:NOICF "/PDBALTPATH:%_PDB%")
