@@ -157,8 +157,12 @@ struct McCandidate {
 
 static int ScoreMinecraftCmdLine(const std::wstring& lower) {
     int s = 0;
-    // Strong marker: actual Minecraft main class
-    if (lower.find(L"net.minecraft.client.main.main") != std::wstring::npos) s += 3;
+    // Strong marker: actual Minecraft main class (vanilla or modloaders)
+    if (lower.find(L"net.minecraft.client.main.main") != std::wstring::npos ||
+        lower.find(L"knotclient") != std::wstring::npos ||
+        lower.find(L"launchwrapper") != std::wstring::npos ||
+        lower.find(L"bootstraplauncher") != std::wstring::npos ||
+        lower.find(L"net.minecraftforge") != std::wstring::npos) s += 3;
     // Native library path indicates game, not launcher JVM
     if (lower.find(L"-djava.library.path") != std::wstring::npos &&
         lower.find(L"natives") != std::wstring::npos) s += 2;
@@ -514,9 +518,9 @@ static int RunInject(std::vector<uint8_t>& dll_bytes, DWORD explicit_pid = 0) {
 
         // T6: pick best candidate by score (P3-[18]: tie broken by lower PID)
         best = PickBestCandidate(candidates);
-        // Bug 58: Require minimum score of 3 Minecraft markers to prevent injecting into bare JVM
-        if (best.pid == 0 || best.score < 3) {
-            LOG(L"[!] No se encontro un javaw.exe con suficientes marcadores de Minecraft (score=%d < 3).\n", best.score);
+        // Require minimum score of 2 Minecraft markers (allows modloaders and custom launchers)
+        if (best.pid == 0 || best.score < 2) {
+            LOG(L"[!] No se encontro un javaw.exe con suficientes marcadores de Minecraft (score=%d < 2).\n", best.score);
             return 1;
         }
         LOG(L"[+] Objetivo: javaw.exe PID=%u (score=%d)\n", best.pid, best.score);
