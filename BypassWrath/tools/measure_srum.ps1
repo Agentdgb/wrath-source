@@ -98,21 +98,22 @@ if ($DatabasePath) {
 }
 
 # 3. Analizar la base de datos con ESE
-$instance = $null
-$sesid = $null
-$dbid = $null
-$tableid = $null
+$instance = New-Object Microsoft.Isam.Esent.Interop.JET_INSTANCE
+$sesid    = New-Object Microsoft.Isam.Esent.Interop.JET_SESID
+$dbid     = New-Object Microsoft.Isam.Esent.Interop.JET_DBID
+$tableid  = New-Object Microsoft.Isam.Esent.Interop.JET_TABLEID
 
 $matchedIdentities = @()
 
 try {
-    # Configuración de ESE para lectura offline segura
-    [Microsoft.Isam.Esent.Interop.SystemParameters]::Recovery = $false
-    [Microsoft.Isam.Esent.Interop.SystemParameters]::CircularLog = 1
-    [Microsoft.Isam.Esent.Interop.SystemParameters]::TempPath = $env:TEMP
-
     $instName = "SrumAuditor_" + (Get-Random)
     [Microsoft.Isam.Esent.Interop.Api]::JetCreateInstance([ref]$instance, $instName)
+    
+    $instParams = New-Object Microsoft.Isam.Esent.Interop.InstanceParameters($instance)
+    $instParams.Recovery = $false
+    $instParams.CircularLog = $true
+    $instParams.TempDirectory = $env:TEMP
+
     [Microsoft.Isam.Esent.Interop.Api]::JetInit([ref]$instance)
     [Microsoft.Isam.Esent.Interop.Api]::JetBeginSession($instance, [ref]$sesid, $null, $null)
 
@@ -158,7 +159,7 @@ try {
     }
 
     [Microsoft.Isam.Esent.Interop.Api]::JetCloseTable($sesid, $tableid)
-    $tableid = $null
+    $tableid = New-Object Microsoft.Isam.Esent.Interop.JET_TABLEID
 
     Write-Host "[+] Total de ejecutables registrados en SRUM: $totalApps" -ForegroundColor Gray
 
@@ -178,8 +179,8 @@ try {
         )
 
         foreach ($tblName in $usageTables) {
+            $tId = New-Object Microsoft.Isam.Esent.Interop.JET_TABLEID
             try {
-                $tId = $null
                 [Microsoft.Isam.Esent.Interop.Api]::JetOpenTable($sesid, $dbid, $tblName, $null, 0, [Microsoft.Isam.Esent.Interop.OpenTableGrbit]::ReadOnly, [ref]$tId)
                 $colAppId = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumnid($sesid, $tId, "AppId")
 
@@ -193,9 +194,12 @@ try {
                         }
                     } while ([Microsoft.Isam.Esent.Interop.Api]::TryMoveNext($sesid, $tId))
                 }
-                [Microsoft.Isam.Esent.Interop.Api]::JetCloseTable($sesid, $tId)
             } catch {
                 # Tabla no presente en este schema o vacía
+            } finally {
+                if (-not $tId.IsInvalid) {
+                    try { [Microsoft.Isam.Esent.Interop.Api]::JetCloseTable($sesid, $tId) } catch {}
+                }
             }
         }
     }
@@ -218,19 +222,19 @@ try {
     Write-Host "------------------------------------------------------------`n" -ForegroundColor Cyan
 
 } catch {
-    Write-Host "[!] Error durante el análisis ESE: $_" -ForegroundColor Red
+    Write-Host "[!] Error durante el análisis ESE: $($_.Exception.ToString())" -ForegroundColor Red
 } finally {
-    if ($tableid) {
+    if ($tableid -and -not $tableid.IsInvalid) {
         try { [Microsoft.Isam.Esent.Interop.Api]::JetCloseTable($sesid, $tableid) } catch {}
     }
-    if ($dbid) {
+    if ($dbid -and -not $dbid.IsInvalid) {
         try { [Microsoft.Isam.Esent.Interop.Api]::JetCloseDatabase($sesid, $dbid, [Microsoft.Isam.Esent.Interop.CloseDatabaseGrbit]::None) } catch {}
     }
-    if ($sesid) {
+    if ($sesid -and -not $sesid.IsInvalid) {
         try { [Microsoft.Isam.Esent.Interop.Api]::JetDetachDatabase($sesid, $targetDb) } catch {}
         try { [Microsoft.Isam.Esent.Interop.Api]::JetEndSession($sesid, [Microsoft.Isam.Esent.Interop.EndSessionGrbit]::None) } catch {}
     }
-    if ($instance) {
+    if ($instance -and -not $instance.IsInvalid) {
         try { [Microsoft.Isam.Esent.Interop.Api]::JetTerm($instance) } catch {}
     }
 
