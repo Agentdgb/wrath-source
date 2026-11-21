@@ -374,6 +374,8 @@ static void LaunchScrubChild(const std::wstring& log_path) {
         cmdline += log_path;
         cmdline += L"\"";
     }
+    if (!g_srum_enabled) cmdline += L" --no-srum";
+    if (g_srum_all)      cmdline += L" --srum-all";
 
     STARTUPINFOW si{};
     si.cb = sizeof(si);

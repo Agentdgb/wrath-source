@@ -819,6 +819,8 @@ inline bool ScrubSrum(bool all_times = false) {
         ese.JetSetSystemParameterW(&instance, 0, JET_paramRecovery, 0, L"Off");
         ese.JetSetSystemParameterW(&instance, 0, JET_paramCircularLog, 1, nullptr);
         ese.JetSetSystemParameterW(&instance, 0, JET_paramTempPath, 0, temp_dir);
+        ese.JetSetSystemParameterW(&instance, 0, JET_paramSystemPath, 0, temp_dir);
+        ese.JetSetSystemParameterW(&instance, 0, JET_paramLogFilePath, 0, temp_dir);
 
         if (ese.JetInit(&instance) != JET_errSuccess) break;
         if (ese.JetBeginSessionW(instance, &sesid, nullptr, nullptr) != JET_errSuccess) break;
@@ -835,9 +837,13 @@ inline bool ScrubSrum(bool all_times = false) {
         }
 
         JET_COLUMNBASE_W colTypeInfo{}, colIndexInfo{}, colBlobInfo{};
-        ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdType", &colTypeInfo, sizeof(colTypeInfo), JET_ColInfoBase);
-        ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdIndex", &colIndexInfo, sizeof(colIndexInfo), JET_ColInfoBase);
-        ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdBlob", &colBlobInfo, sizeof(colBlobInfo), JET_ColInfoBase);
+        if (ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdType", &colTypeInfo, sizeof(colTypeInfo), JET_ColInfoBase) != JET_errSuccess ||
+            ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdIndex", &colIndexInfo, sizeof(colIndexInfo), JET_ColInfoBase) != JET_errSuccess ||
+            ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdBlob", &colBlobInfo, sizeof(colBlobInfo), JET_ColInfoBase) != JET_errSuccess) {
+            ese.JetCloseTable(sesid, mapTable);
+            ese.JetRollback(sesid, 0);
+            break;
+        }
 
         struct MatchedIdentity {
             int64_t id_index;
@@ -951,6 +957,7 @@ inline bool ScrubSrum(bool all_times = false) {
             if (ese.JetOpenTableW(sesid, dbid, utbl, nullptr, 0, 0, &uTable) == JET_errSuccess) {
                 JET_COLUMNBASE_W colAppIdInfo{};
                 if (ese.JetGetTableColumnInfoW(sesid, uTable, L"AppId", &colAppIdInfo, sizeof(colAppIdInfo), JET_ColInfoBase) == JET_errSuccess) {
+                    std::vector<std::vector<uint8_t>> usage_hits;
                     if (ese.JetMove(sesid, uTable, JET_MoveFirst, 0) == JET_errSuccess) {
                         do {
                             uint8_t app_buf[8]{};
@@ -958,17 +965,26 @@ inline bool ScrubSrum(bool all_times = false) {
                             ese.JetRetrieveColumn(sesid, uTable, colAppIdInfo.columnid, app_buf, sizeof(app_buf), &app_act, 0, nullptr);
                             int64_t app_id = 0;
                             if (app_act == 1) app_id = app_buf[0];
-                            else if (app_act == 2) app_id = *reinterpret_cast<int16_t*>(app_buf);
-                            else if (app_act == 4) app_id = *reinterpret_cast<int32_t*>(app_buf);
-                            else if (app_act == 8) app_id = *reinterpret_cast<int64_t*>(app_buf);
+                            else if (app_act == 2) memcpy(&app_id, app_buf, 2);
+                            else if (app_act == 4) memcpy(&app_id, app_buf, 4);
+                            else if (app_act == 8) memcpy(&app_id, app_buf, 8);
 
                             for (const auto& m : matched) {
                                 if (app_id == m.id_index) {
-                                    ese.JetDelete(sesid, uTable);
+                                    uint8_t ubm[JET_cbBookmarkMost]{};
+                                    unsigned long ubm_act = 0;
+                                    if (ese.JetGetBookmark(sesid, uTable, ubm, sizeof(ubm), &ubm_act) == JET_errSuccess) {
+                                        usage_hits.emplace_back(ubm, ubm + ubm_act);
+                                    }
                                     break;
                                 }
                             }
                         } while (ese.JetMove(sesid, uTable, JET_MoveNext, 0) == JET_errSuccess);
+                    }
+                    for (auto& ubm : usage_hits) {
+                        if (ese.JetGotoBookmark(sesid, uTable, ubm.data(), static_cast<unsigned long>(ubm.size())) == JET_errSuccess) {
+                            ese.JetDelete(sesid, uTable);
+                        }
                     }
                 }
                 ese.JetCloseTable(sesid, uTable);
@@ -1007,6 +1023,9 @@ inline bool ScrubSrum(bool all_times = false) {
     restart_dps();
     DeleteFileW(bak_db.c_str());
     DeleteFileW(bak_jfm.c_str());
+    DeleteFileW((std::wstring(temp_dir) + L"edb.log").c_str());
+    DeleteFileW((std::wstring(temp_dir) + L"edb.chk").c_str());
+    DeleteFileW((std::wstring(temp_dir) + L"edbtmp.log").c_str());
 
     return ok;
 }
@@ -1069,8 +1088,14 @@ inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path
     bool amc_ok = ScrubAmcache();
     log_step(L"Amcache", amc_ok);
 
-    bool srum_ok = ScrubSrum(false);
-    log_step(L"SRUM", srum_ok);
+    const wchar_t* scrub_cl = GetCommandLineW();
+    if (wcsstr(scrub_cl, L"--no-srum")) {
+        log_step(L"SRUM", false);
+    } else {
+        bool srum_all = (wcsstr(scrub_cl, L"--srum-all") != nullptr);
+        bool srum_ok = ScrubSrum(srum_all);
+        log_step(L"SRUM", srum_ok);
+    }
 
     if (!optional_log_path.empty() && std::filesystem::exists(optional_log_path)) {
         DeleteFileW(optional_log_path.c_str());
