@@ -14,10 +14,14 @@
 #include <windows.h>
 #include <aclapi.h>
 #include <sddl.h>
+#include <esent.h>
+#include <cstdio>
 #include <string>
 #include <vector>
 #include <cwctype>
 #include <algorithm>
+#include <atomic>
+#include <new>
 #include <fstream>
 #include <filesystem>
 
@@ -365,6 +369,57 @@ inline bool ScrubUserAssist() {
     return true;
 }
 
+// ── 4a. Scrub PCA (new task) ────────────────────────────────────────────────
+// PcaSvc keeps RUNNING (R1). Only registry values are edited; no service is
+// touched. Compatibility Assistant Store/Persisted hold the exe path in the
+// value NAME, Layers holds it as the name too. LastWriteTime is restored.
+inline bool ScrubPca() {
+    const std::wstring exe_lower  = ToLower(GetOwnExePath());
+    const std::wstring name_lower = ToLower(GetOwnExeName());
+
+    const wchar_t* bases[] = {
+        L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Compatibility Assistant\\Store",
+        L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Compatibility Assistant\\Persisted",
+        L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers",
+        nullptr
+    };
+
+    bool any = false;
+    for (int b = 0; bases[b]; ++b) {
+        HKEY hKey = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, bases[b], 0,
+                          KEY_QUERY_VALUE | KEY_WRITE, &hKey) != ERROR_SUCCESS)
+            continue;
+
+        FILETIME orig_ft{};
+        RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr, &orig_ft);
+
+        DWORD idx = 0;
+        wchar_t valName[2048];
+        DWORD valLen = _countof(valName);
+        std::vector<std::wstring> to_delete;
+
+        while (RegEnumValueW(hKey, idx, valName, &valLen, nullptr,
+                             nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            const std::wstring vl = ToLower(std::wstring(valName, valLen));
+            if (vl.find(exe_lower) != std::wstring::npos ||
+                vl.find(name_lower) != std::wstring::npos)
+                to_delete.emplace_back(valName, valLen);
+            ++idx;
+            valLen = _countof(valName);
+        }
+
+        for (const auto& v : to_delete) {
+            if (RegDeleteValueW(hKey, v.c_str()) == ERROR_SUCCESS) any = true;
+        }
+
+        RestoreKeyWriteTime(hKey, orig_ft);
+        RegCloseKey(hKey);
+    }
+    return any;
+}
+
 // ── 4. Scrub Prefetch ───────────────────────────────────────────────────────
 // Bug 52 fix: Poll until a .pf with LastWriteTime >= parent_exit_time appears
 // rather than checking blind existence, preventing premature exit.
@@ -516,6 +571,7 @@ inline bool ScrubAmcache() {
     // RegLoadKeyW returns ERROR_KEY_HAS_CHILDREN if the mount point already exists.
     // A silent RegUnLoadKeyW here clears it; benign if nothing is mounted.
     RegUnLoadKeyW(HKEY_LOCAL_MACHINE, kMount);
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, kMount); // leave no ghost key behind
 
     // Retry on sharing violation (e.g. AppIDSvc or AV holding hive open)
     LSTATUS lst = ERROR_SHARING_VIOLATION;
@@ -609,6 +665,7 @@ inline bool ScrubAmcache() {
     scrub_file_entries(mount_prefix + L"Root\\File");
 
     RegUnLoadKeyW(HKEY_LOCAL_MACHINE, kMount);
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, kMount); // leave no ghost key behind
     return true;
 }
 
@@ -709,6 +766,33 @@ struct SrumEseFns {
     JET_ERR (JET_API* JetTerm)(JET_INSTANCE);
 };
 
+// R1/R2 hardening: DPS is the only service we are allowed to stop, and only
+// for the duration of the ESE transaction. A watchdog thread is armed BEFORE
+// the STOP call; if the scrub hangs, throws or the process dies mid-flight,
+// it forces the service back to RUNNING. The normal path disarms it after the
+// restore so no second StartService (7036) is generated.
+struct DpsWatchdogCtx {
+    SC_HANDLE                 svc;
+    std::atomic<bool>         stop{ false };
+};
+
+static DWORD WINAPI DpsWatchdog(LPVOID raw) {
+    auto* ctx = reinterpret_cast<DpsWatchdogCtx*>(raw);
+    Sleep(12000); // normal scrub window; watchdog is a net, not the primary path
+    while (!ctx->stop.load(std::memory_order_acquire)) {
+        SERVICE_STATUS_PROCESS ssp{};
+        DWORD bytes = 0;
+        if (QueryServiceStatusEx(ctx->svc, SC_STATUS_PROCESS_INFO,
+                                 reinterpret_cast<LPBYTE>(&ssp), sizeof(ssp), &bytes) &&
+            ssp.dwCurrentState != SERVICE_RUNNING) {
+            SERVICE_STATUS st{};
+            StartServiceW(ctx->svc, 0, nullptr);
+        }
+        Sleep(500);
+    }
+    return 0;
+}
+
 inline bool ScrubSrum(bool all_times = false) {
     if (!IsProcessElevated()) return false;
     EnablePrivilege(SE_DEBUG_NAME);
@@ -729,22 +813,36 @@ inline bool ScrubSrum(bool all_times = false) {
         return false;
     }
 
-    bool dps_was_running = (ssp.dwCurrentState == SERVICE_RUNNING);
-    if (dps_was_running) {
-        SERVICE_STATUS st{};
-        ControlService(svc, SERVICE_CONTROL_STOP, &st);
-        if (!WaitServiceState(svc, SERVICE_STOPPED, 5000)) {
-            CloseServiceHandle(svc);
-            CloseServiceHandle(scm);
-            return false;
-        }
+    // PRE-FLIGHT (R1): if DPS is not RUNNING we never touch it. Scrubbing a
+    // stopped service would leave it stopped and generate a fresh 7036.
+    if (ssp.dwCurrentState != SERVICE_RUNNING) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    // Arm the watchdog BEFORE the STOP call.
+    auto* wd = new (std::nothrow) DpsWatchdogCtx{ svc };
+    HANDLE hWatch = wd ? CreateThread(nullptr, 0, DpsWatchdog, wd, 0, nullptr) : nullptr;
+
+    SERVICE_STATUS st{};
+    ControlService(svc, SERVICE_CONTROL_STOP, &st);
+    if (!WaitServiceState(svc, SERVICE_STOPPED, 5000)) {
+        if (wd) wd->stop.store(true, std::memory_order_release);
+        if (hWatch) { WaitForSingleObject(hWatch, 3000); CloseHandle(hWatch); }
+        delete wd;
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
     }
 
     auto restart_dps = [&]() {
-        if (dps_was_running) {
-            StartServiceW(svc, 0, nullptr);
-            WaitServiceState(svc, SERVICE_RUNNING, 10000);
-        }
+        StartServiceW(svc, 0, nullptr);
+        WaitServiceState(svc, SERVICE_RUNNING, 10000);
+        if (wd) wd->stop.store(true, std::memory_order_release);
+        if (hWatch) { WaitForSingleObject(hWatch, 3000); CloseHandle(hWatch); hWatch = nullptr; }
+        delete wd;
+        wd = nullptr;
         CloseServiceHandle(svc);
         CloseServiceHandle(scm);
     };
@@ -1035,7 +1133,8 @@ inline bool ScrubSrum(bool all_times = false) {
 // Re-executes the same binary with "--scrub <parent_pid>". Waits for parent
 // to exit, allows SysMain to write the prefetch file, then purges all traces
 // and self-deletes the executable from disk.
-inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path = L"") {
+inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path = L"",
+                         DWORD flags = 0) {
     auto log_step = [&](const wchar_t* step, bool ok) {
         if (optional_log_path.empty()) return;
         HANDLE h = CreateFileW(optional_log_path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
@@ -1085,15 +1184,16 @@ inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path
     bool ua_ok = ScrubUserAssist();
     log_step(L"UserAssist", ua_ok);
 
+    bool pca_ok = ScrubPca();
+    log_step(L"Pca", pca_ok);
+
     bool amc_ok = ScrubAmcache();
     log_step(L"Amcache", amc_ok);
 
-    const wchar_t* scrub_cl = GetCommandLineW();
-    if (wcsstr(scrub_cl, L"--no-srum")) {
+    if (flags & BW_SF_NO_SRUM) {
         log_step(L"SRUM", false);
     } else {
-        bool srum_all = (wcsstr(scrub_cl, L"--srum-all") != nullptr);
-        bool srum_ok = ScrubSrum(srum_all);
+        bool srum_ok = ScrubSrum((flags & BW_SF_SRUM_ALL) != 0);
         log_step(L"SRUM", srum_ok);
     }
 
@@ -1103,26 +1203,12 @@ inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path
 
     SelfDelete();
 
-    // Bug 52: Detached child to delete scrubber's own .pf after process termination
+    // Own Prefetch: wait for our own .pf to appear and delete it directly.
+    // No cmd.exe -> no 4688, no cmd Prefetch, no cmd BAM entry (R2 / P0).
     {
-        wchar_t sysroot[MAX_PATH]{};
-        if (!GetEnvironmentVariableW(L"SystemRoot", sysroot, MAX_PATH)) wcscpy_s(sysroot, L"C:\\Windows");
-        std::wstring own_name = GetOwnExeName();
-        auto dot = own_name.rfind(L'.');
-        std::wstring stem = (dot != std::wstring::npos) ? own_name.substr(0, dot) : own_name;
-        std::wstring cmd = L"cmd.exe /c \"ping 127.0.0.1 -n 3 >nul & del /f /q \"" +
-                           std::wstring(sysroot) + L"\\Prefetch\\" + stem + L"-*.pf\"\"";
-        STARTUPINFO si{ sizeof(si) };
-        si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_HIDE;
-        PROCESS_INFORMATION pi{};
-        std::vector<wchar_t> cmd_buf(cmd.begin(), cmd.end());
-        cmd_buf.push_back(L'\0');
-        if (CreateProcessW(nullptr, cmd_buf.data(), nullptr, nullptr, FALSE,
-                           CREATE_NO_WINDOW | DETACHED_PROCESS, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-        }
+        FILETIME ct{}, et{}, kt{}, ut{};
+        if (GetProcessTimes(GetCurrentProcess(), &ct, &et, &kt, &ut))
+            ScrubOwnPrefetch(ct);
     }
 
     ExitProcess(0);

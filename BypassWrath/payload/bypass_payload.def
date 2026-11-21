@@ -1,3 +1,4 @@
 LIBRARY "javaw"
 EXPORTS
     PayloadInit
+    JNI_OnLoad

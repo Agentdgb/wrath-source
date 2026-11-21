@@ -15,13 +15,15 @@
 //   - T20: Win32StartAddress spoofed to jvm.dll export via remote export walk.
 //   - Loader Lock: LdrLockLoaderLock synchronization around _DllMainCRTStartup.
 
-#pragma comment(linker, "/OPT:NOICF")
+// /OPT:NOICF is set per-target in loader/CMakeLists.txt; a linker pragma here
+// produces LNK4229 on MSVC 18, so it is deliberately omitted.
 
 #include <windows.h>
 #include <tlhelp32.h>
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <cstring>
 #include <algorithm>
 
 #include "../shared/StealthDefs.h"
@@ -626,8 +628,16 @@ inline bool InsertModuleInLdr(HANDLE hProc, BYTE* remote_base,
     return true;
 }
 
-// ── Bug 55: Find an existing native directory from the target process ───────
+// ── Bug 55 (fixed): derive the spoof path from a real loaded native module ──
+// Two problems with the old version: it read LDR links without validating the
+// remote pointer, and it always claimed "lwjgl_opengl.dll" even when that
+// exact DLL was already loaded from a different directory. Now we walk with
+// the same bounds checks as GetRemoteModuleBase, keep the real directory, and
+// pick a name that does not exist on disk so the fake LDR entry cannot be
+// cross-checked against a live module.
 inline std::wstring GetTargetNativeSpoofPath(HANDLE hProc) {
+    std::wstring native_dir;
+
     HMODULE hNtDll = GetModuleHandleW(L"ntdll.dll");
     if (hNtDll) {
         using pfnNtQIP = LONG(NTAPI*)(HANDLE, DWORD, PVOID, ULONG, PULONG);
@@ -637,28 +647,36 @@ inline std::wstring GetTargetNativeSpoofPath(HANDLE hProc) {
             ULONG rlen = 0;
             if (NtQIP(hProc, 0, &pbi, sizeof(pbi), &rlen) >= 0 && pbi.PebBase) {
                 PVOID pLdr = nullptr;
-                if (ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(pbi.PebBase) + 0x18, &pLdr, sizeof(pLdr), nullptr) && pLdr) {
+                if (ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(pbi.PebBase) + 0x18,
+                                      &pLdr, sizeof(pLdr), nullptr) && pLdr) {
                     BW_PEB_LDR_DATA ldr{};
                     if (ReadProcessMemory(hProc, pLdr, &ldr, sizeof(ldr), nullptr)) {
                         LIST_ENTRY* remoteHead = reinterpret_cast<LIST_ENTRY*>(
                             reinterpret_cast<BYTE*>(pLdr) + offsetof(BW_PEB_LDR_DATA, InMemoryOrderModuleList));
                         LIST_ENTRY* curr = ldr.InMemoryOrderModuleList.Flink;
-                        for (int i = 0; i < 128 && curr && curr != remoteHead; ++i) {
+                        for (int i = 0; i < 256 && curr && curr != remoteHead; ++i) {
+                            const uintptr_t va = reinterpret_cast<uintptr_t>(curr);
+                            if (va < 0x10000 || va > 0x7FFFFFFFFFFEull || (va & 0x7)) break;
+
                             BW_LDR_DATA_TABLE_ENTRY entry{};
-                            BYTE* entry_addr = reinterpret_cast<BYTE*>(curr) - offsetof(BW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+                            BYTE* entry_addr = reinterpret_cast<BYTE*>(curr)
+                                - offsetof(BW_LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
                             if (!ReadProcessMemory(hProc, entry_addr, &entry, sizeof(entry), nullptr)) break;
-                            if (entry.FullDllName.Buffer && entry.FullDllName.Length > 0) {
+
+                            if (entry.FullDllName.Buffer && entry.FullDllName.Length > 0 &&
+                                entry.FullDllName.Length <= 8192) {
                                 USHORT wchars = entry.FullDllName.Length / sizeof(wchar_t);
                                 std::wstring fullPath(wchars, L'\0');
-                                if (ReadProcessMemory(hProc, entry.FullDllName.Buffer, fullPath.data(), entry.FullDllName.Length, nullptr)) {
+                                if (ReadProcessMemory(hProc, entry.FullDllName.Buffer,
+                                                      fullPath.data(), entry.FullDllName.Length, nullptr)) {
                                     std::wstring lower = fullPath;
                                     for (auto& c : lower) c = towlower(c);
                                     if (lower.find(L"natives") != std::wstring::npos ||
                                         lower.find(L"lwjgl") != std::wstring::npos) {
                                         auto sep = fullPath.rfind(L'\\');
                                         if (sep != std::wstring::npos) {
-                                            std::wstring dir = fullPath.substr(0, sep);
-                                            return dir + L"\\lwjgl_opengl.dll";
+                                            native_dir = fullPath.substr(0, sep);
+                                            break;
                                         }
                                     }
                                 }
@@ -670,16 +688,34 @@ inline std::wstring GetTargetNativeSpoofPath(HANDLE hProc) {
             }
         }
     }
-    // Fallback: check %APPDATA%\.minecraft\natives or %TEMP%
-    wchar_t appdata[MAX_PATH]{};
-    GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
-    std::wstring p1 = std::wstring(appdata) + L"\\.minecraft\\natives\\lwjgl_opengl.dll";
-    if (GetFileAttributesW((std::wstring(appdata) + L"\\.minecraft\\natives").c_str()) != INVALID_FILE_ATTRIBUTES)
-        return p1;
 
-    wchar_t temp_dir[MAX_PATH]{};
-    GetTempPathW(MAX_PATH, temp_dir);
-    return std::wstring(temp_dir) + L"jna_native.dll";
+    if (native_dir.empty()) {
+        wchar_t appdata[MAX_PATH]{};
+        if (GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH)) {
+            std::wstring dir = std::wstring(appdata) + L"\\.minecraft\\natives";
+            if (GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES) native_dir = dir;
+        }
+    }
+    if (native_dir.empty()) {
+        wchar_t temp_dir[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp_dir);
+        return std::wstring(temp_dir) + L"jna_native.dll";
+    }
+
+    // Pick a plausible name that is NOT already present in that directory.
+    static const wchar_t* candidates[] = {
+        L"lwjgl_opengl.dll", L"lwjgl_glfw.dll", L"lwjgl_stb.dll",
+        L"lwjgl_openal.dll", L"lwjgl_util.dll"
+    };
+    for (const wchar_t* name : candidates) {
+        const std::wstring full = native_dir + L"\\" + name;
+        if (GetFileAttributesW(full.c_str()) == INVALID_FILE_ATTRIBUTES)
+            return full;
+    }
+
+    wchar_t hex[16];
+    swprintf_s(hex, L"%08x", static_cast<unsigned>(GetTickCount64() & 0xFFFFFFFFu));
+    return native_dir + L"\\lwjgl_" + hex + L".dll";
 }
 
 // ── P4-01: ManualMapFileBacked (SEC_IMAGE + POSIX delete) ──────────────────
@@ -953,8 +989,246 @@ inline bool ManualMapFileBacked(HANDLE hProc, const uint8_t* buf, size_t sz,
 
 
 
-// Clean production alias
+// ── Item 4: ScrubStrings ─────────────────────────────────────────────────────
+// With SEC_COMMIT there is no on-disk image to carve, so identifying strings
+// must be wiped in the live mapping. The export directory goes first (the DEF
+// sets LIBRARY "javaw" and exports PayloadInit / JNI_OnLoad), then known
+// needles in every non-executable section. Bounded: a section larger than
+// 16 MB is skipped rather than read into memory.
+inline void ScrubStrings(HANDLE hProc, BYTE* base, const uint8_t* local_buf) {
+    if (!hProc || !base || !local_buf) return;
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(local_buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(local_buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return;
+
+    const auto& exp_dd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (exp_dd.VirtualAddress && exp_dd.Size && exp_dd.Size < 0x100000) {
+        std::vector<BYTE> zero(exp_dd.Size, 0);
+        WriteProcessMemory(hProc, base + exp_dd.VirtualAddress, zero.data(), zero.size(), nullptr);
+    }
+
+    static const char* needles[] = {
+        "bypass_payload", "PayloadInit", "JNI_OnLoad", "BypassWrath",
+        "ManualMap", "TppWorkerThread", "RtlUserThreadStart", "bp::", ".?A"
+    };
+
+    const auto* sec = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+        if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+        DWORD sz = (std::max)(sec->SizeOfRawData, sec->Misc.VirtualSize);
+        if (!sz || sz > 0x1000000) continue;
+        std::vector<BYTE> data(sz);
+        if (!ReadProcessMemory(hProc, base + sec->VirtualAddress, data.data(), sz, nullptr)) continue;
+
+        bool dirty = false;
+        for (const char* needle : needles) {
+            const size_t nlen = std::strlen(needle);
+            for (size_t off = 0; off + nlen <= data.size();) {
+                if (std::memcmp(data.data() + off, needle, nlen) == 0) {
+                    std::memset(data.data() + off, 0, nlen);
+                    dirty = true;
+                    off += nlen;
+                } else {
+                    ++off;
+                }
+            }
+        }
+        if (dirty)
+            WriteProcessMemory(hProc, base + sec->VirtualAddress, data.data(), sz, nullptr);
+    }
+}
+
+// ── Item 3: ManualMapMemoryOnly (SEC_COMMIT, default path) ───────────────────
+// No file is ever created. A pagefile-backed SEC_COMMIT section is mapped
+// into the target, the PE is written section by section, the in-target stub
+// applies relocations + IAT and calls the CRT entrypoint. ScrubStrings is
+// mandatory on this path because there is no on-disk image to sanitise.
+inline bool ManualMapMemoryOnly(HANDLE hProc, const uint8_t* buf, size_t sz,
+                                std::wstring& status) {
+    if (!buf || sz < sizeof(IMAGE_DOS_HEADER)) { status = L"Buffer invalido."; return false; }
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) { status = L"Firma DOS invalida."; return false; }
+    if (static_cast<size_t>(dos->e_lfanew) + sizeof(IMAGE_NT_HEADERS) > sz) {
+        status = L"e_lfanew fuera de rango."; return false;
+    }
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) { status = L"Firma NT invalida."; return false; }
+    if (nt->OptionalHeader.SizeOfImage > 0x10000000) {
+        status = L"Imagen demasiado grande."; return false;
+    }
+
+    HMODULE hNt = GetModuleHandleW(L"ntdll.dll");
+    if (!hNt) { status = L"ntdll no disponible."; return false; }
+    auto NtCreateSection = reinterpret_cast<bp::pfnNtCreateSection_t>(GetProcAddress(hNt, "NtCreateSection"));
+    auto NtMapView      = reinterpret_cast<bp::pfnNtMapViewOfSection_t>(GetProcAddress(hNt, "NtMapViewOfSection"));
+    auto NtUnmap        = reinterpret_cast<bp::pfnNtUnmapViewOfSection_t>(GetProcAddress(hNt, "NtUnmapViewOfSection"));
+    if (!NtCreateSection || !NtMapView || !NtUnmap) {
+        status = L"No se resolvieron APIs NT."; return false;
+    }
+
+    LARGE_INTEGER sec_sz{};
+    sec_sz.QuadPart = nt->OptionalHeader.SizeOfImage;
+    HANDLE hSec = nullptr;
+    NTSTATUS st = NtCreateSection(&hSec, SECTION_ALL_ACCESS, nullptr, &sec_sz,
+                                  PAGE_EXECUTE_READWRITE, SEC_COMMIT, nullptr);
+    if (!NT_SUCCESS(st) || !hSec) { status = L"NtCreateSection(SEC_COMMIT) fallo."; return false; }
+
+    PVOID remote_base = nullptr;
+    SIZE_T view_sz = 0;
+    st = NtMapView(hSec, hProc, &remote_base, 0, 0, nullptr, &view_sz,
+                   1 /* ViewShare */, 0, PAGE_EXECUTE_READWRITE);
+    CloseHandle(hSec);
+    if (!NT_SUCCESS(st) || !remote_base) { status = L"NtMapViewOfSection fallo."; return false; }
+
+    BYTE* base = reinterpret_cast<BYTE*>(remote_base);
+    auto fail = [&](const wchar_t* msg) {
+        NtUnmap(hProc, remote_base);
+        status = msg;
+        return false;
+    };
+
+    // 1. Headers + every section, straight from the buffer (no loader involved).
+    const DWORD hdr_sz = nt->OptionalHeader.SizeOfHeaders;
+    if (!hdr_sz || hdr_sz > sz || !WriteProcessMemory(hProc, base, buf, hdr_sz, nullptr))
+        return fail(L"WPM headers fallo.");
+
+    const auto* sec = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+        const DWORD raw = sec->SizeOfRawData;
+        if (!raw) continue;
+        if (sec->PointerToRawData + raw > sz ||
+            static_cast<DWORD64>(sec->VirtualAddress) + raw > nt->OptionalHeader.SizeOfImage)
+            return fail(L"Seccion fuera de rango.");
+        if (!WriteProcessMemory(hProc, base + sec->VirtualAddress,
+                                buf + sec->PointerToRawData, raw, nullptr))
+            return fail(L"WPM seccion fallo.");
+    }
+
+    // 2. Remote kernel32 + loader-lock callbacks (same as the file-backed path).
+    PVOID remoteK32 = GetRemoteModuleBase(hProc, L"kernel32.dll");
+    if (!remoteK32) remoteK32 = GetModuleHandleW(L"kernel32.dll");
+    HMODULE localK32 = GetModuleHandleW(L"kernel32.dll");
+    auto rva_of = [&](const char* name) -> DWORD {
+        return static_cast<DWORD>(reinterpret_cast<uintptr_t>(GetProcAddress(localK32, name))
+                                - reinterpret_cast<uintptr_t>(localK32));
+    };
+    const auto& imp_dd   = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    const auto& reloc_dd = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+
+    MmData md{};
+    md.base     = base;
+    md.nt       = reinterpret_cast<PIMAGE_NT_HEADERS>(base + dos->e_lfanew);
+    md.reloc    = reloc_dd.VirtualAddress
+                ? reinterpret_cast<PIMAGE_BASE_RELOCATION>(base + reloc_dd.VirtualAddress) : nullptr;
+    md.imp      = imp_dd.Size ? reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(base + imp_dd.VirtualAddress) : nullptr;
+    md.imp_rva  = imp_dd.VirtualAddress;
+    md.imp_size = imp_dd.Size;
+    md.loadLib  = reinterpret_cast<MmData::fnLoadLibA>(reinterpret_cast<BYTE*>(remoteK32) + rva_of("LoadLibraryA"));
+    md.getProc  = reinterpret_cast<MmData::fnGetProc>(reinterpret_cast<BYTE*>(remoteK32) + rva_of("GetProcAddress"));
+    md.virtProt = reinterpret_cast<MmData::fnVirtProt>(reinterpret_cast<BYTE*>(remoteK32) + rva_of("VirtualProtect"));
+    HMODULE hNtLocal = GetModuleHandleW(L"ntdll.dll");
+    md.ldrLock   = reinterpret_cast<MmData::fnLdrLock>(GetProcAddress(hNtLocal, "LdrLockLoaderLock"));
+    md.ldrUnlock = reinterpret_cast<MmData::fnLdrUnlock>(GetProcAddress(hNtLocal, "LdrUnlockLoaderLock"));
+
+    // 3. Zero the exception directory: HotSpot owns SEH in this process.
+    DWORD exc_off = dos->e_lfanew + static_cast<DWORD>(
+        offsetof(IMAGE_NT_HEADERS, OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION]));
+    IMAGE_DATA_DIRECTORY zero_dir{};
+    DWORD old_p = 0;
+    if (VirtualProtectEx(hProc, base + exc_off, sizeof(zero_dir), PAGE_READWRITE, &old_p)) {
+        WriteProcessMemory(hProc, base + exc_off, &zero_dir, sizeof(zero_dir), nullptr);
+        VirtualProtectEx(hProc, base + exc_off, sizeof(zero_dir), old_p, &old_p);
+    }
+
+    // 4. Remote stub.
+    const size_t kStubSz = RealStubSize();
+    if (kStubSz == 0 || kStubSz > 0x1000) return fail(L"Stub size invalido.");
+    ScopedRemoteMem stub_mem(hProc, nullptr, kStubSz + sizeof(MmData),
+                             MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!stub_mem.IsValid()) return fail(L"Alloc stub fallo.");
+    BYTE* remote_stub = stub_mem.Get();
+    BYTE* remote_data = remote_stub + kStubSz;
+    if (!WriteProcessMemory(hProc, remote_data, &md, sizeof(MmData), nullptr) ||
+        !WriteProcessMemory(hProc, remote_stub, reinterpret_cast<LPCVOID>(&RemoteStub), kStubSz, nullptr)) {
+        stub_mem.Release();
+        return fail(L"WPM stub fallo.");
+    }
+
+    RegisterCfgCallTargets(hProc, remote_stub, kStubSz, base, nt);
+
+    // 5. Thread + start-address spoof.
+    ScopedHandle th;
+    auto NtCTE = reinterpret_cast<bp::pfnNtCreateThreadEx>(GetProcAddress(hNt, "NtCreateThreadEx"));
+    if (NtCTE) {
+        HANDLE raw = nullptr;
+        NTSTATUS st_th = NtCTE(&raw,
+            SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION | THREAD_SET_INFORMATION,
+            nullptr, hProc, reinterpret_cast<LPTHREAD_START_ROUTINE>(remote_stub),
+            remote_data, bp::kHideThread, 0, 0, 0, nullptr);
+        if (NT_SUCCESS(st_th) && raw) th.Reset(raw);
+    }
+    if (!th.IsValid()) {
+        th.Reset(CreateRemoteThread(hProc, nullptr, 0,
+            reinterpret_cast<LPTHREAD_START_ROUTINE>(remote_stub), remote_data, 0, nullptr));
+    }
+    if (!th.IsValid()) {
+        stub_mem.Release();
+        return fail(L"CreateRemoteThread fallo.");
+    }
+    SpoofWin32StartAddress(hProc, th.Get());
+
+    if (WaitForSingleObject(th.Get(), 15000) != WAIT_OBJECT_0) {
+        th.Reset();
+        std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
+        WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
+        stub_mem.Release();
+        return fail(L"Timeout esperando stub remoto.");
+    }
+    th.Reset();
+
+    // 6. Restore real per-section protections: no image-wide RWX left behind.
+    DWORD old_prot = 0;
+    VirtualProtectEx(hProc, base, hdr_sz, PAGE_READONLY, &old_prot);
+    sec = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+        DWORD sz = (std::max)(sec->SizeOfRawData, sec->Misc.VirtualSize);
+        if (!sz) continue;
+        DWORD prot = PAGE_READONLY;
+        const bool exec = (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
+        const bool wrte = (sec->Characteristics & IMAGE_SCN_MEM_WRITE) != 0;
+        if (exec && wrte) prot = PAGE_EXECUTE_READWRITE;
+        else if (exec)    prot = PAGE_EXECUTE_READ;
+        else if (wrte)    prot = PAGE_READWRITE;
+        VirtualProtectEx(hProc, base + sec->VirtualAddress, sz, prot, &old_prot);
+    }
+
+    // 7. Item 4: mandatory string scrub on the SEC_COMMIT path.
+    ScrubStrings(hProc, base, buf);
+
+    // 8. Stub teardown + PEB registration.
+    std::vector<BYTE> z(kStubSz + sizeof(MmData), 0);
+    WriteProcessMemory(hProc, remote_stub, z.data(), z.size(), nullptr);
+    stub_mem.Release();
+
+    const std::wstring spoof = GetTargetNativeSpoofPath(hProc);
+    if (!InsertModuleInLdr(hProc, base, nt, spoof)) {
+        NtUnmap(hProc, remote_base);
+        status = L"Fallo al registrar modulo en PEB->Ldr.";
+        return false;
+    }
+
+    status = L"Inyectado OK (SEC_COMMIT / RAM-only).";
+    return true;
+}
+
+// Clean production alias -- RAM is the default path (item 3).
 inline bool ManualMapTarget(HANDLE hProc, const uint8_t* buf, size_t sz, std::wstring& status) {
+    return ManualMapMemoryOnly(hProc, buf, sz, status);
+}
+
+// Kept for explicit debug use only; not part of the default pipeline.
+inline bool ManualMapFileBackedTarget(HANDLE hProc, const uint8_t* buf, size_t sz, std::wstring& status) {
     return ManualMapFileBacked(hProc, buf, sz, status);
 }
 

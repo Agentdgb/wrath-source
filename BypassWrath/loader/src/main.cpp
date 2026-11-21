@@ -5,13 +5,15 @@
 //   BP_SILENT=0 -> SUBSYSTEM:CONSOLE, wprintf to stdout       (debug)
 //
 // CLI flags (both variants, parsed via GetCommandLineW):
-//   --scrub <pid>   Child-scrub mode: wait for <pid> to exit, then scrub
-//                   Prefetch/WER/BAM/MuiCache/UserAssist and self-delete.
 //   --log           Write operational log to %TEMP%\wrath_<ownpid>.log
 //                   (cleaned up by ScrubberMain).
+//   --pid <n>       Force target PID (must be javaw.exe).
+//   --no-srum       Skip SRUM scrub.  --srum-all  SRUM without time window.
+//   --srum-only     SRUM scrub only, no injection.
 //   [path]          (debug only) Path to payload DLL.
-//   --txf           (debug only) Force TxF path.
-//   --ram           (debug only) Force in-memory path.
+//
+// The scrub child takes NO arguments. Context travels in a named section.
+// In-memory mapping (SEC_COMMIT) is the default; no file-backed path exists.
 //
 // Deploy name: RuntimeBroker.exe  (OriginalFilename in version resource must match)
 
@@ -27,6 +29,7 @@
 #include "ManualMap.h"
 #include "ForensicScrub.h"
 #include "SelfDelete.h"
+#include "AutoPipeline.h"
 #include "resource_ids.h"
 #include "build_salt.h"
 
@@ -356,90 +359,84 @@ static HANDLE OpenTargetProcess(DWORD pid, bool* elevated) {
     return h; // nullptr if still fails
 }
 
-// ── T4: Scrub child launcher ─────────────────────────────────────────────────
-// Spawns a detached child process with --scrub <own_pid> [--log <path>].
-// The child waits for us to exit, then scrubs Prefetch and self-deletes.
+// ── T4: Scrub child launcher (no command-line arguments) ────────────────────
+// Context is written to a named section. The child opens it by name, copies
+// it locally, signals the ready event and then waits for our PID to die.
+// Keeping the section handle open until process exit guarantees the child can
+// always read it even if it starts before the parent reaches the wait.
 static void LaunchScrubChild(const std::wstring& log_path) {
     wchar_t own_path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, own_path, MAX_PATH);
 
-    DWORD own_pid = GetCurrentProcessId();
-
-    std::wstring cmdline = L"\"";
-    cmdline += own_path;
-    cmdline += L"\" --scrub ";
-    cmdline += std::to_wstring(own_pid);
-    if (!log_path.empty()) {
-        cmdline += L" --log \"";
-        cmdline += log_path;
-        cmdline += L"\"";
+    HANDLE hReady = CreateEventW(nullptr, TRUE, FALSE, bp::kBwScrubReadyEvent);
+    HANDLE hSec = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+                                     0, sizeof(bp::BW_SCRUB_CONTEXT),
+                                     bp::kBwScrubSection);
+    if (!hSec) {
+        if (hReady) CloseHandle(hReady);
+        return;
     }
-    if (!g_srum_enabled) cmdline += L" --no-srum";
-    if (g_srum_all)      cmdline += L" --srum-all";
+
+    auto* ctx = reinterpret_cast<bp::BW_SCRUB_CONTEXT*>(
+        MapViewOfFile(hSec, FILE_MAP_WRITE, 0, 0, 0));
+    if (!ctx) {
+        CloseHandle(hSec);
+        if (hReady) CloseHandle(hReady);
+        return;
+    }
+
+    ctx->parentPid = GetCurrentProcessId();
+    ctx->flags = 0;
+    if (!g_srum_enabled) ctx->flags |= bp::BW_SF_NO_SRUM;
+    if (g_srum_all)      ctx->flags |= bp::BW_SF_SRUM_ALL;
+    ctx->logPath[0] = L'\0';
+    if (!log_path.empty()) {
+        wcsncpy_s(ctx->logPath, MAX_PATH, log_path.c_str(), _TRUNCATE);
+        ctx->flags |= bp::BW_SF_HAS_LOG;
+    }
+    UnmapViewOfFile(ctx);
 
     STARTUPINFOW si{};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
 
-    // CREATE_NO_WINDOW + DETACHED_PROCESS: child survives our exit
-    if (CreateProcessW(own_path, cmdline.data(),
-                       nullptr, nullptr, FALSE,
+    // lpCommandLine = nullptr -> child cmdline is just the exe path.
+    if (CreateProcessW(own_path, nullptr, nullptr, nullptr, FALSE,
                        CREATE_NO_WINDOW | DETACHED_PROCESS,
                        nullptr, nullptr, &si, &pi)) {
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
+        if (hReady) WaitForSingleObject(hReady, 5000);
     }
+    // hSec deliberately left open until process exit.
 }
 
-// ── T4: Parse --scrub <pid> and optional --log <path> from cmdline ───────────
-// Returns true if --scrub was found; sets out_pid and out_log.
-static bool ParseScrubArgs(const wchar_t* cmdline, DWORD* out_pid, std::wstring* out_log) {
-    if (!cmdline) return false;
-    *out_pid = 0;
-    out_log->clear();
+// ── Child-mode discovery via named section ──────────────────────────────────
+// Returns true when this process is the scrub child. No flag is parsed.
+static bool TryScrubChildMode() {
+    HANDLE hSec = OpenFileMappingW(FILE_MAP_READ, FALSE, bp::kBwScrubSection);
+    if (!hSec) return false;
 
-    // Simple linear scan; not using CommandLineToArgvW to avoid shell32 load
-    const wchar_t* p = cmdline;
+    bp::BW_SCRUB_CONTEXT local{};
+    auto* view = reinterpret_cast<const bp::BW_SCRUB_CONTEXT*>(
+        MapViewOfFile(hSec, FILE_MAP_READ, 0, 0, 0));
+    if (view) {
+        memcpy(&local, view, sizeof(local));
+        UnmapViewOfFile(view);
+    }
+    CloseHandle(hSec);
+    if (local.parentPid == 0) return false;
 
-    // skip executable token (may be quoted)
-    if (*p == L'"') {
-        ++p;
-        while (*p && *p != L'"') ++p;
-        if (*p) ++p;
-    } else {
-        while (*p && *p != L' ') ++p;
+    HANDLE hReady = OpenEventW(SYNCHRONIZE, FALSE, bp::kBwScrubReadyEvent);
+    if (hReady) {
+        SetEvent(hReady);
+        CloseHandle(hReady);
     }
 
-    while (*p == L' ') ++p;
-
-    // tokenise rest
-    std::vector<std::wstring> tokens;
-    while (*p) {
-        std::wstring tok;
-        bool quoted = (*p == L'"');
-        if (quoted) ++p;
-        while (*p && (quoted ? *p != L'"' : *p != L' ')) tok += *p++;
-        if (quoted && *p) ++p;
-        while (*p == L' ') ++p;
-        tokens.push_back(std::move(tok));
-    }
-
-    bool found_scrub = false;
-    for (size_t i = 0; i < tokens.size(); ++i) {
-        if (_wcsicmp(tokens[i].c_str(), L"--scrub") == 0) {
-            if (i + 1 < tokens.size()) {
-                *out_pid = static_cast<DWORD>(_wtoi(tokens[i + 1].c_str()));
-                ++i;
-                found_scrub = true;
-            }
-        } else if (_wcsicmp(tokens[i].c_str(), L"--log") == 0) {
-            if (i + 1 < tokens.size()) {
-                *out_log = tokens[i + 1];
-                ++i;
-            }
-        }
-    }
-    return found_scrub && (*out_pid != 0);
+    std::wstring log;
+    if (local.flags & bp::BW_SF_HAS_LOG) log = local.logPath;
+    bp::ScrubberMain(local.parentPid, log, local.flags);
+    return true;
 }
 
 // ── T22: Build log path from %TEMP%\wrath_<pid>.log ──────────────────────────
@@ -561,6 +558,53 @@ static int RunInject(std::vector<uint8_t>& dll_bytes, DWORD explicit_pid = 0) {
     return ok ? 0 : 2;
 }
 
+// ── Automatic pipeline ──────────────────────────────────────────────────────
+// One entry point, no flags, no menu. Every step is a named command in the
+// registry, executed in order. Cleanup commands are non-critical so they run
+// even if the inject itself failed.
+static int RunAutomatic(std::vector<uint8_t>& dll_bytes, DWORD explicit_pid,
+                        const std::wstring& log_path) {
+    int inject_result = 1;
+
+    bp::CommandRegistry reg;
+    reg.Register({ L"scrub", [&](std::wstring&) {
+        // Launch BEFORE inject: child waits on our PID, so cleanup runs even
+        // if the inject crashes mid-flight.
+        LaunchScrubChild(log_path);
+        return true;
+    }, true });
+
+    reg.Register({ L"inject", [&](std::wstring& err) {
+        inject_result = RunInject(dll_bytes, explicit_pid);
+        if (inject_result != 0) {
+            err = L"inyeccion fallida (codigo " + std::to_wstring(inject_result) + L")";
+            return false;
+        }
+        return true;
+    }, false }); // non-critical: cleanup below must still run
+
+    reg.Register({ L"zero", [&](std::wstring&) {
+        SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
+        return true;
+    }, true });
+
+    reg.Register({ L"selfdelete", [](std::wstring&) {
+        bp::SelfDelete();
+        return true;
+    }, false });
+
+    const auto results = reg.RunAll();
+    for (const auto& r : results) {
+        LOG(L"[%s] %s (%llu ms)%s%s\n",
+            r.ok ? L"+" : L"!", r.name.c_str(),
+            static_cast<unsigned long long>(r.elapsedMs),
+            r.error.empty() ? L"" : L" -- ",
+            r.error.c_str());
+    }
+
+    return inject_result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Entry points
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -572,13 +616,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
 
     const wchar_t* cmdline = GetCommandLineW();
 
-    // T4: --scrub child mode — handle before anything else
-    DWORD scrub_pid = 0;
-    std::wstring scrub_log;
-    if (ParseScrubArgs(cmdline, &scrub_pid, &scrub_log)) {
-        bp::ScrubberMain(scrub_pid, scrub_log);
-        return 0;
-    }
+    // Child mode: discovered from named section, no arguments on cmdline.
+    if (TryScrubChildMode()) return 0;
 
     if (wcsstr(cmdline, L"--no-srum")) g_srum_enabled = false;
     if (wcsstr(cmdline, L"--srum-all")) g_srum_all = true;
@@ -629,17 +668,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     // In silent deploy, payload must come from encrypted RCDATA resource
     if (dll_bytes.empty()) return 1;
 
-    // P3-[13]: Launch scrub child BEFORE inject. The child waits for our PID to die,
-    // so the timing is identical from the child's perspective — but if inject crashes
-    // mid-flight, cleanup still runs regardless.
-    LaunchScrubChild(g_log_path);
-
-    int result = RunInject(dll_bytes, explicit_pid);
-
-    // Zero our payload bytes before exit.
-    SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
-
-    return result;
+    // Modo automatico: una sola pasada encadena scrub -> inyeccion -> zero -> selfdelete.
+    return RunAutomatic(dll_bytes, explicit_pid, g_log_path);
 }
 
 #else
@@ -649,13 +679,8 @@ int wmain(int argc, wchar_t** argv) {
 
     const wchar_t* cmdline = GetCommandLineW();
 
-    // T4: --scrub child mode — handle before anything else
-    DWORD scrub_pid = 0;
-    std::wstring scrub_log;
-    if (ParseScrubArgs(cmdline, &scrub_pid, &scrub_log)) {
-        bp::ScrubberMain(scrub_pid, scrub_log);
-        return 0;
-    }
+    // Child mode: discovered from named section, no arguments on cmdline.
+    if (TryScrubChildMode()) return 0;
 
     if (wcsstr(cmdline, L"--no-srum")) g_srum_enabled = false;
     if (wcsstr(cmdline, L"--srum-all")) g_srum_all = true;
@@ -678,10 +703,10 @@ int wmain(int argc, wchar_t** argv) {
     DWORD explicit_pid = ParsePidFlag(cmdline);
 
     for (int i = 1; i < argc; ++i) {
-        if      (_wcsicmp(argv[i], L"--log") == 0)   { /* already handled */ }
-        else if (_wcsicmp(argv[i], L"--scrub") == 0) { ++i; /* already handled */ }
-        else if (_wcsicmp(argv[i], L"--pid") == 0)   { ++i; /* already handled */ }
-        else payload_path = argv[i];
+        if (_wcsicmp(argv[i], L"--pid") == 0) { ++i; continue; }
+        // Unknown flags are ignored; they must never fall through as a path.
+        if (argv[i][0] == L'-') continue;
+        payload_path = argv[i];
     }
 
     if (payload_path.empty())

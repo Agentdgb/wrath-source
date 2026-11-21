@@ -4,6 +4,7 @@ add_library(bypass_payload SHARED
     src/DllMain.cpp
     src/Payload.cpp
     src/PayloadExports.cpp
+    src/JniBridge.cpp
     bypass_payload.def
 )
 

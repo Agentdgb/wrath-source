@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BYPASSWRATH — Loader / Inyector para Minecraft Java</title>
+<style>
+  :root{
+    --bg:#07090c; --panel:#0e1319; --panel2:#111922;
+    --line:#1d2a35; --text:#e8f1f5; --muted:#7d909c;
+    --mint:#7cffb2; --cyan:#29d3ff; --rose:#ff3d6e;
+    --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    line-height:1.6;overflow-x:hidden;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:-2;
+    background:
+      radial-gradient(900px 500px at 12% -5%,rgba(124,255,178,.10),transparent 70%),
+      radial-gradient(800px 500px at 88% 10%,rgba(41,211,255,.08),transparent 70%);
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:-1;opacity:.25;pointer-events:none;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:48px 48px;
+    mask-image:linear-gradient(to bottom,#000,transparent 75%);
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  /* NAV */
+  nav{
+    position:sticky;top:0;z-index:50;
+    background:rgba(7,9,12,.82);backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:66px}
+  .brand{font-family:var(--mono);font-weight:700;letter-spacing:.14em;font-size:15px;color:var(--text)}
+  .brand span{color:var(--mint)}
+  .nav-links{display:flex;gap:28px;align-items:center}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:13px;letter-spacing:.04em;transition:color .2s}
+  .nav-links a:hover{color:var(--mint)}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.06em;
+    padding:11px 18px;border:1px solid var(--mint);color:#04120a;
+    background:var(--mint);text-decoration:none;transition:.2s;cursor:pointer;
+  }
+  .btn:hover{background:transparent;color:var(--mint);box-shadow:0 0 22px rgba(124,255,178,.25)}
+  .btn.ghost{background:transparent;color:var(--text);border-color:var(--line)}
+  .btn.ghost:hover{color:var(--cyan);border-color:var(--cyan);box-shadow:none}
+  .burger{display:none;background:none;border:1px solid var(--line);color:var(--text);padding:8px 11px;cursor:pointer;font-family:var(--mono)}
+
+  /* HERO */
+  header{padding:96px 0 64px}
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--mint);margin-bottom:20px}
+  h1{font-size:clamp(42px,6vw,74px);line-height:1.02;letter-spacing:-.04em;font-weight:800}
+  h1 .grad{background:linear-gradient(100deg,var(--mint),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{color:var(--muted);max-width:560px;margin:24px 0 32px;font-size:16px}
+  .lede b{color:var(--text);font-weight:600}
+  .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+
+  .terminal{
+    background:var(--panel);border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.55);
+    font-family:var(--mono);font-size:12px;overflow:hidden;
+  }
+  .term-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#33424e}
+  .dot.r{background:var(--rose)}.dot.y{background:#ffc857}.dot.g{background:var(--mint)}
+  .term-title{margin-left:auto;color:var(--muted);font-size:10px;letter-spacing:.12em}
+  .term-body{padding:18px 18px 20px;min-height:236px}
+  .term-body .ln{display:flex;justify-content:space-between;gap:16px;padding:4px 0;color:var(--muted)}
+  .term-body .ln b{color:var(--mint);font-weight:500}
+  .term-body .ln.dim b{color:var(--cyan)}
+  .cursor{display:inline-block;width:7px;height:13px;background:var(--mint);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* STATS */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);background:var(--panel)}
+  .stat{padding:26px 20px;border-right:1px solid var(--line)}
+  .stat:last-child{border-right:0}
+  .stat .n{font-family:var(--mono);font-size:30px;font-weight:700;color:var(--mint)}
+  .stat .l{font-size:11px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-top:6px}
+
+  /* SECTIONS */
+  section{padding:88px 0;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--cyan);margin-bottom:14px}
+  h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em;line-height:1.1}
+  .sub{color:var(--muted);max-width:640px;margin-top:14px}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:44px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);padding:26px;position:relative;
+    transition:transform .2s,border-color .2s,box-shadow .2s;
+  }
+  .card:hover{transform:translateY(-4px);border-color:var(--mint);box-shadow:0 16px 44px rgba(0,0,0,.45)}
+  .card .idx{font-family:var(--mono);font-size:11px;color:var(--mint);letter-spacing:.1em}
+  .card h3{font-size:19px;margin:14px 0 10px;letter-spacing:-.01em}
+  .card p{color:var(--muted);font-size:14px}
+
+  .modules{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:44px}
+  .mod{
+    background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);padding:30px;min-height:196px;
+    position:relative;overflow:hidden;transition:.2s;
+  }
+  .mod:hover{border-color:var(--cyan)}
+  .mod::after{
+    content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;
+    background:radial-gradient(circle,rgba(41,211,255,.12),transparent 70%);
+  }
+  .mod .num{font-family:var(--mono);font-size:46px;font-weight:800;color:rgba(124,255,178,.16);line-height:1}
+  .mod h3{font-size:21px;margin:12px 0 10px}
+  .mod h3 em{font-style:normal;color:var(--mint)}
+  .mod p{color:var(--muted);font-size:14px;max-width:440px}
+  .mod .tag{display:inline-block;margin-top:16px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--cyan);border:1px solid var(--line);padding:4px 9px}
+
+  /* PIPELINE */
+  .pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:44px;border:1px solid var(--line)}
+  .step{padding:28px 22px;border-right:1px solid var(--line);position:relative;background:var(--panel)}
+  .step:last-child{border-right:0}
+  .step .s{font-family:var(--mono);font-size:12px;color:var(--mint)}
+  .step h4{margin:12px 0 8px;font-size:16px}
+  .step p{font-size:13px;color:var(--muted)}
+  .step::after{content:"→";position:absolute;right:-9px;top:50%;transform:translateY(-50%);color:var(--mint);background:var(--bg);font-family:var(--mono);z-index:2}
+  .step:last-child::after{display:none}
+
+  /* COMPAT */
+  .compat{display:grid;grid-template-columns:1fr;gap:16px;margin-top:44px}
+  .plat{background:var(--panel);border:1px solid var(--line);padding:30px}
+  .plat .badge{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--mint)}
+  .plat h3{font-size:24px;margin:12px 0}
+  .plat ul{list-style:none;margin-top:16px}
+  .plat li{padding:8px 0;border-bottom:1px solid var(--line);color:var(--muted);font-size:14px;display:flex;justify-content:space-between;gap:12px}
+  .plat li span{color:var(--text);font-family:var(--mono);font-size:12px}
+
+  /* SPECS */
+  .specs{display:grid;grid-template-columns:repeat(2,1fr);gap:0;margin-top:40px;border:1px solid var(--line)}
+  .spec{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;font-family:var(--mono);font-size:12px}
+  .spec:nth-child(odd){border-right:1px solid var(--line)}
+  .spec span{color:var(--muted)}
+  .spec b{color:var(--mint);font-weight:500}
+
+  /* CTA + FOOTER */
+  .final{padding:90px 0;text-align:center}
+  .final h2{font-size:clamp(30px,5vw,52px)}
+  .final p{color:var(--muted);margin:16px auto 28px;max-width:540px}
+  footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.06em}
+  .foot-in{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .foot-in a{color:var(--mint);text-decoration:none}
+
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s,transform .6s}
+  .reveal.in{opacity:1;transform:none}
+
+  @media(max-width:900px){
+    .hero{grid-template-columns:1fr;gap:40px}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .stat:nth-child(2){border-right:0}
+    .stat:nth-child(-n+2){border-bottom:1px solid var(--line)}
+    .grid3,.modules,.compat{grid-template-columns:1fr}
+    .pipe{grid-template-columns:1fr 1fr}
+    .step:nth-child(2){border-right:0}
+    .step:nth-child(-n+2){border-bottom:1px solid var(--line)}
+    .step::after{display:none}
+  }
+  @media(max-width:640px){
+    .nav-links{display:none;position:absolute;top:66px;left:0;right:0;flex-direction:column;gap:0;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 24px}
+    .nav-links.open{display:flex}
+    .nav-links a{padding:12px 0;border-bottom:1px solid var(--line)}
+    .burger{display:block}
+    .stats,.pipe,.specs{grid-template-columns:1fr}
+    .stat,.step{border-right:0;border-bottom:1px solid var(--line)}
+    .spec,.spec:nth-child(odd){border-right:0}
+    section{padding:64px 0}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-in">
+    <div class="brand">BYPASS<span>WRATH</span> / LOADER</div>
+    <div class="nav-links" id="nav">
+      <a href="#tecnologia">Tecnología</a>
+      <a href="#modulos">Módulos</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#compat">Compatibilidad</a>
+      <a href="#specs">Specs</a>
+    </div>
+    <button class="burger" id="burger" aria-label="Menú">☰</button>
+    <a class="btn" href="https://discord.gg/ojailbreaks" target="_blank" rel="noopener">DISCORD ↗</a>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap hero">
+    <div>
+      <div class="eyebrow">[ LOADER / INYECTOR ] — MINECRAFT JAVA EDITION</div>
+      <h1>Entra. Juega.<br><span class="grad">Desaparece.</span></h1>
+      <p class="lede">
+        Inyección en <b>RAM</b>, <b>manual map</b> y un stack de evasión construido para
+        sobrevivir screenshares. Sin DLL suelto en disco. Sin rastro que seguir.
+      </p>
+      <div class="hero-actions">
+        <a class="btn" href="#modulos">EXPLORAR MÓDULOS ↓</a>
+        <a class="btn ghost" href="https://discord.gg/ojailbreaks" target="_blank" rel="noopener">UNIRSE AL DISCORD ↗</a>
+      </div>
+    </div>
+
+    <div class="terminal">
+      <div class="term-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="term-title">bw-loader — session.log</span>
+      </div>
+      <div class="term-body" id="term">
+        <div class="ln"><span>&gt; resolving javaw.exe</span><b>OK</b></div>
+        <div class="ln"><span>&gt; cmdline fingerprint</span><b>OK</b></div>
+        <div class="ln dim"><span>&gt; SEC_IMAGE section</span><b>MAPPED</b></div>
+        <div class="ln"><span>&gt; IAT + CFG targets</span><b>OK</b></div>
+        <div class="ln"><span>&gt; PEB&rarr;Ldr registry</span><b>OK</b></div>
+        <div class="ln dim"><span>&gt; payload source</span><b>RCDATA</b></div>
+        <div class="ln"><span>&gt; scrub child</span><b>ARMED</b></div>
+        <div class="ln"><span>&gt; strings cleaner</span><b>ARMED</b></div>
+        <div class="ln dim"><span>&gt; doomsday cleaner</span><b>ARMED</b></div>
+        <div class="ln"><span>&gt; ready<span class="cursor"></span></span><b></b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:64px">
+    <div class="stats reveal">
+      <div class="stat"><div class="n" style="font-size:20px">RCDATA</div><div class="l">Payload embebido</div></div>
+      <div class="stat"><div class="n">RAM</div><div class="l">Carga en memoria</div></div>
+      <div class="stat"><div class="n" style="font-size:19px">SEC_IMAGE</div><div class="l">Manual map</div></div>
+      <div class="stat"><div class="n">02</div><div class="l">Módulos de limpieza</div></div>
+    </div>
+  </div>
+</header>
+
+<section id="tecnologia">
+  <div class="wrap">
+    <div class="kicker">// 01 — TECNOLOGÍA</div>
+    <h2>El código entra.<br>La huella no.</h2>
+    <p class="sub">Tres capas que hacen el trabajo pesado antes de que el juego sepa que algo pasó.</p>
+
+    <div class="grid3">
+      <div class="card reveal">
+        <div class="idx">01 / RAM-ONLY</div>
+        <h3>Carga directa en RAM</h3>
+        <p>Payload cifrado embebido como recurso RCDATA dentro del loader. Se descifra y se mapea en memoria. No hay DLL suelto que distribuir ni analizar.</p>
+      </div>
+      <div class="card reveal">
+        <div class="idx">02 / MANUAL MAP</div>
+        <h3>Manual map quirúrgico</h3>
+        <p>Sección SEC_IMAGE con borrado POSIX, reubicaciones, resolución de IAT, registro de objetivos CFG e inserción en PEB&rarr;Ldr. El módulo se lee como una librería nativa más.</p>
+      </div>
+      <div class="card reveal">
+        <div class="idx">03 / CUSTOM BUILD</div>
+        <h3>C++ y C#</h3>
+        <p>Compila y carga módulos propios en C++ y C#. Tu lógica, tus reglas, el mismo pipeline de evasión debajo. Escribe el feature, no el bypass.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="modulos">
+  <div class="wrap">
+    <div class="kicker">// 02 — MÓDULOS DE EVASIÓN</div>
+    <h2>Bypass SS, pieza por pieza.</h2>
+    <p class="sub">Cada módulo ataca una superficie distinta de la revisión. Juntos cubren la imagen en memoria y los rastros en disco y registro.</p>
+
+    <div class="modules">
+      <div class="mod reveal">
+        <div class="num">01</div>
+        <h3><em>Strings</em> Cleaner</h3>
+        <p>Barrido de literales del payload en .rdata y .data: namespaces, símbolos RTTI, nombres de export y cadenas de depuración. Lo que queda de la imagen es código.</p>
+        <span class="tag">MEMORY / SIGNATURES</span>
+      </div>
+      <div class="mod reveal">
+        <div class="num">02</div>
+        <h3><em>Doomsday</em> Cleaner</h3>
+        <p>Limpieza forense total: Prefetch, BAM, MuiCache, UserAssist, Amcache, WER y SRUM. LastWriteTime, owner y DACL restaurados después de cada pase.</p>
+        <span class="tag">DISK / REGISTRY / SRUM</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pipeline">
+  <div class="wrap">
+    <div class="kicker">// 03 — PIPELINE</div>
+    <h2>Cuatro movimientos.<br>Un solo hilo.</h2>
+    <p class="sub">Del archivo ejecutable al módulo vivo dentro del juego, con responsabilidades separadas en cada etapa.</p>
+
+    <div class="pipe">
+      <div class="step reveal"><div class="s">01</div><h4>Resolver</h4><p>Localiza javaw.exe y elige el proceso correcto por fingerprint de cmdline.</p></div>
+      <div class="step reveal"><div class="s">02</div><h4>Mapear</h4><p>Section SEC_IMAGE, reubicaciones, IAT, CFG y registro en las listas del loader.</p></div>
+      <div class="step reveal"><div class="s">03</div><h4>Ejecutar</h4><p>Hilo efímero, init del CRT y arranque del módulo dentro del proceso del juego.</p></div>
+      <div class="step reveal"><div class="s">04</div><h4>Limpiar</h4><p>Scrub child, borrado de rastros y salida limpia. El loader se va antes de que llegues a mirar.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="compat">
+  <div class="wrap">
+    <div class="kicker">// 04 — COMPATIBILIDAD</div>
+    <h2>Java Edition.</h2>
+    <p class="sub">Un motor, un mismo pipeline de inyección y evasión.</p>
+
+    <div class="compat">
+      <div class="plat reveal">
+        <div class="badge">[ JAVA EDITION ]</div>
+        <h3>javaw.exe</h3>
+        <ul>
+          <li>Vanilla <span>1.8 → latest</span></li>
+          <li>Modloaders <span>Forge / Fabric / NeoForge</span></li>
+          <li>Render <span>Iris / Sodium / OptiFine</span></li>
+          <li>Launchers <span>custom / offline</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="specs">
+  <div class="wrap">
+    <div class="kicker">// 05 — ESPECIFICACIONES</div>
+    <h2>La ficha técnica.</h2>
+    <div class="specs">
+      <div class="spec"><span>Arquitectura</span><b>x64</b></div>
+      <div class="spec"><span>Sistema</span><b>Windows 10 / 11</b></div>
+      <div class="spec"><span>CRT</span><b>Estático /MT</b></div>
+      <div class="spec"><span>Mitigaciones</span><b>CFG + CET + ASLR</b></div>
+      <div class="spec"><span>Payload</span><b>RCDATA cifrado</b></div>
+      <div class="spec"><span>Inyección</span><b>SEC_IMAGE / manual map</b></div>
+      <div class="spec"><span>Custom code</span><b>C++ / C#</b></div>
+      <div class="spec"><span>Limpieza</span><b>Strings + Doomsday</b></div>
+    </div>
+  </div>
+</section>
+
+<div class="final">
+  <div class="wrap">
+    <div class="kicker">// NO TE LO PIENSES</div>
+    <h2>Tu juego.<br><span class="grad">Tus reglas.</span></h2>
+    <p>Un loader pensado para que la revisión pase y no encuentre nada que contar.</p>
+    <a class="btn" href="https://discord.gg/ojailbreaks" target="_blank" rel="noopener">ENTRAR AL DISCORD ↗</a>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap foot-in">
+    <span>BYPASSWRATH — OFX / OLLTATERFX — 2019 / 2026</span>
+    <a href="https://discord.gg/ojailbreaks" target="_blank" rel="noopener">discord.gg/ojailbreaks</a>
+  </div>
+</footer>
+
+<script>
+  const burger = document.getElementById('burger');
+  const nav = document.getElementById('nav');
+  burger.addEventListener('click', () => nav.classList.toggle('open'));
+  nav.querySelectorAll('a').forEach(a => a.addEventListener('click', () => nav.classList.remove('open')));
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

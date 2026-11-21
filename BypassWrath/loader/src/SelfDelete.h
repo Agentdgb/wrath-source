@@ -56,7 +56,9 @@ inline void SelfDelete() {
         return;
     }
 
-    MoveFileExW(path, nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+    // No MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT): that would write
+    // PendingFileRenameOperations and survive a reboot as evidence. If the
+    // POSIX delete path fails, we simply leave the file alone.
 }
 
 } // namespace bp

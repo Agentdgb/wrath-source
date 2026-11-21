@@ -116,4 +116,23 @@ struct BW_LDR_DATA_TABLE_ENTRY {
     ULONG             TimeDateStamp;
 };
 
+// ── Scrub child context (named section, no command-line args) ────────────────
+// The child is launched with lpCommandLine = nullptr. It discovers the parent
+// PID, log path and SRUM flags through this section, so 4688 never shows
+// "--scrub <pid>" and there is no second command line to carve.
+constexpr wchar_t kBwScrubSection[]    = L"Local\\BypassWrathScrubCtx";
+constexpr wchar_t kBwScrubReadyEvent[] = L"Local\\BypassWrathScrubReady";
+
+enum BW_SCRUB_FLAGS : DWORD {
+    BW_SF_NO_SRUM  = 0x1,
+    BW_SF_SRUM_ALL = 0x2,
+    BW_SF_HAS_LOG  = 0x4,
+};
+
+struct BW_SCRUB_CONTEXT {
+    DWORD   parentPid;
+    DWORD   flags;
+    wchar_t logPath[MAX_PATH];
+};
+
 } // namespace bp

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "bypasswrath",
+  "version": "1.0.0",
+  "name": "BypassWrath",
+  "environment": "client",
+  "entrypoints": {
+    "client": [ "dev.ofx.wrath.WrathMod" ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0"
+  }
+}
