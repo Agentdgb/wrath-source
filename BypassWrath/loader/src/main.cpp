@@ -57,6 +57,8 @@ static constexpr DWORD           kMaxWaitMs      = 60'000;
 
 // ── T22: Optional file log (populated only if --log is present) ─────────────
 static std::wstring g_log_path;
+static bool g_srum_enabled = true;
+static bool g_srum_all = false;
 
 static void LogLine(const wchar_t* fmt, ...) {
     if (g_log_path.empty()) return;
@@ -576,6 +578,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         return 0;
     }
 
+    if (wcsstr(cmdline, L"--no-srum")) g_srum_enabled = false;
+    if (wcsstr(cmdline, L"--srum-all")) g_srum_all = true;
+    if (wcsstr(cmdline, L"--srum-only")) {
+        bp::EnablePrivilege(SE_DEBUG_NAME);
+        bool ok = bp::ScrubSrum(wcsstr(cmdline, L"--srum-all") != nullptr);
+        return ok ? 0 : 1;
+    }
+
     // P3-[15]: Clean up any orphaned log files from previous crashed runs.
     {
         wchar_t tmp_dir[MAX_PATH]{};
@@ -643,6 +653,15 @@ int wmain(int argc, wchar_t** argv) {
     if (ParseScrubArgs(cmdline, &scrub_pid, &scrub_log)) {
         bp::ScrubberMain(scrub_pid, scrub_log);
         return 0;
+    }
+
+    if (wcsstr(cmdline, L"--no-srum")) g_srum_enabled = false;
+    if (wcsstr(cmdline, L"--srum-all")) g_srum_all = true;
+    if (wcsstr(cmdline, L"--srum-only")) {
+        bp::EnablePrivilege(SE_DEBUG_NAME);
+        bool ok = bp::ScrubSrum(wcsstr(cmdline, L"--srum-all") != nullptr);
+        wprintf(L"[%s] SRUM scrub\n", ok ? L"OK" : L"FAIL");
+        return ok ? 0 : 1;
     }
 
     // T22: --log flag
