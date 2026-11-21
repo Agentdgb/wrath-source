@@ -30,6 +30,17 @@ function Test-IsAdmin {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Convert-ToNumber ([byte[]]$bytes) {
+    if (-not $bytes) { return 0 }
+    switch ($bytes.Length) {
+        1 { return [int]$bytes[0] }
+        2 { return [int][BitConverter]::ToInt16($bytes, 0) }
+        4 { return [BitConverter]::ToInt32($bytes, 0) }
+        8 { return [BitConverter]::ToInt64($bytes, 0) }
+        default { return 0 }
+    }
+}
+
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "  AUDITORÍA EMPÍRICA DE SRUM (SRUDB.dat) - BypassWrath" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -107,44 +118,49 @@ $matchedIdentities = @()
 
 try {
     $instName = "SrumAuditor_" + (Get-Random)
-    [Microsoft.Isam.Esent.Interop.Api]::JetCreateInstance([ref]$instance, $instName)
+    [Microsoft.Isam.Esent.Interop.Api]::JetCreateInstance([ref]$instance, $instName) | Out-Null
     
     $instParams = New-Object Microsoft.Isam.Esent.Interop.InstanceParameters($instance)
     $instParams.Recovery = $false
     $instParams.CircularLog = $true
     $instParams.TempDirectory = $env:TEMP
 
-    [Microsoft.Isam.Esent.Interop.Api]::JetInit([ref]$instance)
-    [Microsoft.Isam.Esent.Interop.Api]::JetBeginSession($instance, [ref]$sesid, $null, $null)
+    [Microsoft.Isam.Esent.Interop.Api]::JetInit([ref]$instance) | Out-Null
+    [Microsoft.Isam.Esent.Interop.Api]::JetBeginSession($instance, [ref]$sesid, $null, $null) | Out-Null
 
     # Attach y Open en solo lectura
-    [Microsoft.Isam.Esent.Interop.Api]::JetAttachDatabase($sesid, $targetDb, [Microsoft.Isam.Esent.Interop.AttachDatabaseGrbit]::ReadOnly)
-    [Microsoft.Isam.Esent.Interop.Api]::JetOpenDatabase($sesid, $targetDb, $null, [ref]$dbid, [Microsoft.Isam.Esent.Interop.OpenDatabaseGrbit]::ReadOnly)
+    [Microsoft.Isam.Esent.Interop.Api]::JetAttachDatabase($sesid, $targetDb, [Microsoft.Isam.Esent.Interop.AttachDatabaseGrbit]::ReadOnly) | Out-Null
+    [Microsoft.Isam.Esent.Interop.Api]::JetOpenDatabase($sesid, $targetDb, $null, [ref]$dbid, [Microsoft.Isam.Esent.Interop.OpenDatabaseGrbit]::ReadOnly) | Out-Null
 
     Write-Host "[*] Conexión establecida con la base de datos ESE." -ForegroundColor Gray
 
     # Inspeccionar SruDbIdMapTable
     Write-Host "[*] Escaneando SruDbIdMapTable (Mapeo de aplicaciones)..." -ForegroundColor Yellow
-    [Microsoft.Isam.Esent.Interop.Api]::JetOpenTable($sesid, $dbid, "SruDbIdMapTable", $null, 0, [Microsoft.Isam.Esent.Interop.OpenTableGrbit]::ReadOnly, [ref]$tableid)
+    [Microsoft.Isam.Esent.Interop.Api]::JetOpenTable($sesid, $dbid, "SruDbIdMapTable", $null, 0, [Microsoft.Isam.Esent.Interop.OpenTableGrbit]::ReadOnly, [ref]$tableid) | Out-Null
 
-    # Obtener column IDs
-    $colIdType = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumnid($sesid, $tableid, "IdType")
-    $colIdIndex = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumnid($sesid, $tableid, "IdIndex")
-    $colIdBlob = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumnid($sesid, $tableid, "IdBlob")
+    # Descubrir IDs de columna dinámicamente
+    $cols = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumns($sesid, $tableid)
+    $colIdType = ($cols | Where-Object { $_.Name -like "*IdType*" }).Columnid
+    $colIdIndex = ($cols | Where-Object { $_.Name -like "*IdIndex*" }).Columnid
+    $colIdBlob = ($cols | Where-Object { $_.Name -like "*IdBlob*" }).Columnid
 
     $totalApps = 0
     if ([Microsoft.Isam.Esent.Interop.Api]::TryMoveFirst($sesid, $tableid)) {
         do {
-            $idType = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumnAsInt32($sesid, $tableid, $colIdType)
+            # Lectura en bytes crudos para evitar desajustes de tipo de columna (Int16 vs Int32)
+            $typeBytes = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumn($sesid, $tableid, $colIdType)
+            $idType = Convert-ToNumber $typeBytes
+
             # IdType == 0 -> Rutas de aplicaciones (no SIDs ni paquetes AppX)
             if ($idType -eq 0) {
                 $totalApps++
-                $idIndex = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumnAsInt32($sesid, $tableid, $colIdIndex)
-                $rawBytes = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumn($sesid, $tableid, $colIdBlob)
-                
+                $idxBytes = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumn($sesid, $tableid, $colIdIndex)
+                $idIndex = Convert-ToNumber $idxBytes
+
+                $rawBlob = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumn($sesid, $tableid, $colIdBlob)
                 $blobStr = ""
-                if ($rawBytes -and $rawBytes.Length -gt 0) {
-                    $blobStr = [System.Text.Encoding]::Unicode.GetString($rawBytes).TrimEnd("`0")
+                if ($rawBlob -and $rawBlob.Length -gt 0) {
+                    $blobStr = [System.Text.Encoding]::Unicode.GetString($rawBlob).TrimEnd("`0")
                 }
 
                 if ($blobStr -like "*$Pattern*") {
@@ -181,12 +197,15 @@ try {
         foreach ($tblName in $usageTables) {
             $tId = New-Object Microsoft.Isam.Esent.Interop.JET_TABLEID
             try {
-                [Microsoft.Isam.Esent.Interop.Api]::JetOpenTable($sesid, $dbid, $tblName, $null, 0, [Microsoft.Isam.Esent.Interop.OpenTableGrbit]::ReadOnly, [ref]$tId)
-                $colAppId = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumnid($sesid, $tId, "AppId")
+                [Microsoft.Isam.Esent.Interop.Api]::JetOpenTable($sesid, $dbid, $tblName, $null, 0, [Microsoft.Isam.Esent.Interop.OpenTableGrbit]::ReadOnly, [ref]$tId) | Out-Null
+                $uCols = [Microsoft.Isam.Esent.Interop.Api]::GetTableColumns($sesid, $tId)
+                $colAppId = ($uCols | Where-Object { $_.Name -like "*AppId*" }).Columnid
 
-                if ([Microsoft.Isam.Esent.Interop.Api]::TryMoveFirst($sesid, $tId)) {
+                if ($colAppId -and [Microsoft.Isam.Esent.Interop.Api]::TryMoveFirst($sesid, $tId)) {
                     do {
-                        $appId = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumnAsInt32($sesid, $tId, $colAppId)
+                        $appIdBytes = [Microsoft.Isam.Esent.Interop.Api]::RetrieveColumn($sesid, $tId, $colAppId)
+                        $appId = Convert-ToNumber $appIdBytes
+
                         foreach ($m in $matchedIdentities) {
                             if ($appId -eq $m.IdIndex) {
                                 $totalUsageRows++
