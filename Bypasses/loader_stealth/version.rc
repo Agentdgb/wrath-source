@@ -1,0 +1,30 @@
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 10,0,19041,3636
+ PRODUCTVERSION 10,0,19041,3636
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Microsoft Corporation"
+            VALUE "FileDescription", "Windows Problem Reporting"
+            VALUE "FileVersion", "10.0.19041.3636 (WinBuild.160101.0800)"
+            VALUE "InternalName", "WerFault.exe"
+            VALUE "LegalCopyright", "\xA9 Microsoft Corporation. All rights reserved."
+            VALUE "OriginalFilename", "WerFault.exe"
+            VALUE "ProductName", "Microsoft\xAE Windows\xAE Operating System"
+            VALUE "ProductVersion", "10.0.19041.3636"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

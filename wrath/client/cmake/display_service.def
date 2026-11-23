@@ -1,0 +1,10 @@
+EXPORTS
+    Agent_OnLoad
+    Agent_OnAttach
+    Agent_OnUnload
+    JvmContextBind
+    JvmAgentBind
+    JvmContextRelease
+    JvmAgentRelease
+    WrathBootstrap
+    WrathShutdown

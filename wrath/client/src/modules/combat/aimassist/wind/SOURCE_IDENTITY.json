@@ -1,0 +1,12 @@
+{
+  "reference_directory": "C:\\Sources\\Projects\\DirectXColorRenderer\\Modulos Source\\Vanta Aimssist",
+  "unchanged_wind_files_sha256": {
+    "aimassist_regular.cpp": "6b73567632ba87cf48b988f1f3b4e2bdc33fb6158ee4efca94d6c252f63542ae",
+    "aimassist_cache.cpp": "3ccc8b629ac315923694535b0fdba6f0f7ca35aa6fc576de7c0fc5cf2e917b37",
+    "aimassist_debug.cpp": "94853dbe1e96afb8efeedf2ebf0a15e027b7a8e02a9c9c8dd19c8b8de318897f",
+    "aimassist_debug.h": "11ccc090f0d49c704b1a13968fba13fe46aa368fc0814324b5a44ed4c72ceee6"
+  },
+  "targeting_helpers_text_sha256": "e75f44c13bb8973398938c408e58601681c224854deafc060e170cf072b876ed",
+  "simple_math_files_unchanged": true,
+  "bridge": "Wind Engine.cpp owns original Runtime; Simple Engine.h owns independent frame state"
+}

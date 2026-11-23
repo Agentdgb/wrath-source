@@ -1,0 +1,6 @@
+package net.caffeinemc.mods.lithium.lattice.bundle.pipeline.shard;
+import java.awt.image.BufferedImage;import java.awt.*;import javax.imageio.ImageIO;import java.nio.file.*;
+public class Export {public static void main(String[]args)throws Exception{Path out=Path.of(args[0]);Files.createDirectories(out);int[] data=PaletteArrayCache.a();BufferedImage image=new BufferedImage(512,512,BufferedImage.TYPE_INT_ARGB);image.setRGB(0,0,512,512,data,0,512);ImageIO.write(image,"png",out.resolve("palette.png").toFile());BufferedImage atlas=new BufferedImage(1024,2048,BufferedImage.TYPE_INT_ARGB);Graphics2D g=atlas.createGraphics();g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+for(int slot=0;slot<32;slot++){int src=slot<20?4+(slot/5):((slot-20)/2)%4;int sx=(src&3)*128,sy=(src>>2)*128;BufferedImage tile=image.getSubimage(sx,sy,128,128);boolean flip=slot>=20&&(slot&1)!=0;
+for(int size:new int[]{16,32,64,128}){int columns=1024/size,x=(slot%columns)*size,y=(size==16?192:size==32?320:size==64?640:1024)+(slot/columns)*size;if(flip)g.drawImage(tile,x+size,y,-size,size,null);else g.drawImage(tile,x,y,size,size,null);}}
+g.dispose();ImageIO.write(atlas,"png",out.resolve("petals.png").toFile());}}

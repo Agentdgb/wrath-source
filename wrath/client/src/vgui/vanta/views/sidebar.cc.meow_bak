@@ -1,0 +1,1884 @@
+#include "modules/render/keybindhud/keybindhud.h"
+#include "../../includes.hh"
+#include "core/config/ConfigManager.h"
+#include "intro.hh"
+
+/* Declared rather than included: entry/Bootstrap.h pulls in jni.h and jvmti.h,
+   and nothing else in the gui layer knows the JVM exists. One prototype keeps
+   it that way. Safe to call from the render thread — it hands the teardown to a
+   thread of its own precisely because its callers cannot be the ones to die. */
+namespace vanta::entry { void requestFullUnload(); void requestFullUnload(bool purgeConfig); }
+
+namespace vanta
+{
+	namespace
+	{
+		/* the panel is wider than the sidebar it hangs off — the colour rows need
+		   room for a label, a swatch and a whole picker, and 180px of rail is not
+		   a picker, it is a hint of one */
+		constexpr float k_panel_width = 254.f;
+		constexpr float k_panel_pad = 14.f;
+		constexpr float k_panel_gap = 10.f;
+		/* must match c_color_setting::height() — the rows ARE that widget's compact
+		   form, and a panel that advanced by a different number than the widget
+		   draws would overlap them by the difference */
+		constexpr float k_colour_row = 34.f;
+
+		/* No surface may be made completely invisible. Alpha is worth having on
+		   these — a translucent sidebar over the game reads well — but a slip of
+		   the hand on the alpha rail must not leave someone with a client they
+		   can no longer see the Reset button in. */
+		constexpr float k_min_surface_alpha = 0.35f;
+
+		/* the search field accepts printable ascii only, and never grows past the field */
+		constexpr std::size_t k_search_limit = 24;
+
+		/* @a single letter is a keystroke, not a search.
+
+		   Recording on blur means every abandoned first character would otherwise
+		   become an entry, and a "recent searches" list whose top row is "a" is
+		   noise pretending to be history. */
+		constexpr std::size_t k_min_query = 2;
+
+		/* how many searches are worth keeping — a list nobody can see the bottom of
+		   is not a list */
+		constexpr std::size_t k_remembered = 5;
+
+		/* @does this past search continue what is being typed?
+
+		   Prefix and not substring: the question the user is asking by typing "t" is
+		   "which of my searches STARTED with t", and a substring match would answer
+		   it with entries whose t is buried in the middle — which reads as a list
+		   that ignored what you typed.
+
+		   An exact match is deliberately not a match. If the field already holds the
+		   whole entry then the search it offers is the search already running, and a
+		   suggestion you are looking at the results of is a row that does nothing. */
+		bool continues(std::string_view entry, std::string_view prefix)
+		{
+			if (entry.size() <= prefix.size())
+				return false;
+
+			for (std::size_t index = 0; index < prefix.size(); ++index)
+			{
+				if (std::tolower(static_cast<unsigned char>(entry[index]))
+					!= std::tolower(static_cast<unsigned char>(prefix[index])))
+					return false;
+			}
+
+			return true;
+		}
+
+		bool same_query(std::string_view a, std::string_view b)
+		{
+			/* @folded, because the search itself is folded.
+
+			   module_manager lowercases the needle before matching, so "Aura",
+			   "aura" and "AURA" are the same search and return the same list. Comparing
+			   them byte for byte here let one search take three of the five slots and
+			   the list read as the same line repeated. */
+			if (a.size() != b.size())
+				return false;
+
+			for (std::size_t index = 0; index < a.size(); ++index)
+			{
+				if (std::tolower(static_cast<unsigned char>(a[index]))
+					!= std::tolower(static_cast<unsigned char>(b[index])))
+					return false;
+			}
+
+			return true;
+		}
+
+		hue::c_color colour_of(const c_color_setting& picker, bool clamp_alpha)
+		{
+			const float a = clamp_alpha ? std::max(picker.a(), k_min_surface_alpha) : picker.a();
+
+			return hue::c_color(
+				static_cast<int>(std::lround(picker.r() * 255.f)),
+				static_cast<int>(std::lround(picker.g() * 255.f)),
+				static_cast<int>(std::lround(picker.b() * 255.f)),
+				static_cast<int>(std::lround(a * 255.f)));
+		}
+
+		void seed(c_color_setting& picker, const hue::c_color& colour)
+		{
+			picker.set_rgba(
+				static_cast<float>(colour.r) / 255.f,
+				static_cast<float>(colour.g) / 255.f,
+				static_cast<float>(colour.b) / 255.f,
+				static_cast<float>(colour.a) / 255.f);
+		}
+	}
+
+
+	c_sidebar::c_sidebar()
+	{
+		this->m_main_items.emplace_back("Combat", "combat", true);
+		this->m_main_items.emplace_back("Movement", "movement", false);
+		this->m_main_items.emplace_back("Visuals", "visuals", false);
+		this->m_main_items.emplace_back("Utilities", "utilities", false);
+		this->m_main_items.emplace_back("Misc", "misc", false);
+
+		this->m_other_items.emplace_back("Configs", "configs", false);
+		this->m_other_items.emplace_back("HUD", "hud", false);
+
+		/* Settings is gone. Everything on that page was either a keybind the user
+		   cannot change from there anyway, or the interface-size slider — and that
+		   one moved onto Ctrl+wheel, which is where a zoom belongs: on the thing
+		   being zoomed, not on a page you have to leave to see the effect. */
+
+		this->m_active_category = this->m_main_items.front().m_title;
+
+		/* @the customisable surfaces.
+
+		   Each row owns a real c_color_setting — the same widget the module drawer
+		   uses — rather than a cut-down swatch of its own. That is what gives the
+		   panel a hex field, a clipboard button and an alpha rail for free, and it
+		   means a change to the picker is a change everywhere it appears. */
+		const auto add_colour = [this](std::string title, hue::c_color* target, bool is_accent)
+			{
+				colour_row_t row{};
+				row.m_title = std::move(title);
+				row.m_target = target;
+				row.m_is_accent = is_accent;
+				row.m_picker = std::make_shared<c_color_setting>(row.m_title, 1.f, 1.f, 1.f, 1.f);
+
+				this->m_colours.push_back(std::move(row));
+			};
+
+		this->m_glass = std::make_shared<c_boolean_setting>("Glass", theme::glass_enabled);
+        this->m_keybinds = std::make_shared<c_boolean_setting>("Keybinds", modules::keybindhud::enabled);
+
+		add_colour("Accent", nullptr, true);
+        add_colour("Intro color", &theme::intro_colour, false);
+		add_colour("Sidebar", &theme::bg_sidebar, false);
+		add_colour("Search bar", &theme::bg_search, false);
+		add_colour("Background", &theme::bg_window, false);
+	}
+
+	void c_sidebar::intro_name_character(unsigned int codepoint)
+	{
+		if (!intro_name_focused() || codepoint < 0x20 || codepoint > 0x00FF ||
+		    (codepoint >= 0x7F && codepoint <= 0x9F)) return;
+		std::string name = m_intro_edit_wordmark ? intro::custom_wordmark() : intro::custom_name();
+		std::size_t count = 0;
+		for (const char* p = name.c_str(); *p; ) {
+			unsigned int ch = 0;
+			const int bytes = ImTextCharFromUtf8(&ch, p, nullptr);
+			if (bytes <= 0) break;
+			p += bytes; ++count;
+		}
+		if (count >= 24) return;
+		char encoded[5]{};
+		ImTextCharToUtf8(encoded, codepoint);
+		name += encoded;
+		if (m_intro_edit_wordmark) intro::set_custom_wordmark(name);
+		else intro::set_custom_name(name);
+		ConfigManager::get().markDirty();
+	}
+
+	void c_sidebar::intro_name_backspace()
+	{
+		if (!intro_name_focused()) return;
+		std::string name = m_intro_edit_wordmark ? intro::custom_wordmark() : intro::custom_name();
+		if (name.empty()) return;
+		std::size_t pos = name.size() - 1;
+		while (pos > 0 && (static_cast<unsigned char>(name[pos]) & 0xC0) == 0x80) --pos;
+		name.erase(pos);
+		if (m_intro_edit_wordmark) intro::set_custom_wordmark(name);
+		else intro::set_custom_name(name);
+		ConfigManager::get().markDirty();
+	}
+
+	void c_sidebar::intro_name_paste(const char* text)
+	{
+		if (!intro_name_focused() || !text) return;
+		// Cap the scan even when the clipboard contains very large text.
+		for (std::size_t scanned = 0; *text && scanned < 4096; ) {
+			unsigned int codepoint = 0;
+			const int bytes = ImTextCharFromUtf8(&codepoint, text, nullptr);
+			if (bytes <= 0) break;
+			text += bytes; scanned += static_cast<std::size_t>(bytes);
+			intro_name_character(codepoint);
+		}
+	}
+
+	void c_sidebar::on_character(char character)
+	{
+		if (!this->m_search_focused)
+			return;
+
+		if (character < 32 || character == 127 || this->m_search_text.size() >= k_search_limit)
+			return;
+
+		this->m_search_text.push_back(character);
+		this->m_typed.push_back(typed_char_t{ character, 0.f });
+	}
+
+	void c_sidebar::on_backspace()
+	{
+		if (!this->m_search_focused || this->m_search_text.empty())
+			return;
+
+		this->m_search_text.pop_back();
+
+		if (!this->m_typed.empty())
+			this->m_typed.pop_back();
+	}
+
+	void c_sidebar::set_search_focused(bool focused)
+	{
+		/* The transition is what matters, not the value: this is called every frame
+		   the field is clicked in, and re-focusing an already-focused field must not
+		   record anything. */
+		if (this->m_search_focused && !focused)
+			this->submit_search();
+
+		this->m_search_focused = focused;
+	}
+
+	void c_sidebar::submit_search()
+	{
+		std::string query = this->m_search_text;
+
+		const auto first = query.find_first_not_of(' ');
+		const auto last = query.find_last_not_of(' ');
+
+		if (first == std::string::npos)
+			return;
+
+		query = query.substr(first, last - first + 1);
+
+		if (query.size() < k_min_query)
+			return;
+
+		/* lifted, not appended — searching the same thing again is the same entry */
+		const auto existing = std::find_if(this->m_history.begin(), this->m_history.end(),
+			[&](const std::string& entry) { return same_query(entry, query); });
+
+		if (existing != this->m_history.end())
+			this->m_history.erase(existing);
+
+		this->m_history.insert(this->m_history.begin(), std::move(query));
+
+		if (this->m_history.size() > k_remembered)
+			this->m_history.resize(k_remembered);
+
+		/* A finished search closes a pinned list: the pin means "show me what I
+		   searched before", and the answer to that has just changed. */
+		this->m_history_pinned = false;
+	}
+
+	void c_sidebar::select(nav_item_t& item)
+	{
+		for (auto& entry : this->m_main_items)
+			entry.m_selected = false;
+
+		for (auto& entry : this->m_other_items)
+			entry.m_selected = false;
+
+		item.m_selected = true;
+		this->m_active_category = item.m_title;
+
+		if (this->m_callback)
+			this->m_callback(item);
+	}
+
+	void c_sidebar::sync_category(const std::string& title)
+	{
+		if (this->m_active_category == title)
+			return;
+
+		const auto holds = [&](const std::vector<nav_item_t>& items)
+		{
+			for (const auto& entry : items)
+				if (entry.m_title == title)
+					return true;
+
+			return false;
+		};
+
+		/* Checked BEFORE anything is cleared. Marking first and bailing on a miss
+		   would leave the rail with no entry selected at all, which is a worse lie
+		   than the stale one being fixed here. */
+		if (!holds(this->m_main_items) && !holds(this->m_other_items))
+			return;
+
+		const auto mark = [&](std::vector<nav_item_t>& items)
+		{
+			for (auto& entry : items)
+				entry.m_selected = entry.m_title == title;
+		};
+
+		mark(this->m_main_items);
+		mark(this->m_other_items);
+
+		this->m_active_category = title;
+	}
+
+	void c_sidebar::update(float delta)
+	{
+		this->m_timer += delta;
+
+		// a spring rather than a lerp: the rail carries momentum into its resting width
+		this->m_collapse.update(this->m_collapsed ? 1.f : 0.f, 210.f, 26.f, delta);
+
+		const auto advance = [delta](std::vector<nav_item_t>& items)
+			{
+				for (auto& item : items)
+					item.m_select = anim::lerp(item.m_select, item.m_selected ? 1.f : 0.f, 16.f, delta);
+			};
+
+		advance(this->m_main_items);
+		advance(this->m_other_items);
+
+		for (auto& typed : this->m_typed)
+			typed.m_anim = anim::lerp(typed.m_anim, 1.f, 16.f, delta);
+	}
+
+	void c_sidebar::render(float x, float y, float w, float h, int search_matches, const frame_input_t& input_)
+	{
+		this->update(input_.m_delta);
+
+		/* @the recent-searches panel covers the nav list.
+
+		   The rows are drawn before it and hit-tested as they are drawn, so without
+		   this a click on a remembered search would ALSO land on whatever category
+		   happens to be behind it — the panel would change the category and fill
+		   the field in the same gesture. Same one-frame-behind contract the shell
+		   uses for the account panel, and for the same reason: the layout that
+		   produces the rect has not run yet. */
+		frame_input_t input = input_;
+
+		if (this->m_history_live && input.hovered(this->m_history_x, this->m_history_y,
+			this->m_history_w, this->m_history_h))
+		{
+			input.m_cursor = math::c_vector_2d(-10000.f, -10000.f);
+			input.m_left_down = false;
+			input.m_left_clicked = false;
+			input.m_right_clicked = false;
+			input.m_wheel = 0.f;
+		}
+
+		const float top_gap = 48.f * this->m_collapse.m_value;
+		const float card_y = y + top_gap;
+		const float card_height = h - top_gap;
+
+		/* 1. detached top card, only present once collapsed */
+		if (this->m_collapse.m_value > 0.01f)
+		{
+			constexpr float top_card_height = 38.f;
+			constexpr float top_card_radius = 12.f;
+
+			const bool hovered = input.hovered(x, y, w, top_card_height);
+			this->m_top_card_hover = anim::lerp(this->m_top_card_hover, hovered ? 1.f : 0.f, 16.f, input.m_delta);
+
+			if (hovered && input.m_left_clicked)
+				this->toggle_collapsed();
+
+			draw::shadow(x, y, w, top_card_height, top_card_radius, 14.f * this->m_collapse.m_value, 0.f, 2.f,
+				hue::c_color(0, 0, 0, static_cast<int>(120.f * this->m_collapse.m_value)));
+
+			if (this->m_top_card_hover > 0.01f)
+			{
+				draw::shadow(x, y, w, top_card_height, top_card_radius, 10.f * this->m_top_card_hover, 0.f, 1.f,
+					theme::accent_violet.alpha(static_cast<int>(90.f * this->m_top_card_hover * this->m_collapse.m_value)));
+			}
+
+			const hue::c_color background = this->m_top_card_hover > 0.1f ? hue::c_color(18, 18, 20) : theme::bg_sidebar;
+
+			draw::rounded_rect(x, y, w, top_card_height, top_card_radius, background);
+			draw::border(x, y, w, top_card_height, top_card_radius, 1.f, theme::border);
+
+			constexpr float icon_size = 17.f;
+			const hue::c_color icon_color = this->m_top_card_hover > 0.1f ? theme::text_white : theme::text_secondary;
+
+			draw::icon("sidebar_expand",
+				x + (w - icon_size) * 0.5f,
+				y + (top_card_height - icon_size) * 0.5f,
+				icon_size, icon_color.modulate(this->m_collapse.m_value));
+		}
+
+		/* 2. main card */
+		const float card_radius = (this->m_collapse.m_value > 0.5f) ? 12.f : 14.f;
+
+		draw::shadow(x, card_y, w, card_height, card_radius, 18.f, 0.f, 2.f, hue::c_color(0, 0, 0, 120));
+		draw::rounded_rect(x, card_y, w, card_height, card_radius,
+			theme::pane(theme::bg_sidebar, 0.42f));
+		draw::border(x, card_y, w, card_height, card_radius, 1.f, theme::border);
+
+		/* 3. branding */
+		this->render_branding(x, card_y, w, input);
+
+		/* 4. main navigation */
+		constexpr float item_height = 34.5f;
+		constexpr float item_stride = 36.5f;
+		constexpr float padding_x = 10.f;
+
+		const float item_width = w - padding_x * 2.f;
+		float item_y = card_y + 66.f;
+
+		/* Reordering is settled BEFORE anything is measured or drawn, so the pill,
+		   the divider and every row all agree about the order for this frame. */
+		const float secondary_top_guess = item_y + item_stride * static_cast<float>(this->m_main_items.size()) + 14.f;
+
+		this->reorder_nav(this->m_main_items, false, x + padding_x, item_y,
+			item_width, item_height, item_stride, input);
+		this->reorder_nav(this->m_other_items, true, x + padding_x, secondary_top_guess,
+			item_width, item_height, item_stride, input);
+
+		/* the selected entry owns one pill that travels to it, so switching sections reads as
+		   movement instead of one pill fading out while another fades in */
+		{
+			float cursor = item_y;
+
+			for (const auto& item : this->m_main_items)
+			{
+				if (item.m_selected)
+					this->m_selected_y = cursor;
+
+				cursor += item_stride;
+			}
+
+			const float secondary_start = ((cursor - 2.f) + 8.f) + 8.f;
+			cursor = secondary_start;
+
+			for (const auto& item : this->m_other_items)
+			{
+				if (item.m_selected)
+					this->m_selected_y = cursor;
+
+				cursor += item_stride;
+			}
+		}
+
+		this->render_selection_pill(x + padding_x, item_width, item_height, input);
+
+		nav_item_t* carried = nullptr;
+
+		for (auto& item : this->m_main_items)
+		{
+			if (!this->m_nav_drag.empty() && !this->m_nav_drag_other && item.m_title == this->m_nav_drag)
+				carried = &item;
+			else
+				this->render_nav_item(item, x + padding_x, item_y, item_width, item_height, input);
+
+			item_y += item_stride;
+		}
+
+		/* 5. hairline divider, symmetric spacing on both sides */
+		const float divider_y = (item_y - 2.f) + 8.f;
+
+		draw::gradient_line(x + padding_x + 2.f, divider_y, w - (padding_x + 2.f) * 2.f, 1.f,
+			hue::c_color(140, 140, 155, 70));
+
+		/* 6. secondary navigation */
+		item_y = divider_y + 8.f;
+
+		for (auto& item : this->m_other_items)
+		{
+			if (!this->m_nav_drag.empty() && this->m_nav_drag_other && item.m_title == this->m_nav_drag)
+				carried = &item;
+			else
+				this->render_nav_item(item, x + padding_x, item_y, item_width, item_height, input);
+
+			item_y += item_stride;
+		}
+
+		/* the row being carried, over the list it is moving through */
+		if (carried != nullptr)
+		{
+			const float pinned_y = input.m_cursor.y - this->m_nav_grab;
+
+			draw::shadow(x + padding_x, pinned_y, item_width, item_height, 7.f, 16.f, 0.f, 5.f,
+				hue::c_color(0, 0, 0, 170));
+
+			this->render_nav_item(*carried, x + padding_x, pinned_y, item_width, item_height, input, true);
+		}
+
+		/* 7. profile card, pinned to the bottom */
+		constexpr float profile_height = 46.f;
+		const float profile_y = card_y + card_height - profile_height - 12.f;
+
+		this->render_profile_card(x, profile_y, w, profile_height, input);
+
+		/* 8. search field, directly above the profile card */
+		constexpr float search_height = 34.f;
+		/* the panel and its own field get the REAL cursor — the shield above exists
+		   only to keep the rows underneath from answering for them */
+		this->render_search(x, profile_y - search_height - 10.f, w, search_height, search_matches, input_);
+	}
+
+	void c_sidebar::render_branding(float x, float y, float w, const frame_input_t& input)
+	{
+		constexpr float header_height = 48.f;
+
+		const float center_y = y + 8.f + header_height * 0.5f;
+		const float expand_ratio = anim::saturate(1.f - this->m_collapse.m_value);
+		const float text_alpha = anim::saturate((expand_ratio - 0.2f) / 0.8f);
+
+		/* Publish the drag handle before any early return, so the shell always
+		   has a current rect to hit-test — including while collapsed, where the
+		   rest of this function does not run. The collapse button's 18+12px are
+		   reserved only when that button is actually drawn. */
+		const float button_reserve = (text_alpha > 0.01f) ? 30.f : 0.f;
+		this->m_brand_x = x;
+		this->m_brand_y = center_y - header_height * 0.5f;
+		this->m_brand_w = std::max(0.f, w - button_reserve);
+		this->m_brand_h = header_height;
+
+        const float logo_size = 48.f - 16.f * this->m_collapse.m_value;
+        const float logo_x = x + (w - button_reserve - logo_size) * .5f;
+        const float logo_y = center_y - logo_size * .5f;
+        const ImTextureID logo = g_icons ? g_icons->get("logo",static_cast<int>(logo_size)) : 0;
+        if (logo) draw::texture(logo,logo_x,logo_y,logo_size,logo_size,0.f,hue::c_color(255,255,255));
+        if (text_alpha <= .01f) return;
+
+		/* collapse button */
+		constexpr float button_size = 18.f;
+
+		const float button_x = x + w - button_size - 12.f;
+		const float button_y = center_y - button_size * 0.5f;
+
+		const bool hovered = input.hovered(button_x, button_y, button_size, button_size);
+		this->m_collapse_button_hover = anim::lerp(this->m_collapse_button_hover, hovered ? 1.f : 0.f, 16.f, input.m_delta);
+
+		if (hovered && input.m_left_clicked)
+			this->toggle_collapsed();
+
+		const hue::c_color toggle_color = this->m_collapse_button_hover > 0.2f ? theme::text_white : theme::text_muted;
+		draw::icon("sidebar_collapse", button_x, button_y, button_size, toggle_color.modulate(text_alpha));
+	}
+
+	void c_sidebar::reorder_nav(std::vector<nav_item_t>& items, bool other, float x, float top,
+		float w, float item_height, float stride, const frame_input_t& input)
+	{
+		if (items.empty())
+			return;
+
+		if (!input.m_left_down)
+		{
+			if (this->m_nav_drag_other == other)
+				this->m_nav_drag.clear();
+
+			if (this->m_nav_press_other == other)
+				this->m_nav_press.clear();
+
+			return;
+		}
+
+		/* Arm on a press. Selecting the row it lands on is left to happen normally:
+		   picking a category and then deciding to move it is a perfectly ordinary
+		   thing to do, and suppressing the pick would make every reorder cost the
+		   user their place. */
+		if (input.m_left_clicked && this->m_nav_drag.empty())
+		{
+			for (std::size_t index = 0; index < items.size(); ++index)
+			{
+				if (!input.hovered(x, top + static_cast<float>(index) * stride, w, item_height))
+					continue;
+
+				this->m_nav_press = items[index].m_title;
+				this->m_nav_press_other = other;
+				this->m_nav_press_y = input.m_cursor.y;
+				break;
+			}
+		}
+
+		/* a press is only a drag once it has actually travelled — otherwise every
+		   click on a category would jitter the list by a pixel */
+		if (this->m_nav_drag.empty() && !this->m_nav_press.empty()
+			&& this->m_nav_press_other == other
+			&& std::fabs(input.m_cursor.y - this->m_nav_press_y) > 6.f)
+		{
+			const auto pressed = std::find_if(items.begin(), items.end(),
+				[this](const nav_item_t& entry) { return entry.m_title == this->m_nav_press; });
+
+			if (pressed != items.end())
+			{
+				this->m_nav_drag = this->m_nav_press;
+				this->m_nav_drag_other = other;
+				this->m_nav_grab = this->m_nav_press_y
+					- (top + static_cast<float>(std::distance(items.begin(), pressed)) * stride);
+			}
+		}
+
+		if (this->m_nav_drag.empty() || this->m_nav_drag_other != other)
+			return;
+
+		const auto held = std::find_if(items.begin(), items.end(),
+			[this](const nav_item_t& entry) { return entry.m_title == this->m_nav_drag; });
+
+		if (held == items.end())
+		{
+			this->m_nav_drag.clear();
+			return;
+		}
+
+		/* Rounded, so a row changes place once it is more than halfway over its
+		   neighbour — which is where the eye expects the list to give way. */
+		const float loose = input.m_cursor.y - this->m_nav_grab;
+
+		const int slot = std::clamp(
+			static_cast<int>(std::lround((loose - top) / stride)),
+			0, static_cast<int>(items.size()) - 1);
+
+		nav_item_t carried = std::move(*held);
+		items.erase(held);
+		items.insert(items.begin() + slot, std::move(carried));
+	}
+
+	void c_sidebar::render_selection_pill(float x, float w, float item_height, const frame_input_t& input)
+	{
+		if (!this->m_pill_ready)
+		{
+			// first frame: sit where the selection already is, do not slide in from the top
+			this->m_pill_y.snap(this->m_selected_y);
+			this->m_pill_ready = true;
+		}
+
+		this->m_pill_y.update(this->m_selected_y, 260.f, 30.f, input.m_delta);
+
+		const float y = this->m_pill_y.m_value;
+
+		draw::rounded_rect(x, y, w, item_height, 7.f, hue::c_color(15, 15, 15));
+		draw::border(x, y, w, item_height, 7.f, 1.f, theme::border);
+	}
+
+	void c_sidebar::render_nav_item(nav_item_t& item, float x, float target_y, float w, float h,
+		const frame_input_t& input, bool pinned)
+	{
+		/* A row is drawn where it IS, not where the layout says it belongs — the
+		   two differ for as long as it takes the list to settle after a reorder.
+		   A carried row is pinned instead: it is already under the cursor, and
+		   easing it would make it lag behind the hand holding it. */
+		if (pinned || item.m_visual_y < 0.f)
+			item.m_visual_y = target_y;
+		else
+			item.m_visual_y = anim::lerp(item.m_visual_y, target_y, 16.f, input.m_delta);
+
+		const float y = item.m_visual_y;
+
+		const bool hovered = input.hovered(x, y, w, h);
+		item.m_hover = anim::lerp(item.m_hover, hovered ? 1.f : 0.f, 16.f, input.m_delta);
+
+		if (hovered && input.m_left_clicked && !item.m_selected)
+		{
+			this->select(item);
+			item.m_picked.kick();
+		}
+
+		/* the selected pill is drawn by render_selection_pill, this is only the hover wash */
+		if (item.m_hover > 0.01f && item.m_select < 0.99f)
+		{
+			draw::rounded_rect(x, y, w, h, 7.f,
+				hue::c_color(13, 13, 13, static_cast<int>(255.f * item.m_hover * (1.f - item.m_select))));
+		}
+
+		if (const float picked = item.m_picked.update(input.m_delta); picked > 0.01f)
+		{
+			draw::shadow(x, y, w, h, 7.f, 8.f + 20.f * (1.f - picked), 0.f, 0.f,
+				theme::accent_violet.alpha(static_cast<int>(140.f * picked)));
+		}
+
+		const float center_y = y + h * 0.5f;
+		const float expand_ratio = anim::saturate(1.f - this->m_collapse.m_value);
+		const float text_alpha = anim::saturate((expand_ratio - 0.25f) / 0.75f);
+
+		constexpr float icon_size = 16.5f;
+
+		const float icon_x = (x + 12.f) + ((x + (w - icon_size) * 0.5f) - (x + 12.f)) * this->m_collapse.m_value;
+		const hue::c_color icon_color = item.m_selected ? theme::text_white : theme::text_secondary;
+
+		draw::icon(item.m_icon, icon_x, center_y - icon_size * 0.5f, icon_size, icon_color);
+
+		if (text_alpha <= 0.01f)
+			return;
+
+		const hue::c_color title = (item.m_selected ? theme::text_white : theme::text_secondary).modulate(text_alpha);
+		draw_text(item.m_title, x + 38.f, center_y, font_face::regular, 13.f, title, align_left | align_middle);
+	}
+
+	void c_sidebar::render_profile_card(float x, float y, float w, float h, const frame_input_t& input)
+	{
+		const float expand_ratio = anim::saturate(1.f - this->m_collapse.m_value);
+		const float text_alpha = anim::saturate((expand_ratio - 0.25f) / 0.75f);
+
+		/* the card shrinks down to a square avatar tile while collapsing */
+		const float full_width = w - 20.f;
+		const float full_x = x + 10.f;
+		constexpr float compact_size = 34.f;
+
+		const float compact_x = x + (w - compact_size) * 0.5f;
+		const float card_width = full_width + (compact_size - full_width) * this->m_collapse.m_value;
+		const float card_x = full_x + (compact_x - full_x) * this->m_collapse.m_value;
+
+		/* published for the account panel, which hangs off this card and must not
+		   re-derive the collapse interpolation above to find it */
+		this->m_card_x = card_x;
+		this->m_card_y = y;
+		this->m_card_w = card_width;
+
+		const bool hovered = input.hovered(card_x, y, card_width, h);
+		this->m_profile_hover = anim::lerp(this->m_profile_hover, hovered ? 1.f : 0.f, 14.f, input.m_delta);
+
+		/* the whole card is the control, not just the arrow drawn in its corner —
+		   a 12px hit target at the very bottom of the client is a target you miss */
+		if (hovered && input.m_left_clicked)
+		{
+			this->m_profile_expanded = !this->m_profile_expanded;
+			if (!this->m_profile_expanded) {
+                this->m_intro_name_focused = false;
+                this->m_intro_options_open = false;
+            }
+
+			/* Read the palette on the way OPEN only. From here until it shuts the
+			   panel is the source of truth and writes one way (see
+			   sync_colour_rows) — seeding every frame would overwrite a drag with
+			   the value that drag had just produced. */
+			if (this->m_profile_expanded)
+			{
+				if (this->m_glass)
+					this->m_glass->set_enabled(theme::glass_enabled);
+				if (this->m_keybinds)
+					this->m_keybinds->set_enabled(modules::keybindhud::enabled);
+
+				for (auto& row : this->m_colours)
+				{
+					if (!row.m_picker)
+						continue;
+
+					seed(*row.m_picker, row.m_target != nullptr ? *row.m_target : theme::accent_violet);
+				}
+			}
+		}
+
+		const float expanded = anim::saturate(this->m_profile_expand.m_value);
+
+		if (this->m_profile_hover > 0.01f)
+		{
+			draw::shadow(card_x, y, card_width, h, 8.f, 10.f * this->m_profile_hover, 0.f, 2.f,
+				hue::c_color(0, 0, 0, static_cast<int>(110.f * this->m_profile_hover)));
+		}
+
+		if (expanded > 0.01f)
+		{
+			draw::shadow(card_x, y, card_width, h, 8.f, 14.f * expanded, 0.f, 0.f,
+				theme::accent_violet.alpha(static_cast<int>(70.f * expanded)));
+		}
+
+		/* the card and the avatar share a radius family, the avatar reads as a squircle inside it */
+		constexpr float card_radius = 10.f;
+		constexpr float avatar_radius = 8.f;
+
+		draw::rounded_rect(card_x, y, card_width, h, card_radius,
+			theme::bg_element.lerp(hue::c_color(21, 18, 26), std::max(expanded, this->m_profile_hover * 0.6f)));
+
+		draw::border(card_x, y, card_width, h, card_radius, 1.f,
+			theme::border.lerp(theme::accent_violet, expanded * 0.75f));
+
+		const float center_y = y + h * 0.5f;
+		constexpr float avatar_size = 26.f;
+
+		const float avatar_x = (card_x + 8.f) + ((card_x + (card_width - avatar_size) * 0.5f) - (card_x + 8.f)) * this->m_collapse.m_value;
+		const float avatar_y = center_y - avatar_size * 0.5f;
+
+		/* The real head if it has arrived, the bundled placeholder until then.
+		   Uploading here rather than where it is fetched is deliberate: the
+		   pixels come off a worker thread, and a GL texture may only be created
+		   on the thread that owns the context — which is this one. */
+		if (profile::head_texture() != 0)
+		{
+			draw::texture(profile::head_texture(), avatar_x, avatar_y,
+				avatar_size, avatar_size, avatar_radius, theme::text_white);
+		}
+		else
+		{
+			draw::rounded_icon("avatar", avatar_x, avatar_y, avatar_size, avatar_radius, theme::text_white);
+		}
+
+		draw::border(avatar_x, avatar_y, avatar_size, avatar_size, avatar_radius, 1.f, theme::border);
+
+		if (text_alpha <= 0.01f)
+			return;
+
+		const float text_x = avatar_x + avatar_size + 10.f;
+
+		/* The signed-in account. Empty until the JVM has been asked, which in a
+		   launcher is after auth — so the card says so instead of showing a
+		   blank row. */
+		const std::string account = profile::name();
+
+		draw_text(account.empty() ? "Signing in..." : account,
+			text_x, center_y, font_face::bold, 13.f,
+			theme::text_white.modulate(text_alpha), align_left | align_middle);
+
+		/* @the disclosure arrow.
+
+		   Points UP while the panel is shut — it is saying where the panel will
+		   come from, not which way the card will move — and rotates through flat to
+		   point down once it is open. It also drifts a couple of pixels upward on
+		   the way, so the gesture and the panel travel together. */
+		{
+			/* Small and grey, and it stays grey. This is a disclosure mark, not a
+			   status light: it says the card has more behind it, and it has nothing
+			   to say about the client's accent. Colouring it violet on open made an
+			   8px triangle the brightest thing in the corner of a panel it is not
+			   even part of. */
+			constexpr float arrow_size = 10.f;
+
+			const float arrow_x = card_x + card_width - 12.f;
+			const float arrow_y = y + 13.f - 2.f * expanded;
+
+			const bool arrow_hovered = input.hovered(arrow_x - 9.f, arrow_y - 9.f, 18.f, 18.f);
+			this->m_profile_arrow_hover = anim::lerp(this->m_profile_arrow_hover,
+				arrow_hovered ? 1.f : 0.f, 16.f, input.m_delta);
+
+			const hue::c_color tint = hue::c_color(118, 118, 126)
+				.lerp(hue::c_color(178, 178, 186),
+					std::max(this->m_profile_arrow_hover, this->m_profile_hover));
+
+			draw::disclosure_arrow(arrow_x, arrow_y, arrow_size, -1.f + 2.f * expanded, 1.f,
+				tint.modulate(text_alpha));
+		}
+	}
+
+	void c_sidebar::render_search_history(float x, float field_top, float w, const frame_input_t& input)
+	{
+		/* @the list narrows to what is being typed.
+
+		   An empty field offers everything remembered; a field with "t" in it offers
+		   only the searches that began with t. That is what makes the history worth
+		   opening at all — five entries you have to read through is a list, but
+		   "t" -> "triggerbot" is a completion, and it costs one keystroke instead of
+		   eleven.
+
+		   The panel disappears on its own when nothing continues what you typed, so
+		   it never sits there contradicting the field it is attached to. */
+		std::vector<std::string> matching{};
+
+		if ((this->m_history_pinned || this->m_search_focused) && this->m_collapse.m_value < 0.1f)
+		{
+			for (const std::string& entry : this->m_history)
+			{
+				if (this->m_search_text.empty() || continues(entry, this->m_search_text))
+					matching.push_back(entry);
+			}
+		}
+
+		const bool wanted = !matching.empty();
+
+		/* The rows are captured while the panel is open and held for the whole fade.
+		   See m_history_shown: the eraser empties m_history, and a box sized from a
+		   list that just went to zero collapses in one frame instead of fading. */
+		if (wanted)
+			this->m_history_shown = std::move(matching);
+
+		this->m_history_reveal.update(wanted ? 1.f : 0.f, 250.f, 26.f, input.m_delta);
+
+		const float reveal = anim::saturate(this->m_history_reveal.m_value);
+
+		this->m_history_live = reveal > 0.004f && !this->m_history_shown.empty();
+
+		if (!this->m_history_live)
+			return;
+
+		if (this->m_history_hover.size() != this->m_history_shown.size())
+			this->m_history_hover.assign(this->m_history_shown.size(), 0.f);
+
+		constexpr float row_height = 26.f;
+		constexpr float header_height = 24.f;
+		constexpr float pad = 6.f;
+
+		const float height = header_height + row_height * static_cast<float>(this->m_history_shown.size()) + pad;
+		const float top = field_top - height - 8.f;
+
+		const float alpha = anim::saturate(reveal * 1.2f);
+		const float lift = (1.f - anim::ease_out_cubic(reveal)) * 8.f;
+
+		const float draw_y = top + lift;
+
+		/* @the shield goes where the panel IS, not where it comes to rest.
+
+		   Published after the lift is applied, because this rect is what the nav rows
+		   underneath are told to ignore. Publishing the resting position instead left
+		   the shield sitting above the visible panel during the whole animation: the
+		   bottom strip of what you could see was unshielded and clicks fell through it
+		   to the category behind, while an equal strip of bare card above it swallowed
+		   clicks that had nothing drawn in them. */
+		this->m_history_x = x;
+		this->m_history_y = draw_y;
+		this->m_history_w = w;
+		this->m_history_h = height;
+
+		/* @nothing acts before everything is drawn.
+
+		   Both handlers used to return out of the middle of the paint, so the frame
+		   you pressed on was the frame that lost its content: the eraser deleted the
+		   icon under your own cursor, and picking the third of five rows erased rows
+		   three, four and five as it went. The gesture is recorded here and carried
+		   out below, once the panel has finished drawing itself. */
+		enum class action { none, clear, pick };
+
+		action taken = action::none;
+		std::size_t picked = 0;
+
+		/* Interactive only while it is actually open. During the fade-out the rows on
+		   screen are a snapshot of a list that may already be gone, and a click landing
+		   on one of them must not resurrect it. */
+		const bool live_input = wanted;
+
+		draw::shadow(x, draw_y, w, height, 11.f, 22.f, 0.f, 5.f,
+			hue::c_color(0, 0, 0, static_cast<int>(185.f * alpha)));
+
+		/* @frosted, like every other floating surface in glass mode.
+
+		   Nine rounds where the window gets six: this pane is 180px across and the
+		   rows behind it are the nav list, which is high-contrast text. A blur that
+		   only softens leaves those rows legible through the panel, and a list you
+		   can read another list through is not a surface. The cost of the extra
+		   rounds on a rectangle this small is negligible.
+
+		   Barely darkened, like the account panel it shares a card with — this
+		   covers the client, which glass mode has already dimmed, and darkening a
+		   second time by the same amount is what turns a pane into a black slab
+		   with the blur invisible inside it. */
+		if (theme::glass_enabled && vanta::g_app->visible())
+		{
+			panel_glass::blur_under(x, draw_y, w, height, 11.f, alpha,
+				/*brightness=*/0.92f, /*darken=*/0.16f, /*passes=*/9);
+		}
+
+		/* Sheer over a blur, solid over nothing. The sheer alpha only works when
+		   there is something underneath worth reading through it; with glass off
+		   there is no blur, and the same value would show the nav rows straight
+		   through the panel — text competing with text. */
+		if (theme::glass_enabled)
+		{
+			/* graded, so the pane catches a little more light along its top */
+			draw::gradient_rect(x, draw_y, w, height, 11.f,
+				hue::c_color(34, 34, 38, static_cast<int>(46.f * alpha)),
+				hue::c_color(13, 13, 15, static_cast<int>(88.f * alpha)), true);
+		}
+		else
+		{
+			draw::rounded_rect(x, draw_y, w, height, 11.f,
+				hue::c_color(17, 17, 20).modulate(alpha));
+		}
+
+		draw::border(x, draw_y, w, height, 11.f, 1.f,
+			hue::c_color(32, 32, 38).modulate(alpha));
+
+		draw_text("RECENT", x + 12.f, draw_y + 13.f, font_face::bold, 9.5f,
+			theme::text_muted.modulate(alpha), align_left | align_middle);
+
+		/* --- clear the lot ------------------------------------------------- */
+		{
+			constexpr float clear_size = 18.f;
+
+			const float clear_x = x + w - clear_size - 8.f;
+			const float clear_y = draw_y + 13.f - clear_size * 0.5f;
+
+			const bool hovered = live_input
+				&& input.hovered(clear_x - 2.f, clear_y - 2.f, clear_size + 4.f, clear_size + 4.f);
+
+			this->m_history_clear_hover = anim::lerp(this->m_history_clear_hover,
+				hovered ? 1.f : 0.f, 18.f, input.m_delta);
+
+			if (hovered && input.m_left_clicked)
+				taken = action::clear;
+
+			if (this->m_history_clear_hover > 0.01f)
+			{
+				draw::rounded_rect(clear_x - 2.f, clear_y - 2.f, clear_size + 4.f, clear_size + 4.f, 6.f,
+					hue::c_color(48, 24, 28).modulate(this->m_history_clear_hover * alpha));
+			}
+
+			draw::icon("eraser", clear_x, clear_y, clear_size,
+				theme::text_muted.lerp(theme::danger_red, this->m_history_clear_hover).modulate(alpha));
+		}
+
+		/* --- the entries ---------------------------------------------------- */
+		for (std::size_t index = 0; index < this->m_history_shown.size(); ++index)
+		{
+			const float row_y = draw_y + header_height + static_cast<float>(index) * row_height;
+
+			const bool hovered = live_input && input.hovered(x + 4.f, row_y, w - 8.f, row_height);
+
+			this->m_history_hover[index] = anim::lerp(this->m_history_hover[index],
+				hovered ? 1.f : 0.f, 18.f, input.m_delta);
+
+			/* First gesture wins. hovered() is closed on both edges, so the eraser's
+			   box and row zero's touch along one scanline — and the row loop runs
+			   second, so a click there used to overwrite the clear that had just been
+			   recorded and recall an entry instead of wiping the list. */
+			if (hovered && input.m_left_clicked && taken == action::none)
+			{
+				taken = action::pick;
+				picked = index;
+			}
+
+			if (this->m_history_hover[index] > 0.01f)
+			{
+				draw::rounded_rect(x + 4.f, row_y, w - 8.f, row_height, 7.f,
+					hue::c_color(26, 26, 31).modulate(this->m_history_hover[index] * alpha));
+			}
+
+			constexpr float glyph = 11.f;
+
+			draw::icon("search", x + 12.f, row_y + (row_height - glyph) * 0.5f, glyph,
+				theme::text_muted.modulate(alpha * 0.8f));
+
+			draw_text(truncate_text(this->m_history_shown[index], w - 46.f, font_face::regular, 11.5f),
+				x + 12.f + glyph + 7.f, row_y + row_height * 0.5f, font_face::regular, 11.5f,
+				theme::text_secondary.lerp(theme::text_white, this->m_history_hover[index]).modulate(alpha),
+				align_left | align_middle);
+		}
+
+		/* --- and now the gesture -------------------------------------------- */
+		if (taken == action::clear)
+		{
+			this->m_history.clear();
+			this->m_history_pinned = false;
+		}
+		else if (taken == action::pick)
+		{
+			/* Picking one puts it back in the field rather than searching and
+			   closing: the reason to reach for a past search is usually to run it
+			   again with a small change. */
+			this->m_search_text = this->m_history_shown[picked];
+
+			this->m_typed.clear();
+
+			for (const char character : this->m_search_text)
+				this->m_typed.push_back(typed_char_t{ character, 1.f });
+
+			this->m_search_focused = true;
+			this->m_history_pinned = false;
+		}
+	}
+
+	void c_sidebar::render_search(float x, float y, float w, float h, int matches, const frame_input_t& input)
+	{
+		const float expand_ratio = anim::saturate(1.f - this->m_collapse.m_value);
+		const float text_alpha = anim::saturate((expand_ratio - 0.25f) / 0.75f);
+
+		const float full_width = w - 20.f;
+		const float full_x = x + 10.f;
+		constexpr float compact_size = 34.f;
+
+		const float compact_x = x + (w - compact_size) * 0.5f;
+		const float field_width = full_width + (compact_size - full_width) * this->m_collapse.m_value;
+		const float field_x = full_x + (compact_x - full_x) * this->m_collapse.m_value;
+
+		const float center_y = y + h * 0.5f;
+		constexpr float radius = 10.f;
+
+		const bool hovered = input.hovered(field_x, y, field_width, h);
+
+		/* --- geometry of the trailing controls, needed before the click test --- */
+		const bool has_text = !this->m_search_text.empty();
+
+		constexpr float clear_size = 18.f;
+		const float clear_x = field_x + field_width - clear_size - 9.f;
+		const float clear_y = center_y - clear_size * 0.5f;
+
+		/* @gated on being visible, not merely on there being text.
+
+		   The X is painted below the `text_alpha <= 0.01f` return, but its hit test
+		   lives up here — so on a collapsed rail it was an invisible button sitting
+		   exactly on top of the magnifier. Clicking the rail to reopen the search
+		   pressed a control that is not there: the query was wiped, the grid silently
+		   un-filtered, the rail stayed shut, and focus went to a field with no caret
+		   and no text, which then quietly recorded whatever was typed blind into it.
+		   Same value that gates the drawing, so the hit box now covers exactly the
+		   pixels the user can see — including through the collapse animation, where
+		   the X spends a moment nearly transparent and was fully clickable. */
+		const bool clear_hovered = has_text
+			&& text_alpha > 0.01f
+			&& input.hovered(clear_x - 2.f, clear_y - 2.f, clear_size + 4.f, clear_size + 4.f);
+
+		/* @the panel counts as part of the control.
+
+		   It is drawn later in this same function, so its rect is one frame old — but
+		   it only moves when it opens and closes, and being one frame stale is what
+		   it costs to have the blur below know about it at all. Without this, a click
+		   on the panel's own header, its side gutters or the pad under the last row
+		   was a click "outside the field": focus dropped, and the list the user was
+		   reaching into folded away under their cursor. The eraser was the worst of
+		   them — wiping the recents also blurred the field. */
+		const bool over_history = this->m_history_live
+			&& input.hovered(this->m_history_x, this->m_history_y, this->m_history_w, this->m_history_h);
+
+		if (input.m_left_clicked)
+		{
+			if (clear_hovered)
+			{
+				/* Clearing must not steal the focus, you almost always type again
+				   right after — but the query being wiped is a finished search and is
+				   worth remembering. This is the "done with that one" gesture, and it
+				   used to be the one that threw the query away. */
+				this->submit_search();
+
+				this->m_search_text.clear();
+				this->m_typed.clear();
+				this->m_search_focused = true;
+
+				this->m_clear_pulse.kick();
+			}
+			else if (this->m_collapsed && hovered)
+			{
+				// clicking the collapsed rail expands the card straight into a focused field
+				this->toggle_collapsed();
+				this->m_search_focused = true;
+			}
+			else if (!over_history)
+			{
+				/* Through the setter, never by assignment: leaving the field is what
+				   records the search, and an assignment here would skip that. */
+				this->set_search_focused(hovered);
+			}
+		}
+
+		/* Pinning an empty list looks like a control that does nothing, and then goes
+		   off on its own later: the flag survived, and the first search to produce an
+		   entry made the panel appear out of a gesture made minutes earlier. */
+		if (hovered && input.m_right_clicked && !this->m_history.empty())
+			this->m_history_pinned = !this->m_history_pinned;
+
+		/* a click anywhere that is not the field or the list puts the list away */
+		if (input.m_left_clicked && !hovered && this->m_history_pinned
+			&& !input.hovered(this->m_history_x, this->m_history_y, this->m_history_w, this->m_history_h))
+		{
+			this->m_history_pinned = false;
+		}
+
+		this->m_search_hover = anim::lerp(this->m_search_hover, hovered ? 1.f : 0.f, 16.f, input.m_delta);
+		this->m_clear_hover = anim::lerp(this->m_clear_hover, clear_hovered ? 1.f : 0.f, 18.f, input.m_delta);
+
+		/* a spring, so the ring lands with a little weight instead of fading in flatly */
+		this->m_search_focus.update(this->m_search_focused ? 1.f : 0.f, 260.f, 26.f, input.m_delta);
+		const float focus = anim::saturate(this->m_search_focus.m_value);
+
+		this->m_clear_reveal = anim::lerp(this->m_clear_reveal, has_text ? 1.f : 0.f, 18.f, input.m_delta);
+		this->m_matches_reveal = anim::lerp(this->m_matches_reveal, has_text ? 1.f : 0.f, 14.f, input.m_delta);
+
+		/* --- the field --------------------------------------------------------- */
+		if (focus > 0.02f)
+		{
+			draw::shadow(field_x, y, field_width, h, radius, 14.f * focus, 0.f, 1.f,
+				theme::accent_violet.alpha(static_cast<int>(70.f * focus * expand_ratio)));
+		}
+
+		/* the hover lift is relative to whatever colour the field is wearing, so a
+		   user-picked search colour still brightens under the cursor instead of
+		   snapping to the stock #141414 */
+		draw::rounded_rect(field_x, y, field_width, h, radius,
+			theme::pane(theme::bg_search.lerp(theme::bg_search.lerp(theme::text_white, 0.045f),
+				this->m_search_hover * (1.f - focus)), 0.55f));
+
+		draw::border(field_x, y, field_width, h, radius, 1.f + 0.35f * focus,
+			theme::border.lerp(theme::accent_violet, focus * expand_ratio));
+
+		if (const float cleared = this->m_clear_pulse.update(input.m_delta); cleared > 0.01f)
+		{
+			draw::shadow(field_x, y, field_width, h, radius, 8.f + 20.f * (1.f - cleared), 0.f, 0.f,
+				theme::accent_violet.alpha(static_cast<int>(140.f * cleared * expand_ratio)));
+		}
+
+		/* --- the magnifier, leading the field the way a search box should ------- */
+		constexpr float icon_size = 15.f;
+
+		const float lead_icon_x = field_x + 11.f;
+		const float centered_icon_x = field_x + (field_width - icon_size) * 0.5f;
+		const float icon_x = lead_icon_x + (centered_icon_x - lead_icon_x) * this->m_collapse.m_value;
+
+		const hue::c_color icon_tint = this->m_search_focused
+			? theme::accent_violet
+			: (hovered ? theme::text_secondary : theme::text_muted);
+
+		draw::icon("search", icon_x, center_y - icon_size * 0.5f, icon_size, icon_tint);
+
+		if (text_alpha <= 0.01f)
+		{
+			/* @a collapsed rail still has to put the panel away.
+
+			   render_search_history is the last statement of this function, so this
+			   return skips it — and it is the only place m_history_live and the shield
+			   rect are written. Left alone they froze at whatever the last expanded
+			   frame published, and the shield went on blanking the cursor over a strip
+			   of the collapsed rail with nothing drawn in it: the nav icons under that
+			   band stopped answering clicks, permanently, for no visible reason.
+
+			   Bringing the spring down here rather than just clearing the flag also
+			   means the panel is genuinely closed when the rail expands again, instead
+			   of resuming from wherever the collapsing frame abandoned it. */
+			this->m_history_reveal.update(0.f, 250.f, 26.f, input.m_delta);
+			this->m_history_live = false;
+			this->m_history_pinned = false;
+
+			return;
+		}
+
+		/* --- trailing controls -------------------------------------------------- */
+		float text_limit = field_x + field_width - 12.f;
+
+		if (this->m_clear_reveal > 0.01f)
+		{
+			const float reveal = anim::ease_out_back(this->m_clear_reveal);
+			const float size = clear_size * std::clamp(reveal, 0.f, 1.12f);
+
+			const float box_x = clear_x + (clear_size - size) * 0.5f;
+			const float box_y = clear_y + (clear_size - size) * 0.5f;
+
+			draw::rounded_rect(box_x, box_y, size, size, size * 0.5f,
+				hue::c_color(38, 38, 38).lerp(hue::c_color(62, 62, 62), this->m_clear_hover)
+				.modulate(this->m_clear_reveal * text_alpha));
+
+			const hue::c_color cross = theme::text_muted.lerp(theme::text_white, this->m_clear_hover);
+			const float reach = size * 0.22f;
+			const float cx = box_x + size * 0.5f;
+			const float cy = box_y + size * 0.5f;
+
+			ImDrawList* draw_list = g_render->draw_list();
+
+			draw_list->PathClear();
+			draw_list->PathLineTo(ImVec2(cx - reach, cy - reach));
+			draw_list->PathLineTo(ImVec2(cx + reach, cy + reach));
+			draw_list->PathStroke(cross.modulate(this->m_clear_reveal * text_alpha).transform(), ImDrawFlags_None, 1.4f);
+
+			draw_list->PathClear();
+			draw_list->PathLineTo(ImVec2(cx + reach, cy - reach));
+			draw_list->PathLineTo(ImVec2(cx - reach, cy + reach));
+			draw_list->PathStroke(cross.modulate(this->m_clear_reveal * text_alpha).transform(), ImDrawFlags_None, 1.4f);
+
+			text_limit = clear_x - 8.f;
+		}
+
+		/* the hit count, so the field says what it found without leaving it */
+		if (this->m_matches_reveal > 0.02f)
+		{
+			const std::string value = std::to_string(matches);
+
+			const float chip_width = text_width(value, font_face::bold, 9.5f) + 12.f;
+			constexpr float chip_height = 15.f;
+
+			const float chip_x = text_limit - chip_width;
+			const float chip_y = center_y - chip_height * 0.5f;
+
+			const hue::c_color chip = matches > 0 ? theme::accent_violet_deep : hue::c_color(34, 34, 34);
+
+			draw::rounded_rect(chip_x, chip_y, chip_width, chip_height, 5.f,
+				chip.modulate(this->m_matches_reveal * text_alpha));
+
+			draw_text(value, chip_x + chip_width * 0.5f, center_y, font_face::bold, 9.5f,
+				(matches > 0 ? theme::text_white : theme::text_muted).modulate(this->m_matches_reveal * text_alpha),
+				align_center | align_middle);
+
+			text_limit = chip_x - 8.f;
+		}
+
+		/* --- text -------------------------------------------------------------- */
+		const float text_x = icon_x + icon_size + 9.f;
+
+		draw::push_clip(text_x - 2.f, y, std::max(4.f, text_limit - text_x + 2.f), h);
+
+		constexpr float font_size = 13.f;
+
+		if (!has_text)
+		{
+			/* the placeholder slides aside and fades as the field takes focus */
+			const float drift = focus * 4.f;
+
+			draw_text("Search modules...", text_x + drift, center_y, font_face::regular, font_size,
+				hue::c_color(104, 104, 104).modulate(text_alpha * (1.f - focus * 0.45f)),
+				align_left | align_middle);
+		}
+		else
+		{
+			// every glyph eases up into place as it is typed
+			float cursor_x = text_x;
+
+			for (const auto& typed : this->m_typed)
+			{
+				const std::string glyph(1, typed.m_character);
+
+				const float offset = (1.f - typed.m_anim) * 3.f;
+				const float alpha = std::min(1.f, typed.m_anim * 1.6f) * text_alpha;
+
+				draw_text(glyph, cursor_x, center_y + offset, font_face::regular, font_size,
+					theme::text_white.modulate(alpha), align_left | align_middle);
+
+				cursor_x += text_width(glyph, font_face::regular, font_size);
+			}
+		}
+
+		/* the caret glides to its target rather than jumping, and never blinks */
+		const float target_cursor = text_x + (has_text ? text_width(this->m_search_text, font_face::regular, font_size) : 0.f);
+		this->m_cursor_x = anim::lerp(this->m_cursor_x, target_cursor, 22.f, input.m_delta);
+
+		if (focus > 0.02f)
+		{
+			draw::rounded_rect(this->m_cursor_x + 1.5f, center_y - 8.f, 1.5f, 16.f, 0.75f,
+				theme::accent_violet.modulate(text_alpha * focus));
+		}
+
+		draw::pop_clip();
+
+		/* Above the field, and drawn after it — the rows it covers were laid down
+		   earlier in the frame, so painting over them is enough to be on top of
+		   them. Answering their clicks is a separate problem, solved by the shield
+		   in render(). */
+		this->render_search_history(field_x, y, field_width, input);
+	}
+
+	/* ------------------------------------------------------------------ */
+	/* the account panel                                                   */
+	/* ------------------------------------------------------------------ */
+
+	bool c_sidebar::overlay_rect(float& x, float& y, float& w, float& h) const
+	{
+		if (!this->m_panel_live)
+			return false;
+
+		x = this->m_panel_x;
+		y = this->m_panel_y;
+		w = this->m_panel_w;
+		h = this->m_panel_h;
+
+		return true;
+	}
+
+	void c_sidebar::sync_colour_rows()
+	{
+		/* Written every frame the panel is open, and read only on the frame it
+		   opens (see render_profile_panel). One direction at a time: seeding from
+		   the palette while the user is dragging a rail would overwrite the drag
+		   with the value it had just produced, and the handle would sit still. */
+		for (const auto& row : this->m_colours)
+		{
+			if (!row.m_picker)
+				continue;
+
+			if (row.m_is_accent)
+			{
+				const auto c = colour_of(*row.m_picker, false);
+				if (c.r != theme::accent_violet.r || c.g != theme::accent_violet.g || c.b != theme::accent_violet.b || c.a != theme::accent_violet.a)
+				{
+					theme::set_accent(c);
+					ConfigManager::get().markDirty();
+				}
+				continue;
+			}
+
+			if (row.m_target != nullptr)
+			{
+				const auto c = colour_of(*row.m_picker, true);
+				if (c.r != row.m_target->r || c.g != row.m_target->g || c.b != row.m_target->b || c.a != row.m_target->a)
+				{
+					*row.m_target = c;
+					ConfigManager::get().markDirty();
+				}
+			}
+		}
+	}
+
+	void c_sidebar::sync_from_theme()
+	{
+		if (this->m_glass)
+			this->m_glass->set_enabled(theme::glass_enabled);
+		if (this->m_keybinds)
+			this->m_keybinds->set_enabled(modules::keybindhud::enabled);
+
+		for (auto& row : this->m_colours)
+		{
+			if (!row.m_picker)
+				continue;
+
+			seed(*row.m_picker, row.m_target != nullptr ? *row.m_target : theme::accent_violet);
+		}
+	}
+
+	void c_sidebar::render_profile_panel(const frame_input_t& input)
+	{
+		const float open = anim::saturate(this->m_profile_expand.m_value);
+
+		this->m_panel_live = open > 0.004f;
+
+		if (!this->m_panel_live)
+			return;
+
+		/* --- geometry ------------------------------------------------------ */
+        // Keep layout and hit areas on the same snapshot for this frame.
+        const bool intro_options_open = this->m_intro_options_open;
+        const bool intro_custom_visible = intro_options_open && intro::mode() == 2;
+        if (!intro_custom_visible) this->m_intro_name_focused = false;
+		const float body_height =
+			k_panel_pad
+			+ 46.f                                   /* identity block                */
+			+ 12.f + 1.f + 12.f                      /* divider, breathing either side */
+			+ 16.f                                   /* section label                 */
+			+ 38.f                                   /* keybind HUD switch */
+			+ 34.f + 4.f                             /* the glass switch              */
+			+ k_colour_row * static_cast<float>(this->m_colours.size())
+            + 8.f + 30.f                             /* intro disclosure              */
+            + (intro_options_open ? 36.f : 0.f)      /* mode choices                  */
+            + (intro_custom_visible ? 70.f : 0.f)    /* custom text fields            */
+			+ 8.f + 30.f                             /* replay intro                  */
+			+ 12.f + 30.f                            /* reset button                  */
+			+ 8.f + 30.f                             /* unload                        */
+			+ 8.f + 30.f                             /* menu activation keybind       */
+			+ k_panel_pad;
+
+		const float width = k_panel_width;
+
+		float x = this->m_card_x;
+		x = std::clamp(x, 12.f, static_cast<float>(c_app::k_window_width) - width - 12.f);
+
+		/* Opens UPWARDS out of the card, and is clamped to the canvas rather than
+		   allowed to run off the top: the client is drawn into a fixed 1120x700
+		   space and anything past its edge is scissored, not scrolled. */
+		float y = this->m_card_y - k_panel_gap - body_height;
+		y = std::max(y, 12.f);
+
+		/* the panel rises the last few pixels into place as it fades in, so it
+		   reads as coming out of the card rather than appearing over it */
+		const float lift = (1.f - anim::ease_out_cubic(open)) * 16.f;
+		const float draw_y = y + lift;
+
+		/* Published from where the panel is DRAWN, not from where it will settle.
+		   The shield and the rows have to agree about what is covered on every
+		   frame of the entrance, and the rows are laid out from draw_y — a rect
+		   taken from the resting position would sit up to 16px above the card the
+		   cursor is actually over. */
+		this->m_panel_x = x;
+		this->m_panel_y = draw_y;
+		this->m_panel_w = width;
+		this->m_panel_h = body_height;
+
+		const float alpha = anim::saturate(open * 1.15f);
+
+		/* --- the card ------------------------------------------------------ */
+		constexpr float radius = 14.f;
+
+		draw::shadow(x, draw_y, width, body_height, radius, 34.f, 0.f, 10.f,
+			hue::c_color(0, 0, 0, static_cast<int>(215.f * alpha)));
+
+		if (theme::glass_enabled && vanta::g_app->visible())
+			panel_glass::blur_under(x, draw_y, width, body_height, radius, alpha, 0.92f, 0.16f);
+
+		if (theme::glass_enabled)
+		{
+			/* graded, so the pane catches a little more light along its top */
+			draw::gradient_rect(x, draw_y, width, body_height, radius,
+				hue::c_color(30, 30, 32, static_cast<int>(40.f * alpha)),
+				hue::c_color(11, 11, 12, static_cast<int>(84.f * alpha)), true);
+		}
+		else
+		{
+			draw::rounded_rect(x, draw_y, width, body_height, radius,
+				theme::bg_sidebar.modulate(alpha));
+		}
+
+		draw::border(x, draw_y, width, body_height, radius, 1.f,
+			hue::c_color(46, 44, 56).modulate(alpha * 0.9f));
+
+		draw::push_clip(x, draw_y, width, body_height);
+
+		float cursor_y = draw_y + k_panel_pad;
+
+		/* --- who you are --------------------------------------------------- */
+		{
+			constexpr float avatar = 38.f;
+
+			const float avatar_x = x + k_panel_pad;
+
+			if (profile::head_texture() != 0)
+			{
+				draw::texture(profile::head_texture(), avatar_x, cursor_y, avatar, avatar, 10.f,
+					theme::text_white.modulate(alpha));
+			}
+			else
+			{
+				draw::rounded_icon("avatar", avatar_x, cursor_y, avatar, 10.f,
+					theme::text_white.modulate(alpha));
+			}
+
+			draw::border(avatar_x, cursor_y, avatar, avatar, 10.f, 1.f,
+				hue::c_color(34, 34, 40).modulate(alpha));
+
+			const std::string account = profile::name();
+			const float text_x = avatar_x + avatar + 11.f;
+
+			draw_text(account.empty() ? "Signing in..." : account,
+				text_x, cursor_y + 19.f, font_face::bold, 13.5f,
+				theme::text_white.modulate(alpha), align_left | align_middle);
+
+			cursor_y += 46.f;
+		}
+
+		/* --- divider -------------------------------------------------------- */
+		cursor_y += 12.f;
+		draw::gradient_line(x + k_panel_pad, cursor_y, width - k_panel_pad * 2.f, 1.f,
+			hue::c_color(140, 140, 155, static_cast<int>(70.f * alpha)));
+		cursor_y += 12.f;
+
+		/* --- what you can restyle ------------------------------------------- */
+		draw_text("INTERFACE", x + k_panel_pad, cursor_y + 4.f, font_face::bold, 10.f,
+			theme::text_muted.modulate(alpha), align_left | align_middle);
+
+		cursor_y += 16.f;
+
+		if (this->m_glass)
+		{
+			this->m_glass->update(input.m_delta);
+			this->m_glass->render(x + 8.f, cursor_y, width - 16.f, input, alpha);
+
+			cursor_y += 34.f + 4.f;
+
+			if (theme::glass_enabled != this->m_glass->enabled())
+			{
+				theme::glass_enabled = this->m_glass->enabled();
+				ConfigManager::get().markDirty();
+			}
+		}
+
+        if (this->m_keybinds) {
+            this->m_keybinds->update(input.m_delta);
+            this->m_keybinds->render(x+8.f,cursor_y,width-16.f,input,alpha);
+            if (modules::keybindhud::enabled != this->m_keybinds->enabled())
+            {
+                modules::keybindhud::enabled = this->m_keybinds->enabled();
+                ConfigManager::get().markDirty();
+            }
+            cursor_y += 38.f;
+        }
+
+		for (auto& row : this->m_colours)
+		{
+			if (!row.m_picker)
+				continue;
+
+			row.m_picker->update(input.m_delta);
+			row.m_picker->render(x + 8.f, cursor_y, width - 16.f, input, alpha);
+
+			cursor_y += k_colour_row;
+		}
+
+        // Intro choices are stored in the active profile and replayed below.
+        {
+            cursor_y += 8.f;
+            const float bx = x + k_panel_pad, bw = width - k_panel_pad * 2.f;
+            const char* mode_labels[] = { "Default", "Logo only", "Custom" };
+            const std::string heading = std::string("Intro: ") + mode_labels[intro::mode()];
+            const bool disclosure_hot = input.hovered(bx, cursor_y, bw, 30.f);
+            draw::rounded_rect(bx, cursor_y, bw, 30.f, 7.f, theme::bg_element.modulate(alpha));
+            draw_text(heading, bx + 8.f, cursor_y + 15.f, font_face::regular, 11.f,
+                theme::text_primary.modulate(alpha), align_left | align_middle);
+            draw_text(intro_options_open ? "-" : "+", bx + bw - 12.f, cursor_y + 15.f,
+                font_face::regular, 13.f, theme::text_secondary.modulate(alpha), align_center | align_middle);
+            if (disclosure_hot && input.m_left_clicked) {
+                this->m_intro_options_open = !intro_options_open;
+                this->m_intro_name_focused = false;
+            }
+            cursor_y += 30.f;
+            if (intro_options_open) {
+                cursor_y += 6.f;
+                const float gap = 3.f, part = (bw - gap * 2.f) / 3.f;
+                const char* labels[] = { "Default", "Logo only", "Custom" };
+                for (int i = 0; i < 3; ++i) {
+                    const float px = bx + i * (part + gap);
+                    const bool selected = intro::mode() == i;
+                    const bool hot = input.hovered(px, cursor_y, part, 30.f);
+                    draw::rounded_rect(px, cursor_y, part, 30.f, 7.f,
+                    (selected ? theme::accent_violet : theme::bg_element).modulate(alpha));
+                    draw_text(labels[i], px + part * .5f, cursor_y + 15.f,
+                    font_face::regular, 10.f, theme::text_white.modulate(alpha), align_center | align_middle);
+                    if (hot && input.m_left_clicked) {
+                        this->m_intro_name_focused = false;
+                        if (intro::mode() != i) { intro::set_mode(i); ConfigManager::get().markDirty(); }
+                    }
+                }
+                cursor_y += 30.f;
+                if (intro_custom_visible) {
+                    cursor_y += 6.f;
+                    const bool custom = true;
+                    const float field_y[2] = {cursor_y, cursor_y + 34.f};
+                    if (input.m_left_clicked) {
+                        const bool greeting_hit = custom && input.hovered(bx, field_y[0], bw, 30.f);
+                        const bool logo_hit = custom && input.hovered(bx, field_y[1], bw, 30.f);
+                        this->m_intro_name_focused = greeting_hit || logo_hit;
+                        if (this->m_intro_name_focused) this->m_intro_edit_wordmark = logo_hit;
+                    }
+                    for (int field = 0; field < 2; ++field) {
+                        const float fy = field_y[field];
+                        const bool focused = this->m_intro_name_focused && this->m_intro_edit_wordmark == (field == 1);
+                        draw::rounded_rect(bx, fy, bw, 30.f, 7.f, theme::bg_element.modulate(alpha));
+                        draw::border(bx, fy, bw, 30.f, 7.f, 1.f,
+                        (focused ? theme::accent_violet : theme::text_muted).modulate(alpha * .7f));
+                        const std::string value = field ? intro::custom_wordmark() : intro::custom_name();
+                        const std::string placeholder = field ? "Logo name (default: Nexus)" : "Greeting name (default: Player)";
+                        const std::string shown = custom && !value.empty() ? value : placeholder;
+                        draw::push_clip(bx + 7.f, fy, bw - 14.f, 30.f);
+                        draw_text(shown, bx + 8.f, fy + 15.f, font_face::regular, 11.f,
+                        (custom && !value.empty() ? theme::text_primary : theme::text_muted).modulate(alpha),
+                        align_left | align_middle);
+                        draw::pop_clip();
+                    }
+                    cursor_y += 64.f;
+                }
+            }
+        }
+
+        // Replay with the selected colour so it can be checked without reinjecting.
+        {
+            cursor_y += 8.f;
+            const float bx = x + k_panel_pad, bw = width - k_panel_pad * 2.f;
+            const bool hot = input.hovered(bx, cursor_y, bw, 30.f);
+            draw::rounded_rect(bx, cursor_y, bw, 30.f, 9.f,
+                theme::bg_element.lerp(theme::intro_colour, hot ? .18f : .06f).modulate(alpha));
+            draw::border(bx, cursor_y, bw, 30.f, 9.f, 1.f,
+                theme::intro_colour.alpha(static_cast<int>((hot ? 160.f : 70.f) * alpha)));
+            draw_text("Preview intro", bx + bw * .5f, cursor_y + 15.f,
+                font_face::regular, 11.5f, theme::text_primary.modulate(alpha), align_center | align_middle);
+            if (hot && input.m_left_clicked) {
+                colour_popup::close();
+                this->sync_colour_rows();
+                this->m_intro_name_focused = false;
+                intro::begin();
+                if (g_app) g_app->set_visible(false);
+            }
+            cursor_y += 30.f;
+        }
+
+		/* --- reset ----------------------------------------------------------- */
+		{
+			cursor_y += 12.f;
+
+			const float button_x = x + k_panel_pad;
+			const float button_w = width - k_panel_pad * 2.f;
+			constexpr float button_h = 30.f;
+
+			const bool hovered = input.hovered(button_x, cursor_y, button_w, button_h);
+			this->m_reset_hover = anim::lerp(this->m_reset_hover, hovered ? 1.f : 0.f, 16.f, input.m_delta);
+
+			if (hovered && input.m_left_clicked)
+			{
+				theme::reset_customisation();
+				theme::glass_enabled = false;
+
+				if (this->m_glass)
+					this->m_glass->set_enabled(false);
+				if (this->m_keybinds)
+					this->m_keybinds->set_enabled(false);
+
+				colour_popup::close();
+
+				for (auto& row : this->m_colours)
+				{
+					if (row.m_picker && row.m_target != nullptr)
+						seed(*row.m_picker, *row.m_target);
+					else if (row.m_picker)
+						seed(*row.m_picker, theme::accent_violet);
+				}
+
+				ConfigManager::get().markDirty();
+				this->m_reset_pulse.kick();
+			}
+
+			draw::rounded_rect(button_x, cursor_y, button_w, button_h, 9.f,
+				hue::c_color(19, 19, 22).lerp(hue::c_color(28, 28, 33), this->m_reset_hover).modulate(alpha));
+
+			draw::border(button_x, cursor_y, button_w, button_h, 9.f, 1.f,
+				hue::c_color(32, 32, 38).lerp(theme::accent_violet, this->m_reset_hover * 0.7f).modulate(alpha));
+
+			if (const float pulse = this->m_reset_pulse.update(input.m_delta); pulse > 0.01f)
+			{
+				draw::shadow(button_x, cursor_y, button_w, button_h, 9.f, 8.f + 18.f * (1.f - pulse), 0.f, 0.f,
+					theme::accent_violet.alpha(static_cast<int>(150.f * pulse * alpha)));
+			}
+
+			draw_text("Reset appearance", button_x + button_w * 0.5f, cursor_y + button_h * 0.5f,
+				font_face::regular, 11.5f,
+				theme::text_secondary.lerp(theme::text_white, this->m_reset_hover).modulate(alpha),
+				align_center | align_middle);
+
+			cursor_y += button_h + 8.f;
+
+			/* --- unload ------------------------------------------------------ */
+			this->m_destruct_armed = std::max(0.f, this->m_destruct_armed - input.m_delta);
+
+			const bool armed = this->m_destruct_armed > 0.f;
+
+			const bool destruct_hovered = input.hovered(button_x, cursor_y, button_w, button_h);
+			this->m_destruct_hover = anim::lerp(this->m_destruct_hover,
+				destruct_hovered ? 1.f : 0.f, 16.f, input.m_delta);
+
+			if (destruct_hovered && input.m_left_clicked)
+			{
+				if (armed)
+				{
+					vanta::entry::requestFullUnload();
+				}
+				else
+					this->m_destruct_armed = 3.f;
+			}
+
+			const float heat = std::max(this->m_destruct_hover, armed ? 1.f : 0.f);
+
+			if (heat > 0.01f)
+			{
+				draw::shadow(button_x, cursor_y, button_w, button_h, 9.f, 12.f * heat, 0.f, 1.f,
+					theme::danger_red.alpha(static_cast<int>(70.f * heat * alpha)));
+			}
+
+			draw::rounded_rect(button_x, cursor_y, button_w, button_h, 9.f,
+				hue::c_color(26, 13, 15).lerp(hue::c_color(64, 20, 24), heat).modulate(alpha));
+
+			draw::border(button_x, cursor_y, button_w, button_h, 9.f, 1.f,
+				hue::c_color(58, 26, 30).lerp(theme::danger_red, heat * 0.8f).modulate(alpha));
+
+			{
+				constexpr float glyph = 14.f;
+
+				const float label_width = text_width(armed ? "Click again to unload" : "Unload client",
+					font_face::regular, 11.5f);
+
+				const float run = glyph + 8.f + label_width;
+				const float run_x = button_x + (button_w - run) * 0.5f;
+
+				const hue::c_color ink = theme::danger_red.lerp(theme::text_white, heat * 0.55f);
+
+				draw::power_glyph(run_x, cursor_y + (button_h - glyph) * 0.5f, glyph, 1.7f,
+					ink.modulate(alpha));
+
+				draw_text(armed ? "Click again to unload" : "Unload client",
+					run_x + glyph + 8.f, cursor_y + button_h * 0.5f,
+					font_face::regular, 11.5f, ink.modulate(alpha), align_left | align_middle);
+			}
+
+			cursor_y += button_h + 8.f;
+
+			/* --- menu activation keybind ------------------------------------- */
+			if (this->m_menu_key_binding && !vanta::vgui::bridge::isMenuKeyBinding())
+			{
+				this->m_menu_key_binding = false;
+				this->m_menu_key_pulse.kick();
+			}
+
+			const bool key_hovered = input.hovered(button_x, cursor_y, button_w, button_h);
+			this->m_menu_key_hover = anim::lerp(this->m_menu_key_hover,
+				(key_hovered || this->m_menu_key_binding) ? 1.f : 0.f, 16.f, input.m_delta);
+
+			if (key_hovered && input.m_left_clicked)
+			{
+				this->m_menu_key_binding = !this->m_menu_key_binding;
+				vanta::vgui::bridge::setMenuKeyBinding(this->m_menu_key_binding);
+				if (this->m_menu_key_binding)
+				{
+					for (int vk = 1; vk < 256; ++vk)
+						this->m_menu_key_held[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
+				}
+			}
+			else if (this->m_menu_key_binding && input.m_left_clicked && !key_hovered)
+			{
+				this->m_menu_key_binding = false;
+				vanta::vgui::bridge::setMenuKeyBinding(false);
+			}
+
+			if (this->m_menu_key_binding)
+			{
+				for (int vk = 1; vk < 256; ++vk)
+				{
+					const bool held = (GetAsyncKeyState(vk) & 0x8000) != 0;
+					if (!held)
+					{
+						this->m_menu_key_held[vk] = false;
+						continue;
+					}
+					if (this->m_menu_key_held[vk])
+						continue;
+					this->m_menu_key_held[vk] = true;
+
+					if (vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON
+						|| vk == VK_XBUTTON1 || vk == VK_XBUTTON2 || vk == VK_CANCEL
+						|| vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU)
+						continue;
+
+					if (vk == VK_ESCAPE)
+					{
+						this->m_menu_key_binding = false;
+						vanta::vgui::bridge::setMenuKeyBinding(false);
+						break;
+					}
+
+					vanta::vgui::bridge::setGuiToggleKey(vk);
+					this->m_menu_key_binding = false;
+					vanta::vgui::bridge::setMenuKeyBinding(false);
+					this->m_menu_key_pulse.kick();
+					break;
+				}
+			}
+
+			draw::rounded_rect(button_x, cursor_y, button_w, button_h, 9.f,
+				hue::c_color(19, 19, 22).lerp(
+					this->m_menu_key_binding ? theme::accent_violet.alpha(48) : hue::c_color(28, 28, 33),
+					this->m_menu_key_hover).modulate(alpha));
+
+			draw::border(button_x, cursor_y, button_w, button_h, 9.f, 1.f,
+				hue::c_color(32, 32, 38).lerp(theme::accent_violet,
+					this->m_menu_key_binding ? 1.f : this->m_menu_key_hover * 0.7f).modulate(alpha));
+
+			if (const float pulse = this->m_menu_key_pulse.update(input.m_delta); pulse > 0.01f)
+			{
+				draw::shadow(button_x, cursor_y, button_w, button_h, 9.f, 8.f + 18.f * (1.f - pulse), 0.f, 0.f,
+					theme::accent_violet.alpha(static_cast<int>(150.f * pulse * alpha)));
+			}
+
+			const std::string key_label = this->m_menu_key_binding
+				? "Press any key..."
+				: ("Menu key: " + vanta::vgui::bridge::vkToString(vanta::vgui::bridge::guiToggleKey()));
+
+			draw_text(key_label, button_x + button_w * 0.5f, cursor_y + button_h * 0.5f,
+				this->m_menu_key_binding ? font_face::bold : font_face::regular, 11.5f,
+				(this->m_menu_key_binding ? theme::accent_violet : theme::text_secondary.lerp(theme::text_white, this->m_menu_key_hover)).modulate(alpha),
+				align_center | align_middle);
+		}
+
+		draw::pop_clip();
+
+		this->sync_colour_rows();
+	}
+
+	void c_sidebar::render_overlay(const frame_input_t& input)
+	{
+		/* Ticked here and nowhere else, including on the frames the panel is shut —
+		   a spring that is only integrated while its target is 1 never comes to
+		   rest at 0, it just stops wherever the closing frame left it. */
+		this->m_profile_expand.update(this->m_profile_expanded ? 1.f : 0.f, 240.f, 26.f, input.m_delta);
+
+		/* An editor opened FROM this panel does not outlive it. The window floats
+		   free of everything, so nothing else would ever put it away, and a picker
+		   still sitting there over a client whose panel is shut is a control with
+		   no visible owner. */
+		if (!this->m_profile_expanded)
+		{
+			if (this->m_menu_key_binding)
+			{
+				this->m_menu_key_binding = false;
+				vanta::vgui::bridge::setMenuKeyBinding(false);
+			}
+			for (const auto& row : this->m_colours)
+			{
+				if (row.m_picker && colour_popup::open_for(row.m_picker.get()))
+				{
+					colour_popup::close();
+					break;
+				}
+			}
+		}
+
+		this->render_profile_panel(input);
+	}
+}
