@@ -53,6 +53,7 @@ endif()
 
 target_link_libraries(WrathLoader PRIVATE
     wrath_trace
+    wrath_inject
     freetype d3d11 d3dcompiler dxgi dwmapi windowscodecs ole32 comdlg32 shell32 advapi32 winhttp bcrypt
 )
 

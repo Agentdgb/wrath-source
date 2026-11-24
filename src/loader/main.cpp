@@ -329,6 +329,14 @@ struct AppState
     int server_port = 8000;
     bool dev_bypass = false;
 
+    // Injection strategy overrides (plan: seleccionable).
+    std::string inject_strategy = "auto";
+    bool no_unlink = false;
+    bool no_wipe_headers = false;
+    bool no_reprotect = false;
+    bool no_zero_scratch = false;
+    bool no_hide_thread = false;
+
     void SetAuthError(std::string msg)
     {
         std::lock_guard lock(auth_msg_mutex);
@@ -579,6 +587,20 @@ void ParseCommandLineOverrides(PWSTR cmdLine)
         {
             g_state.self_delete = true;
         }
+        else if (arg == L"--strategy" || arg == L"--strategy=" || arg == L"-strategy")
+        {
+            std::wstring val;
+            if (arg.find(L"=") != std::wstring::npos) val = arg.substr(arg.find(L"=") + 1);
+            else if (i + 1 < argc) val = argv[++i];
+            char buf[128]{};
+            WideCharToMultiByte(CP_UTF8, 0, val.c_str(), -1, buf, sizeof(buf) - 1, nullptr, nullptr);
+            if (buf[0]) g_state.inject_strategy = buf;
+        }
+        else if (arg == L"--no-unlink")        g_state.no_unlink = true;
+        else if (arg == L"--no-wipe-headers")  g_state.no_wipe_headers = true;
+        else if (arg == L"--no-reprotect")     g_state.no_reprotect = true;
+        else if (arg == L"--no-zero-scratch")  g_state.no_zero_scratch = true;
+        else if (arg == L"--no-hide-thread")   g_state.no_hide_thread = true;
     }
     LocalFree(argv);
 }

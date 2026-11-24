@@ -15,6 +15,7 @@
 #include "loader/Paths.h"`n#include "shared/stealth/StealthDefs.h"
 #include "inject/map/ManualMap.h"
 #include "inject/NtInjector.h"
+#include "inject/Injector.h"
 #include "shared/diagnostics/SessionDiagnostics.h"
 
 namespace launcher
@@ -498,12 +499,25 @@ inline bool InjectPayloadFromMemoryIntoProcess(
         }
     }
 
-    // Inyeccion reflectiva pura en memoria (M03 / M04 / M09) - Cero disco, Cero LoadLibraryW
-    std::wstring inject_err;
-    bool ok = wrath::core::nt::nt_inject(pid, dll_bytes.data(), dll_bytes.size(), &inject_err);
-    if (!ok)
+    // API de inyeccion seleccionable (Strategy / Options / Result).
+    HANDLE hProc = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ |
+                               PROCESS_CREATE_THREAD | PROCESS_QUERY_LIMITED_INFORMATION,
+                               FALSE, pid);
+    if (!hProc)
     {
-        out_status = inject_err.empty() ? L"Error durante la inyeccion reflectiva en javaw.exe." : inject_err;
+        out_status = L"No se pudo abrir javaw.exe para inyectar.";
+        if (hSection) CloseHandle(hSection);
+        return false;
+    }
+    wrath::inject::Options opts;
+    auto res = wrath::inject::inject(
+        hProc, pid, std::span<const uint8_t>(dll_bytes.data(), dll_bytes.size()), opts);
+    CloseHandle(hProc);
+
+    out_status = res.detail;
+    if (!res.ok)
+    {
+        if (out_status.empty()) out_status = L"Error durante la inyeccion en javaw.exe.";
         if (hSection) CloseHandle(hSection);
         return false;
     }

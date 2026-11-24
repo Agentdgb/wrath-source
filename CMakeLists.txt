@@ -24,6 +24,7 @@ include_directories(${WRATH_INCLUDE})
 option(WRATH_BUILD_TESTS "Build client regression tests" OFF)
 if(WRATH_BUILD_TESTS)
     enable_testing()
+    add_subdirectory(tests)
 endif()
 
 # ---- trace (library used by the loader) -------------------------------------
@@ -46,8 +47,8 @@ file(GLOB WRATH_SHARED_SRC
 add_library(wrath_inject STATIC ${WRATH_INJECT_SRC} ${WRATH_SHARED_SRC})
 target_include_directories(wrath_inject PUBLIC ${WRATH_INCLUDE})
 if(MSVC)
-    # C4201: anonymous structs are intentional in the NT structure definitions.
-    target_compile_options(wrath_inject PRIVATE /W4 /WX /wd4201 /permissive- /EHsc /utf-8)
+    # C4201 anonymous NT structs; C4100/C4189 unused params in the legacy mapper.
+    target_compile_options(wrath_inject PRIVATE /W4 /WX /wd4201 /wd4100 /wd4189 /permissive- /EHsc /utf-8)
 endif()
 
 # ---- payload (client) --------------------------------------------------------

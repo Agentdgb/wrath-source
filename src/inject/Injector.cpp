@@ -1,0 +1,90 @@
+#include "inject/Injector.h"
+
+#include <windows.h>
+#include <chrono>
+
+namespace wrath::inject {
+
+// Strategy implementations (one per compilation unit).
+bool map_private(HANDLE, DWORD, std::span<const uint8_t>, const Options&, Result&);
+bool map_section_image(HANDLE, DWORD, std::span<const uint8_t>, const Options&, Result&);
+bool map_stomp(HANDLE, DWORD, std::span<const uint8_t>, const Options&, Result&);
+bool run_thread(HANDLE, DWORD, std::span<const uint8_t>, const Options&, Result&);
+bool run_hijack(HANDLE, DWORD, std::span<const uint8_t>, const Options&, Result&);
+
+namespace {
+
+bool valid_pe(std::span<const uint8_t> p) {
+    if (p.size() < sizeof(IMAGE_DOS_HEADER)) return false;
+    auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(p.data());
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    if (static_cast<size_t>(dos->e_lfanew) + sizeof(IMAGE_NT_HEADERS) > p.size()) return false;
+    auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(p.data() + dos->e_lfanew);
+    return nt->Signature == IMAGE_NT_SIGNATURE;
+}
+
+using Fn = bool(HANDLE, DWORD, std::span<const uint8_t>, const Options&, Result&);
+struct Entry { Strategy strategy; Fn* fn; };
+
+// The four selectable strategies, in Auto order.
+constexpr Entry kTable[] = {
+    { Strategy::MapPrivate,      map_private       },
+    { Strategy::MapSectionImage, map_section_image },
+    { Strategy::MapStomp,        map_stomp         },
+    { Strategy::RunThread,       run_thread        },
+};
+
+} // namespace
+
+const char* strategy_name(Strategy s) {
+    switch (s) {
+        case Strategy::Auto:            return "auto";
+        case Strategy::MapPrivate:      return "map-private";
+        case Strategy::MapSectionImage: return "map-section-image";
+        case Strategy::MapStomp:        return "map-stomp";
+        case Strategy::RunThread:       return "run-thread";
+        case Strategy::RunHijack:       return "run-hijack";
+    }
+    return "unknown";
+}
+
+bool parse_strategy(const std::string& name, Strategy* out) {
+    if (name == "auto") { *out = Strategy::Auto; return true; }
+    for (const auto& e : kTable)
+        if (name == strategy_name(e.strategy)) { *out = e.strategy; return true; }
+    if (name == "run-hijack") { *out = Strategy::RunHijack; return true; }
+    return false;
+}
+
+Result inject(HANDLE hProc, DWORD pid, std::span<const uint8_t> payload,
+              const Options& options) {
+    Result result;
+    result.target_pid = pid;
+
+    if (!valid_pe(payload)) {
+        result.detail = L"inject: payload no es una imagen PE valida.";
+        return result;
+    }
+
+    for (const auto& e : kTable) {
+        Attempt a;
+        a.strategy = e.strategy;
+        auto t0 = std::chrono::steady_clock::now();
+        bool ok = e.fn(hProc, pid, payload, options, result);
+        a.ok = ok;
+        a.detail = result.detail;
+        a.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count();
+        result.attempts.push_back(a);
+        if (ok) {
+            result.ok = true;
+            result.chosen = e.strategy;
+            return result;
+        }
+    }
+
+    result.detail = L"inject: agotadas todas las estrategias.";
+    return result;
+}
+
+} // namespace wrath::inject
