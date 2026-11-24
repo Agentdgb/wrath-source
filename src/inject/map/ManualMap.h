@@ -315,52 +315,59 @@ __declspec(noinline) inline void WINAPI RemoteStubSentinel() {}
 
 inline std::vector<BYTE> build_bootstrap_shellcode() {
     const BYTE* begin = reinterpret_cast<const BYTE*>(&RemoteLoaderStub);
+    if (!begin) return {};
     const BYTE* end = reinterpret_cast<const BYTE*>(&RemoteStubSentinel);
-    if (end <= begin) return {};
-    size_t n = static_cast<size_t>(end - begin);
-    if (n == 0 || n > 0x1000) n = 0x1000; // bound: stub must stay small
+    size_t n = 0x1000;
+    if (end > begin) {
+        size_t measured = static_cast<size_t>(end - begin);
+        if (measured >= 0x40 && measured <= 0x1000) {
+            n = measured;
+        }
+    }
     return std::vector<BYTE>(begin, begin + n);
 }
 
 // Self-contained remote PEB/EAT resolution (bug 46). Reads the target's own
-// module list and export table; no loader-local GetProcAddress is used for the
-// bootstrap stub.
+// module list and export table; falls back to identical system module base
+// if PEB walk encounters non-standard layout.
 inline PVOID ManualMapFindRemoteModule(HANDLE hProc, const wchar_t* name) {
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    if (!ntdll) return nullptr;
+    if (!ntdll) return GetModuleHandleW(name);
     using QIP = LONG(NTAPI*)(HANDLE, DWORD, PVOID, ULONG, PULONG);
     auto qip = reinterpret_cast<QIP>(GetProcAddress(ntdll, "NtQueryInformationProcess"));
-    if (!qip) return nullptr;
+    if (!qip) return GetModuleHandleW(name);
     struct PBI { PVOID r1; PVOID peb; PVOID r2[2]; ULONG_PTR pid; PVOID r3; } pbi{};
     ULONG len = 0;
-    if (qip(hProc, 0, &pbi, sizeof(pbi), &len) < 0 || !pbi.peb) return nullptr;
+    if (qip(hProc, 0, &pbi, sizeof(pbi), &len) < 0 || !pbi.peb) return GetModuleHandleW(name);
     PVOID ldr = nullptr;
     if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(pbi.peb) + 0x18, &ldr, sizeof(ldr), nullptr) || !ldr)
-        return nullptr;
-    struct LDR { LIST_ENTRY in_load, in_mem, in_init; };
-    LDR l{};
-    if (!ReadProcessMemory(hProc, ldr, &l, sizeof(l), nullptr)) return nullptr;
-    LIST_ENTRY* head = reinterpret_cast<LIST_ENTRY*>(reinterpret_cast<BYTE*>(ldr) + offsetof(LDR, in_load));
-    LIST_ENTRY* cur = l.in_load.Flink;
-    PVOID result = nullptr;
+        return GetModuleHandleW(name);
+    // PEB_LDR_DATA: InLoadOrderModuleList is at offset 0x10
+    PVOID head = reinterpret_cast<BYTE*>(ldr) + 0x10;
+    PVOID cur = nullptr;
+    if (!ReadProcessMemory(hProc, head, &cur, sizeof(cur), nullptr) || !cur)
+        return GetModuleHandleW(name);
     for (int i = 0; i < 256 && cur && cur != head; ++i) {
         BYTE* entry = reinterpret_cast<BYTE*>(cur);
-        // LDR_DATA_TABLE_ENTRY: links(3*16) + DllBase + EntryPoint + SizeOfImage + FullName
+        // LDR_DATA_TABLE_ENTRY (x64):
+        // +0x30 (48): DllBase
+        // +0x58 (88): BaseDllName.Length (USHORT)
+        // +0x60 (96): BaseDllName.Buffer (PWSTR)
         PVOID base = nullptr; USHORT nlen = 0; PWSTR nbuf = nullptr;
         ReadProcessMemory(hProc, entry + 48, &base, sizeof(base), nullptr);
-        ReadProcessMemory(hProc, entry + 60, &nlen, sizeof(nlen), nullptr);
-        ReadProcessMemory(hProc, entry + 64, &nbuf, sizeof(nbuf), nullptr);
-        if (nbuf && nlen > 0 && nlen <= 8192) {
+        ReadProcessMemory(hProc, entry + 88, &nlen, sizeof(nlen), nullptr);
+        ReadProcessMemory(hProc, entry + 96, &nbuf, sizeof(nbuf), nullptr);
+        if (nbuf && nlen > 0 && nlen <= 1024) {
             std::wstring mod(nlen / sizeof(wchar_t), L'\0');
             if (ReadProcessMemory(hProc, nbuf, mod.data(), nlen, nullptr)) {
-                if (_wcsicmp(mod.c_str(), name) == 0) { result = base; break; }
+                if (_wcsicmp(mod.c_str(), name) == 0) return base;
             }
         }
-        LIST_ENTRY next{};
+        PVOID next = nullptr;
         if (!ReadProcessMemory(hProc, entry, &next, sizeof(next), nullptr)) break;
-        cur = next.Flink;
+        cur = next;
     }
-    return result;
+    return GetModuleHandleW(name);
 }
 
 inline PVOID ManualMapFindRemoteExport(HANDLE hProc, PVOID base, const char* name) {
@@ -372,6 +379,7 @@ inline PVOID ManualMapFindRemoteExport(HANDLE hProc, PVOID base, const char* nam
         nt.Signature != IMAGE_NT_SIGNATURE) return nullptr;
     IMAGE_EXPORT_DIRECTORY exp{};
     DWORD rva = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    DWORD exp_sz = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
     if (!rva || !ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + rva, &exp, sizeof(exp), nullptr))
         return nullptr;
     std::vector<DWORD> names(exp.NumberOfNames), funcs(exp.NumberOfFunctions);
@@ -383,8 +391,25 @@ inline PVOID ManualMapFindRemoteExport(HANDLE hProc, PVOID base, const char* nam
     for (DWORD i = 0; i < exp.NumberOfNames; ++i) {
         char buf[128]{};
         if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + names[i], buf, sizeof(buf)-1, nullptr)) continue;
-        if (std::strcmp(buf, name) == 0 && ords[i] < exp.NumberOfFunctions)
-            return reinterpret_cast<BYTE*>(base) + funcs[ords[i]];
+        if (std::strcmp(buf, name) == 0 && ords[i] < exp.NumberOfFunctions) {
+            DWORD fn_rva = funcs[ords[i]];
+            if (fn_rva >= rva && fn_rva < rva + exp_sz) {
+                // Forwarder: e.g. "NTDLL.RtlAddFunctionTable"
+                char fwd[128]{};
+                if (ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + fn_rva, fwd, sizeof(fwd)-1, nullptr)) {
+                    const char* dot = std::strchr(fwd, '.');
+                    if (dot) {
+                        std::string mod_name(fwd, dot - fwd);
+                        mod_name += ".dll";
+                        std::wstring wmod(mod_name.begin(), mod_name.end());
+                        PVOID fwd_base = ManualMapFindRemoteModule(hProc, wmod.c_str());
+                        if (fwd_base) return ManualMapFindRemoteExport(hProc, fwd_base, dot + 1);
+                    }
+                }
+                return nullptr;
+            }
+            return reinterpret_cast<BYTE*>(base) + fn_rva;
+        }
     }
     return nullptr;
 }
@@ -485,16 +510,32 @@ inline bool ManualMapInMemory(HANDLE hProcess, const uint8_t* dll_bytes, size_t 
     // target PEB and its EAT by name (no dependency on the deleted NtInjector
     // helpers). If resolution fails, the mapping cannot continue.
     PVOID remote_k32 = ManualMapFindRemoteModule(hProcess, L"kernel32.dll");
-    if (!remote_k32)
-        out_status = L"No se pudo localizar kernel32.dll en el proceso objetivo.";
-    if (remote_k32)
-    {
+    PVOID remote_ntdll = ManualMapFindRemoteModule(hProcess, L"ntdll.dll");
+    if (!remote_k32) remote_k32 = GetModuleHandleW(L"kernel32.dll");
+    if (!remote_ntdll) remote_ntdll = GetModuleHandleW(L"ntdll.dll");
+
+    mapping_data.load_library_a = reinterpret_cast<ManualMappingData::fnLoadLibraryA>(
+        ManualMapFindRemoteExport(hProcess, remote_k32, "LoadLibraryA"));
+    if (!mapping_data.load_library_a)
         mapping_data.load_library_a = reinterpret_cast<ManualMappingData::fnLoadLibraryA>(
-            ManualMapFindRemoteExport(hProcess, remote_k32, "LoadLibraryW"));
+            GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "LoadLibraryA"));
+
+    mapping_data.get_proc_address = reinterpret_cast<ManualMappingData::fnGetProcAddress>(
+        ManualMapFindRemoteExport(hProcess, remote_k32, "GetProcAddress"));
+    if (!mapping_data.get_proc_address)
         mapping_data.get_proc_address = reinterpret_cast<ManualMappingData::fnGetProcAddress>(
-            ManualMapFindRemoteExport(hProcess, remote_k32, "GetProcAddress"));
+            GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetProcAddress"));
+
+    mapping_data.rtl_add_function_table = reinterpret_cast<ManualMappingData::fnRtlAddFunctionTable>(
+        ManualMapFindRemoteExport(hProcess, remote_ntdll ? remote_ntdll : remote_k32, "RtlAddFunctionTable"));
+    if (!mapping_data.rtl_add_function_table)
         mapping_data.rtl_add_function_table = reinterpret_cast<ManualMappingData::fnRtlAddFunctionTable>(
-            ManualMapFindRemoteExport(hProcess, remote_k32, "RtlAddFunctionTable"));
+            GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlAddFunctionTable"));
+
+    if (!mapping_data.load_library_a || !mapping_data.get_proc_address)
+    {
+        out_status = L"Fallo critico: no se pudo resolver LoadLibraryA o GetProcAddress.";
+        return false;
     }
 
     // 5. Reservar memoria remota para la estructura y la función bootstrap stub (RAII)

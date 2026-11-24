@@ -605,6 +605,21 @@ void ParseCommandLineOverrides(PWSTR cmdLine)
     LocalFree(argv);
 }
 
+wrath::inject::Options GetCurrentInjectionOptions()
+{
+    wrath::inject::Options opts;
+    wrath::inject::Strategy strat = wrath::inject::Strategy::Auto;
+    if (wrath::inject::parse_strategy(g_state.inject_strategy, &strat))
+        opts.strategy = strat;
+    opts.wipe_headers = !g_state.no_wipe_headers;
+    opts.unlink = !g_state.no_unlink;
+    opts.reprotect = !g_state.no_reprotect;
+    opts.zero_scratch = !g_state.no_zero_scratch;
+    opts.hide_thread = !g_state.no_hide_thread;
+    return opts;
+}
+
+
 void SaveLoaderConfig()
 {
     const std::string path = ExecutableAssetPath("loader_auth.ini");
@@ -2350,7 +2365,7 @@ int RunCliInjector(bool self_delete)
         ok = launcher::InjectPayloadFromMemoryIntoProcess(
             pid, dll_bytes, status,
             g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-            "", "", "");
+            "", "", "", GetCurrentInjectionOptions());
 
         SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
         dll_bytes.clear();
@@ -2376,7 +2391,7 @@ int RunCliInjector(bool self_delete)
             ok = launcher::InjectPayloadFromMemoryIntoProcess(
                 pid, dll_bytes, status,
                 g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-                "", "", "");
+                "", "", "", GetCurrentInjectionOptions());
 
             SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
             dll_bytes.clear();
@@ -2601,7 +2616,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int)
                                 ok = launcher::InjectPayloadFromMemoryIntoProcess(
                                     procs.front().pid, local_bytes, status,
                                     g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-                                    "", "", "");
+                                    "", "", "", GetCurrentInjectionOptions());
                                 SecureZeroMemory(local_bytes.data(), local_bytes.size());
                                 local_bytes.clear();
                             }
@@ -2624,7 +2639,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int)
                                     ok = launcher::InjectPayloadFromMemoryIntoProcess(
                                         procs.front().pid, local_bytes, status,
                                         g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-                                        "", "", "");
+                                        "", "", "", GetCurrentInjectionOptions());
                                     SecureZeroMemory(local_bytes.data(), local_bytes.size());
                                     local_bytes.clear();
                                 }
@@ -2639,7 +2654,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int)
                                 ok = launcher::InjectPayloadFromMemoryIntoProcess(
                                     procs.front().pid, g_state.in_memory_payload, status,
                                     g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-                                    "", "", "");
+                                    "", "", "", GetCurrentInjectionOptions());
                                 SecureZeroMemory(g_state.in_memory_payload.data(), g_state.in_memory_payload.size());
                                 g_state.in_memory_payload.clear();
                             }

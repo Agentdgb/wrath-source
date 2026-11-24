@@ -18,6 +18,7 @@ enum class Strategy : uint8_t {
 };
 
 struct Options {
+    Strategy strategy = Strategy::Auto;
     bool unlink = true;
     bool wipe_headers = true;
     bool reprotect = true;
