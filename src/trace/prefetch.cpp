@@ -1,5 +1,5 @@
 #include "trace/snapshot.h"
-#include "core/nt.h"
+#include "shared/nt/nt.h"
 
 #include <bcrypt.h>
 

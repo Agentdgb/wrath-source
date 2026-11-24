@@ -8,8 +8,8 @@
 #include <vector>
 #include <string>
 
-#include "core/nt.h"
-#include "core/hash.h"
+#include "shared/nt/nt.h"
+#include "payload/src/core/hash.h"
 
 namespace wrath::injector {
 

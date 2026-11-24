@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cstring>
 
-#include "bypass/StealthDefs.h"
+#include "shared/stealth/StealthDefs.h"
 #include "injector/ManualMap.h"
 #include "injector/NtInjector.h"
 #include "diagnostics/SessionDiagnostics.h"

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "core/hash.h"
+#include "payload/src/core/hash.h"
 
 namespace wrath::core::nt {
 

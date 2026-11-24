@@ -1,6 +1,6 @@
 #include "trace/snapshot.h"
-#include "core/nt.h"
-#include "core/enc.h"
+#include "shared/nt/nt.h"
+#include "shared/util/enc.h"
 
 #include <sddl.h>
 #include <bcrypt.h>

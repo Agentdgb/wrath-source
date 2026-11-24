@@ -1,6 +1,6 @@
 #include "trace/snapshot.h"
-#include "core/nt.h"
-#include "core/hash.h"
+#include "shared/nt/nt.h"
+#include "payload/src/core/hash.h"
 
 #include <tlhelp32.h>
 #include <vector>

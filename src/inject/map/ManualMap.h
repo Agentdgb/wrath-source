@@ -8,7 +8,7 @@
 #include <string>
 #include <cstdint>
 
-#include "bypass/StealthDefs.h"
+#include "shared/stealth/StealthDefs.h"
 
 namespace wrath::injector
 {

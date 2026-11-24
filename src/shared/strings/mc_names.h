@@ -2,7 +2,7 @@
 #ifndef WRATH_STRINGS_MC_NAMES_H
 #define WRATH_STRINGS_MC_NAMES_H
 
-#include "core/enc.h"
+#include "shared/util/enc.h"
 
 namespace wrath::strings {
 

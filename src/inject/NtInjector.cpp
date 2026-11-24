@@ -1,5 +1,5 @@
 #include "NtInjector.h"
-#include "core/enc.h"
+#include "shared/util/enc.h"
 
 #include <windows.h>
 #include <vector>

@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <utility>
 
-#include "core/hash.h"
+#include "payload/src/core/hash.h"
 #include "strings/build_salt.h"
 
 #ifndef BUILD_SALT

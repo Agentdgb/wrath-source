@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #ifndef LAUNCHER_INJECTOR_H
 #define LAUNCHER_INJECTOR_H
 
@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cstring>
 
-#include "bypass/StealthDefs.h"
+#include "shared/stealth/StealthDefs.h"
 #include "injector/ManualMap.h"
 #include "diagnostics/SessionDiagnostics.h"
 

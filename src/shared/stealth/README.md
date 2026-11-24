@@ -17,4 +17,4 @@ No debe describirse como una autodestrucción completa garantizada.
 El login sigue siendo una interfaz de prueba para integrar autenticación real
 posteriormente. Actualmente no comprueba usuario o contraseña.
 
-Las correcciones y límites de validación se detallan en [FIXES.md](../FIXES.md).
+Las correcciones y límites de validación se detallan en [FIXES.md](../../../docs/FIXES.md).

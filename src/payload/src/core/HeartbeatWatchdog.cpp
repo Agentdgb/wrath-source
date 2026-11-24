@@ -6,7 +6,7 @@
 #include "modules/combat/silentaim/silentaim.h"
 #include "platform/ThreadUtil.h"
 #include "util/Log.h"
-#include "bypass/StealthDefs.h"
+#include "shared/stealth/StealthDefs.h"
 #include "vgui/vgui.h"
 
 #include <windows.h>

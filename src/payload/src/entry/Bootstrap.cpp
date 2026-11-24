@@ -28,7 +28,7 @@
 #include "vgui/core/logger.hh"
 #include "vgui/vgui.h"
 
-#include "bypass/StealthDefs.h"
+#include "shared/stealth/StealthDefs.h"
 #include "diagnostics/SessionDiagnostics.h"
 #include <jnihook.h>
 #include <windows.h>

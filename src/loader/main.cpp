@@ -41,7 +41,7 @@
 #include "launcher_injector.h"
 #include "auth/AuthClient.h"
 #include "auth/ObfuscatedString.h"
-#include "bypass/SessionStealth.h"
+#include "shared/stealth/SessionStealth.h"
 #include "trace/teardown.h"
 #include "trace/snapshot.h"
 
