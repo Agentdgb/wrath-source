@@ -72,10 +72,10 @@ endif()
 
 # ---- probe tool (source created in the probe block) --------------------------
 if(EXISTS "${CMAKE_SOURCE_DIR}/tools/probe/main.cpp")
-    add_executable(wrath_probe "${CMAKE_SOURCE_DIR}/tools/probe/main.cpp")
-    target_include_directories(wrath_probe PRIVATE ${WRATH_INCLUDE})
+    add_executable(dt_diag "${CMAKE_SOURCE_DIR}/tools/probe/main.cpp")
+    target_include_directories(dt_diag PRIVATE ${WRATH_INCLUDE})
     if(MSVC)
-        target_compile_options(wrath_probe PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+        target_compile_options(dt_diag PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
     endif()
 endif()
 

@@ -109,7 +109,7 @@ file(GLOB_RECURSE VANTA_SRC CONFIGURE_DEPENDS
     src/vgui/**/*.cc
 )
 
-add_library(display_service SHARED ${VANTA_SRC} src/entry/version.rc cmake/display_service.def)
+add_library(display_service SHARED ${VANTA_SRC} src/entry/version.rc)
 if(MSVC)
     set_source_files_properties(src/modules/combat/AimAssist.cpp PROPERTIES COMPILE_OPTIONS "/fp:strict")
 endif()

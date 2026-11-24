@@ -12,12 +12,23 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+#include <string_view>
 #include <type_traits>
-#include <typeindex>
 #include <utility>
 #include <vector>
 
 namespace vanta {
+
+template <typename T>
+consteval uint64_t typeHash() noexcept {
+    constexpr std::string_view sig = __FUNCSIG__;
+    uint64_t hash = 14695981039346656037ULL;
+    for (char c : sig) {
+        hash ^= static_cast<uint8_t>(c);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
 
 class EventBus;
 
@@ -41,7 +52,7 @@ public:
     template <class E, class Fn>
     [[nodiscard]] std::unique_ptr<IListenerToken> subscribe(Fn&& fn, Priority p = Priority::Normal) {
         static_assert(std::is_base_of_v<Event, E>, "E must derive from vanta::Event");
-        auto& bucket = bucketFor(typeid(E));
+        auto& bucket = bucketFor(typeHash<E>());
         std::unique_lock lk(bucket.mx);
 
         auto slot   = std::make_shared<EventBusSlot>();
@@ -81,7 +92,7 @@ public:
     template <class E>
     bool post(E& evt) {
         static_assert(std::is_base_of_v<Event, E>, "E must derive from vanta::Event");
-        auto& bucket = bucketFor(typeid(E));
+        auto& bucket = bucketFor(typeHash<E>());
         const auto snapshot = bucket.snapshot.load();
         std::lock_guard dispatch(clientStateMutex());
         if (stopped_) {
@@ -116,19 +127,19 @@ private:
     };
     bool stopped_ = false; // guarded by clientStateMutex
 
-    Bucket& bucketFor(std::type_index t) {
+    Bucket& bucketFor(uint64_t id) {
         {
             std::shared_lock lk(bucketMx_);
-            if (auto it = buckets_.find(t); it != buckets_.end()) return *it->second;
+            if (auto it = buckets_.find(id); it != buckets_.end()) return *it->second;
         }
         std::unique_lock lk(bucketMx_);
-        auto& p = buckets_[t];
+        auto& p = buckets_[id];
         if (!p) p = std::make_unique<Bucket>();
         return *p;
     }
 
-    mutable std::shared_mutex                                             bucketMx_;
-    ankerl::unordered_dense::map<std::type_index, std::unique_ptr<Bucket>> buckets_;
+    mutable std::shared_mutex                                      bucketMx_;
+    ankerl::unordered_dense::map<uint64_t, std::unique_ptr<Bucket>> buckets_;
 };
 
 } // namespace vanta

@@ -45,10 +45,19 @@ inline std::wstring sentinelMutexNameForPid(DWORD pid) {
     return std::wstring(kSentinelPrefix) + std::to_wstring(pid);
 }
 
+enum StrategyFlag : uint32_t {
+    Strategy_LoadLibrary     = 0,
+    Strategy_MapPrivate      = 1,
+    Strategy_MapSectionImage = 2,
+    Strategy_MapStomp        = 3,
+};
+
 #pragma pack(push, 8)
 struct HeartbeatSharedContext {
     uint32_t magic;
     uint32_t version;
+    uint32_t strategy;
+    uint32_t flags;
     char server_host[128];
     int32_t server_port;
     char hwid[65];

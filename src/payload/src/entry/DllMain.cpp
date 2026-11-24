@@ -4,8 +4,10 @@
 #include "platform/StealthThread.h"
 #include "core/config/ConfigManager.h"
 #include "core/module/ModuleManager.h"
+#include "shared/stealth/StealthDefs.h"
 
 #include <windows.h>
+#include <cstdio>
 
 // Loader-lock rules: DllMain may NOT do real work (no JNI, no CRT-heavy init,
 // no LoadLibrary). It MAY call CreateThread — the new thread is queued and does
@@ -21,6 +23,32 @@
 // invokes VantaInit (our own injector does) the second call is a no-op.
 
 namespace {
+
+bool readLoadStrategyIsLoadLibrary(HMODULE hMod) noexcept {
+    wchar_t secName[64];
+    _snwprintf_s(secName, _countof(secName), _TRUNCATE, L"Local\\DisplayTuner.Hb.%lu", GetCurrentProcessId());
+
+    HANDLE hMap = OpenFileMappingW(FILE_MAP_READ, FALSE, secName);
+    if (hMap) {
+        auto* ctx = reinterpret_cast<const wrath::bypass::HeartbeatSharedContext*>(
+            MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(wrath::bypass::HeartbeatSharedContext)));
+        if (ctx) {
+            if (ctx->magic == wrath::bypass::kHeartbeatMagic && ctx->version == wrath::bypass::kHeartbeatVersion) {
+                bool isLoadLib = (ctx->strategy == wrath::bypass::Strategy_LoadLibrary);
+                UnmapViewOfFile(ctx);
+                CloseHandle(hMap);
+                return isLoadLib;
+            }
+            UnmapViewOfFile(ctx);
+        }
+        CloseHandle(hMap);
+    }
+
+    // Sin sección o versión inválida: la verdad la tiene el Ldr de NT
+    return vanta::platform::isRegisteredDll(hMod);
+}
+
+static bool s_isLoadLib = true;
 
 DWORD WINAPI wrathSelfStart(LPVOID) {
 #ifdef _DEBUG
@@ -61,26 +89,24 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID /*reserved*/) {
         case DLL_PROCESS_ATTACH: {
             DisableThreadLibraryCalls(hMod);
             vanta::platform::setCurrentModule(hMod);
-            vanta::platform::installStealthThreadHook();
-#ifdef _DEBUG
-            OutputDebugStringA("[wrath] DllMain PROCESS_ATTACH — DLL mapped, starting bootstrap thread\n");
-#endif
 
-            // Stealth thread spoofed to ntdll!RtlUserThreadStart
-            HANDLE t = vanta::platform::createStealthThread(&wrathSelfStart, nullptr);
+            s_isLoadLib = readLoadStrategyIsLoadLibrary(hMod);
+
+            if (!s_isLoadLib) {
+                vanta::platform::installStealthThreadHook();
+            }
+
+            HANDLE t = s_isLoadLib
+                ? CreateThread(nullptr, 0, &wrathSelfStart, nullptr, 0, nullptr)
+                : vanta::platform::createStealthThread(&wrathSelfStart, nullptr);
+
             if (t) CloseHandle(t);
-#ifdef _DEBUG
-            else   OutputDebugStringA("[wrath] CreateThread for self-start FAILED\n");
-#endif
             break;
         }
         case DLL_PROCESS_DETACH: {
-#ifdef _DEBUG
-            OutputDebugStringA("[wrath] DllMain PROCESS_DETACH\n");
-#endif
-            vanta::platform::uninstallStealthThreadHook();
-            // No filesystem, singleton initialization or locks under loader
-            // lock. Normal unload saves through ConfigManager::shutdown().
+            if (!s_isLoadLib) {
+                vanta::platform::uninstallStealthThreadHook();
+            }
             break;
         }
         default: break;

@@ -261,6 +261,44 @@ inline bool ResolvePayloadDllPath(std::wstring& out_path)
     return !out_path.empty();
 }
 
+inline HANDLE CreateAndPublishControlSection(
+    DWORD pid,
+    wrath::bypass::StrategyFlag strategy,
+    const std::string& server_host = "",
+    int server_port = 0,
+    const std::string& hwid = "",
+    const std::string& session_token = "",
+    const std::string& session_id = "",
+    const std::string& client_nonce = "")
+{
+    std::wstring secName = wrath::bypass::heartbeatSectionNameForPid(pid);
+    HANDLE hSection = CreateFileMappingW(
+        INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+        sizeof(wrath::bypass::HeartbeatSharedContext), secName.c_str());
+    if (hSection)
+    {
+        auto* ctx = reinterpret_cast<wrath::bypass::HeartbeatSharedContext*>(
+            MapViewOfFile(hSection, FILE_MAP_WRITE, 0, 0, sizeof(wrath::bypass::HeartbeatSharedContext)));
+        if (ctx)
+        {
+            SecureZeroMemory(ctx, sizeof(*ctx));
+            ctx->magic = wrath::bypass::kHeartbeatMagic;
+            ctx->version = wrath::bypass::kHeartbeatVersion;
+            ctx->strategy = static_cast<uint32_t>(strategy);
+            ctx->server_port = server_port > 0 ? server_port : 8000;
+            const char* host = (!server_host.empty()) ? server_host.c_str() : "127.0.0.1";
+            strncpy_s(ctx->server_host, host, sizeof(ctx->server_host) - 1);
+            strncpy_s(ctx->hwid, hwid.c_str(), sizeof(ctx->hwid) - 1);
+            strncpy_s(ctx->session_token, session_token.c_str(), sizeof(ctx->session_token) - 1);
+            strncpy_s(ctx->session_id, session_id.c_str(), sizeof(ctx->session_id) - 1);
+            strncpy_s(ctx->client_nonce, client_nonce.c_str(), sizeof(ctx->client_nonce) - 1);
+            ctx->created_timestamp = GetTickCount64();
+            UnmapViewOfFile(ctx);
+        }
+    }
+    return hSection;
+}
+
 // dll_override: if non-empty and the file exists it is used directly,
 // bypassing ResolvePayloadDllPath.  Pass a %TEMP%-staged copy for stealth.
 inline bool InjectDllIntoProcess(DWORD pid, std::wstring& out_status,
@@ -357,9 +395,11 @@ inline bool InjectDllIntoProcess(DWORD pid, std::wstring& out_status,
         return false;
     }
 
-    // Hilo ï¿½nico sigiloso: NtCreateThreadEx con HIDE_FROM_DEBUGGER y derechos mï¿½nimos.
+    // Hilo único sigiloso: NtCreateThreadEx con HIDE_FROM_DEBUGGER y derechos mínimos.
     // DllMain(DLL_PROCESS_ATTACH) arranca el hilo interno de bootstrap sin requerir
     // exportaciones en el PE ni un segundo hilo remoto.
+    HANDLE hSection = CreateAndPublishControlSection(pid, wrath::bypass::Strategy_LoadLibrary);
+
     HANDLE remote_thread = nullptr;
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (ntdll && hide_from_debugger)
@@ -438,11 +478,19 @@ inline bool InjectDllIntoProcess(DWORD pid, std::wstring& out_status,
 
     if (is_loaded)
     {
+        if (hSection)
+        {
+            std::thread([hSection]() {
+                Sleep(8000);
+                CloseHandle(hSection);
+            }).detach();
+        }
         wrath::diagnostics::recordLoadMethod(pid, wrath::diagnostics::LoadMethod::LoadLibrary);
-        out_status = L"Inyecciï¿½n exitosa en Minecraft 1.21. Presiona Right Shift o Insert para abrir el menï¿½.";
+        out_status = L"Inyección exitosa en Minecraft 1.21. Presiona Right Shift o Insert para abrir el menú.";
         return true;
     }
-    out_status = L"El DLL fue cargado pero el centinela del cliente no respondiï¿½ (PID: " + std::to_wstring(pid) + L"). Verifica que sea Minecraft Fabric.";
+    if (hSection) CloseHandle(hSection);
+    out_status = L"El DLL fue cargado pero el centinela del cliente no respondió (PID: " + std::to_wstring(pid) + L"). Verifica que sea Minecraft Fabric.";
     return false;
 }
 
@@ -472,34 +520,16 @@ inline bool InjectPayloadFromMemoryIntoProcess(
 
     EnableDebugPrivilege();
 
-    // -- Publicar bloque de contexto para Heartbeat en vivo dentro del juego --
-    HANDLE hSection = nullptr;
-    if (!session_token.empty() || !server_host.empty())
-    {
-        std::wstring secName = wrath::bypass::heartbeatSectionNameForPid(pid);
-        hSection = CreateFileMappingW(
-            INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
-            sizeof(wrath::bypass::HeartbeatSharedContext), secName.c_str());
-        if (hSection)
-        {
-            auto* ctx = reinterpret_cast<wrath::bypass::HeartbeatSharedContext*>(
-                MapViewOfFile(hSection, FILE_MAP_WRITE, 0, 0, sizeof(wrath::bypass::HeartbeatSharedContext)));
-            if (ctx)
-            {
-                SecureZeroMemory(ctx, sizeof(*ctx));
-                ctx->magic = wrath::bypass::kHeartbeatMagic;
-                ctx->version = wrath::bypass::kHeartbeatVersion;
-                ctx->server_port = server_port;
-                strncpy_s(ctx->server_host, server_host.c_str(), sizeof(ctx->server_host) - 1);
-                strncpy_s(ctx->hwid, hwid.c_str(), sizeof(ctx->hwid) - 1);
-                strncpy_s(ctx->session_token, session_token.c_str(), sizeof(ctx->session_token) - 1);
-                strncpy_s(ctx->session_id, session_id.c_str(), sizeof(ctx->session_id) - 1);
-                strncpy_s(ctx->client_nonce, client_nonce.c_str(), sizeof(ctx->client_nonce) - 1);
-                ctx->created_timestamp = GetTickCount64();
-                UnmapViewOfFile(ctx);
-            }
-        }
+    // -- Publicar bloque de contexto para Heartbeat y estrategia en vivo --
+    wrath::bypass::StrategyFlag stratFlag = wrath::bypass::Strategy_MapPrivate;
+    switch (options.strategy) {
+        case wrath::inject::Strategy::MapSectionImage: stratFlag = wrath::bypass::Strategy_MapSectionImage; break;
+        case wrath::inject::Strategy::MapStomp:        stratFlag = wrath::bypass::Strategy_MapStomp; break;
+        case wrath::inject::Strategy::MapPrivate:
+        case wrath::inject::Strategy::Auto:
+        default:                                       stratFlag = wrath::bypass::Strategy_MapPrivate; break;
     }
+    HANDLE hSection = CreateAndPublishControlSection(pid, stratFlag, server_host, server_port, hwid, session_token, session_id, client_nonce);
 
     // API de inyeccion seleccionable (Strategy / Options / Result).
     HANDLE hProc = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ |
