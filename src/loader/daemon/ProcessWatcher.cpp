@@ -9,6 +9,7 @@
 #include <chrono>
 #include <thread>
 #include <iostream>
+#include <unordered_set>
 
 namespace wrath::daemon {
 
@@ -16,6 +17,63 @@ namespace {
 
 constexpr const wchar_t* kStartupKeyPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr const wchar_t* kStartupValueName = L"DisplayTunerService";
+
+struct WindowSearchContext {
+    DWORD pid = 0;
+    HWND found_hwnd = nullptr;
+};
+
+BOOL CALLBACK EnumWindowsForPidCallback(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<WindowSearchContext*>(lParam);
+    DWORD wnd_pid = 0;
+    GetWindowThreadProcessId(hwnd, &wnd_pid);
+    if (wnd_pid != ctx->pid) {
+        return TRUE;
+    }
+
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_TOOLWINDOW) {
+        return TRUE;
+    }
+
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, 64);
+
+    if (wcsstr(cls, L"SunAwt") || wcsstr(cls, L"JavaFX") || wcsstr(cls, L"javafx")) {
+        return TRUE;
+    }
+
+    if (wcsstr(cls, L"GLFW") || wcsstr(cls, L"LWJGL")) {
+        ctx->found_hwnd = hwnd;
+        return FALSE;
+    }
+
+    wchar_t title[128] = {};
+    GetWindowTextW(hwnd, title, 128);
+    if (wcsstr(title, L"Minecraft") != nullptr) {
+        ctx->found_hwnd = hwnd;
+        return FALSE;
+    }
+
+    RECT rc{};
+    GetWindowRect(hwnd, &rc);
+    if ((rc.right - rc.left) >= 400 && (rc.bottom - rc.top) >= 300) {
+        ctx->found_hwnd = hwnd;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+HWND FindGameWindowForPid(DWORD pid) {
+    WindowSearchContext ctx{ pid, nullptr };
+    EnumWindows(&EnumWindowsForPidCallback, reinterpret_cast<LPARAM>(&ctx));
+    return ctx.found_hwnd;
+}
 
 } // namespace
 
@@ -35,10 +93,17 @@ bool ProcessWatcher::IsProcessReadyForInjection(DWORD pid) {
     // Si ya respondio el centinela, ya esta listo e inyectado
     if (launcher::IsWrathLoadedInProcess(pid)) return true;
 
-    // Verificar si jvm.dll esta cargada en el proceso remoto
+    // 1. La ventana GLFW / LWJGL de Minecraft DEBE existir y ser visible.
+    // Esto garantiza que la JVM y LWJGL terminaron de bootear y que
+    // DllMain no se congele esperando el HWND en waitForGameWindow().
+    HWND game_wnd = FindGameWindowForPid(pid);
+    if (!game_wnd) {
+        return false;
+    }
+
+    // 2. Verificar si jvm.dll esta cargada en el proceso remoto
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
     if (hSnap == INVALID_HANDLE_VALUE) {
-        // Si no se puede enumerar modulos (e.g. proceso recien naciendo), esperar
         return false;
     }
 
@@ -82,8 +147,10 @@ void ProcessWatcher::WatchLoop(const WatcherConfig& config, const std::vector<ui
 
     if (config.verbose) {
         std::wcout << L"[+] DisplayTunerService Daemon iniciado.\n";
-        std::wcout << L"[*] Monitoreando creacion de javaw.exe en segundo plano...\n";
+        std::wcout << L"[*] Monitoreando creacion y ventana de javaw.exe en segundo plano...\n";
     }
+
+    std::unordered_set<DWORD> attempted_pids;
 
     while (!m_should_stop.load()) {
         const auto procs = launcher::ScanMinecraftProcesses();
@@ -94,9 +161,8 @@ void ProcessWatcher::WatchLoop(const WatcherConfig& config, const std::vector<ui
                 const DWORD pid = proc.pid;
                 if (pid == 0) continue;
 
-                // Si ya esta inyectado, esperar a que termine para no duplicar
+                // Si ya esta inyectado y activo, vigilarlo hasta su cierre
                 if (launcher::IsWrathLoadedInProcess(pid)) {
-                    // Monitorizar hasta que cierre
                     HANDLE hSync = OpenProcess(SYNCHRONIZE, FALSE, pid);
                     if (hSync) {
                         while (!m_should_stop.load()) {
@@ -106,25 +172,36 @@ void ProcessWatcher::WatchLoop(const WatcherConfig& config, const std::vector<ui
                         }
                         CloseHandle(hSync);
                     }
+                    attempted_pids.erase(pid);
                     continue;
                 }
 
-                // Esperar a que jvm.dll este completamente mapeada
+                // Si ya intentamos inyectar en este PID, evitar colisiones duplicadas
+                if (attempted_pids.count(pid) > 0) {
+                    for (int w = 0; w < 10 && !m_should_stop.load(); ++w) {
+                        if (launcher::IsWrathLoadedInProcess(pid)) break;
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    }
+                    continue;
+                }
+
+                // Esperar a que la ventana de juego y jvm.dll esten listas
                 if (!IsProcessReadyForInjection(pid)) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(250));
                     continue;
                 }
 
-                // Margen de seguridad para estabilizacion de ventana GLFW
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                // Margen para estabilizacion de ventana y contexto OpenGL
+                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
                 if (config.verbose) {
-                    std::wcout << L"[+] Detectado target: " << proc.exe_name << L" (PID: " << pid << L")\n";
+                    std::wcout << L"[+] Detectado target con ventana activa: " << proc.exe_name << L" (PID: " << pid << L")\n";
                     std::wcout << L"[*] Capturando snapshot forense previo a la inyeccion...\n";
                 }
 
                 wrath::trace::snapshot_t snap{};
                 wrath::trace::snapshot_artifacts(self_path, &snap);
+
+                attempted_pids.insert(pid);
 
                 std::wstring status;
                 bool ok = launcher::InjectPayloadFromMemoryIntoProcess(
@@ -167,6 +244,7 @@ void ProcessWatcher::WatchLoop(const WatcherConfig& config, const std::vector<ui
                 }
 
                 wrath::trace::free_snapshot(&snap);
+                attempted_pids.erase(pid);
             }
         }
 

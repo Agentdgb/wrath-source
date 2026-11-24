@@ -538,7 +538,7 @@ inline bool InjectPayloadFromMemoryIntoProcess(
 
     // Verificacion del centinela
     bool is_loaded = false;
-    for (int i = 0; i < 40; ++i)
+    for (int i = 0; i < 60; ++i)
     {
         if (IsWrathLoadedInProcess(pid)) { is_loaded = true; break; }
         Sleep(100);
