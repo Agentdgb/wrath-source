@@ -468,7 +468,7 @@ bool install(JNIEnv* env) {
         && c.camera_pos && c.rotation_vec && c.vx && c.vy && c.vz && c.vec_ctor
         && c.hit_ctor && c.hit_entity;
     for (auto b : c.box) resolved = resolved && b;
-    VLOG_INFO("backtrack", "cache: core={} tickProgress={} lerpedPos={} pose={} limbs={} reach={} hitType={} weapon={} -> {}",
+    VLOG_INFO("backtrack", "cache: core={} tickProgress={} lerpedPos={} pose={} limbs={} dist={} hitType={} weapon={} -> {}",
         resolved, (c.rtc && c.rtc_progress), c.lerped_pos != nullptr,
         (c.body_yaw && c.last_body_yaw && c.head_yaw && c.pitch && c.last_pitch),
         (c.limb && c.limb_progress && c.limb_amplitude), c.reach != nullptr,
@@ -810,7 +810,7 @@ void render(int width, int height) {
 // ─────────────────────────────────────────────────────────────────────────────
 class Backtrack : public Module {
 public:
-    Backtrack() : Module("Backtrack", "Historical player ghost with current reach and ray checks", Category::Combat) {
+    Backtrack() : Module("Backtrack", "Historical player position tracking with distance validation", Category::Combat) {
         registerSetting(&delay_); registerSetting(&weapon_); registerSetting(&ghost_);
         registerSetting(&visual_); registerSetting(&border_); registerSetting(&fill_);
         visual_.setVisibleIf([this] { return ghost_.value(); });

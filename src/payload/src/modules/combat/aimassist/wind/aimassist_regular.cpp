@@ -964,7 +964,7 @@ void renderApply(JNIEnv* env, jobject player, SharedState& sh, const SettingsVie
             return;
         }
         if (distanceToEntity(env, player, sh.targetRef) > static_cast<double>(sv.distance)) {
-            debug::renderStage("target out of reach");
+            debug::renderStage("target out of range");
             env->DeleteGlobalRef(sh.targetRef);
             sh.targetRef = nullptr;
             sh.rateFiltYaw = sh.rateFiltPitch = 0.f;

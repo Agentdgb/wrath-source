@@ -85,41 +85,15 @@ static bool try_open_at(const char* path) {
     return true;
 }
 
+#define VANTA_TB_QUIET 1
+
+inline void log_(const char*, ...) {}
+
 static void log_open_once() {}
 namespace { struct _log_boot { _log_boot() {} } _log_boot_inst; }
 
-static void log_(const char* fmt, ...) {
-    std::lock_guard<std::mutex> _lk(g_log_mx);
-    log_open_once();
-    if (!g_log_fp) return;
-
-    unsigned long long dt = GetTickCount64() - g_log_t0;
-    std::fprintf(g_log_fp, "[%8llu ms] ", dt);
-
-    va_list ap;
-    va_start(ap, fmt);
-    std::vfprintf(g_log_fp, fmt, ap);
-    va_end(ap);
-
-    std::fputc('\n', g_log_fp);
-    std::fflush(g_log_fp);
-}
-
-// Exposed so triggerbot.cpp's run() heartbeat can log to the same file. The
-// header declares it below in namespace vanta::modules::triggerbot_hook so
-// callers see it too.
 extern "C" void vanta_trigger_desktop_log(const char* fmt, ...) {
-    std::lock_guard<std::mutex> _lk(g_log_mx);
-    log_open_once();
-    if (!g_log_fp) return;
-    unsigned long long dt = GetTickCount64() - g_log_t0;
-    std::fprintf(g_log_fp, "[%8llu ms] ", dt);
-    va_list ap;
-    va_start(ap, fmt);
-    std::vfprintf(g_log_fp, fmt, ap);
-    va_end(ap);
-    std::fputc('\n', g_log_fp);
-    std::fflush(g_log_fp);
+    (void)fmt;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2800,19 +2774,17 @@ void shutdown()
     }
 
     auto detach = [](jmethodID mid, const char* label) {
-        if (!mid) { vanta::modules::triggerbot_hook::log_("%s: mid null, skipped", label); return; }
+        if (!mid) { return; }
         try {
-            jnihook_result_t r = JNIHook_Detach(mid);
-            vanta::modules::triggerbot_hook::log_("%s: JNIHook_Detach r=%d", label, (int)r);
+            JNIHook_Detach(mid);
         } catch (...) {
-            vanta::modules::triggerbot_hook::log_("%s: JNIHook_Detach threw", label);
         }
     };
 
-    detach(g_input_method_id,    "triggerbot_hook::shutdown handleInputEvents");
-    detach(g_hbb_method_id,      "triggerbot_hook::shutdown handleBlockBreaking");
-    detach(g_doattack_method_id, "triggerbot_hook::shutdown doAttack");
-    detach(g_tick_method_id,     "triggerbot_hook::shutdown tickMovement");
+    detach(g_input_method_id,    "input_hook_release");
+    detach(g_hbb_method_id,      "block_hook_release");
+    detach(g_doattack_method_id, "attack_hook_release");
+    detach(g_tick_method_id,     "tick_hook_release");
 
     if (vanta::jvm::ctx().vm)
     {
@@ -2828,7 +2800,7 @@ void shutdown()
                 if (g_last_target)        env->DeleteGlobalRef(g_last_target);
             }
         }
-        catch (...) { vanta::modules::triggerbot_hook::log_("triggerbot_hook::shutdown: DeleteGlobalRef threw"); }
+        catch (...) {}
     }
 
     g_clientplayer_class    = nullptr;
