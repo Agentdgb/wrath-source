@@ -1,0 +1,7 @@
+add_executable(inject_api_test inject_api.cpp)
+target_include_directories(inject_api_test PRIVATE ${WRATH_INCLUDE})
+target_link_libraries(inject_api_test PRIVATE wrath_inject)
+if(MSVC)
+    target_compile_options(inject_api_test PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+endif()
+add_test(NAME inject_api COMMAND inject_api_test)

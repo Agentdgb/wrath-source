@@ -1,0 +1,14 @@
+Backups de Wrath
+================
+
+Wrath_antes_de_ordenar_2026-10-23.tar.gz:
+Copia verificada de la estructura anterior, sin Git ni cachés de compilación.
+Conserva el código con los cambios locales previos a la organización.
+
+Retirado/:
+Material fuera del proyecto activo: distribución antigua, archivos de trabajo,
+herramientas de auditoría, caché anterior de compilación y caché de Python.
+El borrado fue rechazado por el control automático; estos archivos continúan
+en disco. La caché build incluida aquí no debe reutilizarse: apunta a otra ruta.
+
+Para compilar, utiliza ../wrath y sigue su README.md.
