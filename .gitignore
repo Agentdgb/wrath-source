@@ -1,8 +1,9 @@
+*.suo
+*.user
+*.VC.db
+.vs/
+/build/
 build*/
+CMakeUserPresets.json
 dist/
 Injeccion/
-.vs/
-*.user
-*.suo
-*.VC.db
-CMakeUserPresets.json
