@@ -10,6 +10,7 @@ add_subdirectory(dependencies/freetype EXCLUDE_FROM_ALL)
 add_executable(WrathLoader WIN32
     main.cpp
     Paths.cpp
+    daemon/ProcessWatcher.cpp
     auth/AuthClient.cpp
     ${CMAKE_SOURCE_DIR}/src/inject/NtInjector.cpp
     version.rc

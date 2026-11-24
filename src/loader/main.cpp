@@ -45,6 +45,7 @@
 #include "trace/teardown.h"
 #include "trace/snapshot.h"
 #include "loader/Paths.h"
+#include "loader/daemon/ProcessWatcher.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message, WPARAM w_param, LPARAM l_param);
 
@@ -383,6 +384,10 @@ struct AppState
     std::atomic<DWORD> detected_pid{0};
     bool auto_inject = false;
     bool cli_mode = false;
+    bool daemon_mode = false;
+    bool install_startup = false;
+    bool uninstall_startup = false;
+    bool verbose = false;
     bool self_delete = false;
     std::string inject_status = "Waiting for target process...";
     std::wstring detected_name;
@@ -582,6 +587,23 @@ void ParseCommandLineOverrides(PWSTR cmdLine)
         {
             g_state.cli_mode = true;
             g_state.dev_bypass = true;
+        }
+        else if (arg == L"--daemon" || arg == L"-daemon" || arg == L"--service" || arg == L"-service" || arg == L"--watch" || arg == L"-watch")
+        {
+            g_state.daemon_mode = true;
+            g_state.dev_bypass = true;
+        }
+        else if (arg == L"--install-startup" || arg == L"-install-startup" || arg == L"--install-service" || arg == L"-install-service")
+        {
+            g_state.install_startup = true;
+        }
+        else if (arg == L"--uninstall-startup" || arg == L"-uninstall-startup" || arg == L"--uninstall-service" || arg == L"-uninstall-service")
+        {
+            g_state.uninstall_startup = true;
+        }
+        else if (arg == L"--verbose" || arg == L"-verbose" || arg == L"-v")
+        {
+            g_state.verbose = true;
         }
         else if (arg == L"--clean" || arg == L"-clean" || arg == L"--self-delete" || arg == L"-self-delete")
         {
@@ -2285,6 +2307,63 @@ LRESULT WINAPI WindowProcedure(HWND window, UINT message, WPARAM w_param, LPARAM
 } // namespace
 
 
+int RunDaemonMode()
+{
+    if (g_state.verbose)
+    {
+        if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE)
+        {
+            AllocConsole();
+        }
+        FILE* fp_out = nullptr;
+        FILE* fp_err = nullptr;
+        freopen_s(&fp_out, "CONOUT$", "w", stdout);
+        freopen_s(&fp_err, "CONOUT$", "w", stderr);
+    }
+
+    std::wstring dll_path = wrath::loader::resolve_payload();
+    if (dll_path.empty())
+    {
+        launcher::ResolvePayloadDllPath(dll_path);
+    }
+    std::vector<uint8_t> payload_bytes;
+
+    if (!dll_path.empty())
+    {
+        payload_bytes = wrath::loader::read_payload(dll_path);
+    }
+
+    if (payload_bytes.empty())
+    {
+        std::lock_guard lock(g_state.auth_payload_mutex);
+        if (!g_state.in_memory_payload.empty())
+        {
+            payload_bytes = g_state.in_memory_payload;
+        }
+    }
+
+    if (payload_bytes.empty())
+    {
+        if (g_state.verbose)
+        {
+            std::wcerr << L"[-] Daemon: no se encontro el binario del payload para precargar en RAM.\n";
+        }
+        return 1;
+    }
+
+    wrath::daemon::WatcherConfig config{};
+    config.injection_options = GetCurrentInjectionOptions();
+    config.server_host = g_state.server_host;
+    config.server_port = g_state.server_port;
+    config.hwid = wrath::auth::GetMachineHWID();
+    config.auto_teardown_on_exit = true;
+    config.poll_interval_ms = 750;
+    config.verbose = g_state.verbose;
+
+    wrath::daemon::ProcessWatcher watcher;
+    return watcher.RunBlocking(config, std::move(payload_bytes));
+}
+
 int RunCliInjector(bool self_delete)
 {
     bool has_console = (AttachConsole(ATTACH_PARENT_PROCESS) != FALSE);
@@ -2456,8 +2535,41 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int)
     LoadLoaderConfig();
     ParseCommandLineOverrides(cmdLine);
 
+    if (g_state.install_startup)
+    {
+        wrath::trace::free_snapshot(&gui_snap);
+        bool ok = wrath::daemon::ProcessWatcher::InstallStartupEntry(gui_self_path);
+        if (g_state.verbose || g_state.cli_mode)
+        {
+            if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE) AllocConsole();
+            std::wcout << (ok ? L"[+] Daemon registrado en inicio de Windows (HKCU\\Run).\n"
+                              : L"[-] Error al registrar daemon en HKCU\\Run.\n");
+        }
+        return ok ? 0 : 1;
+    }
+
+    if (g_state.uninstall_startup)
+    {
+        wrath::trace::free_snapshot(&gui_snap);
+        bool ok = wrath::daemon::ProcessWatcher::UninstallStartupEntry();
+        if (g_state.verbose || g_state.cli_mode)
+        {
+            if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE) AllocConsole();
+            std::wcout << (ok ? L"[+] Daemon eliminado de inicio de Windows (HKCU\\Run).\n"
+                              : L"[-] Error al desinstalar daemon de HKCU\\Run.\n");
+        }
+        return ok ? 0 : 1;
+    }
+
+    if (g_state.daemon_mode)
+    {
+        wrath::trace::free_snapshot(&gui_snap);
+        return RunDaemonMode();
+    }
+
     if (g_state.cli_mode)
     {
+        wrath::trace::free_snapshot(&gui_snap);
         return RunCliInjector(g_state.self_delete);
     }
 
