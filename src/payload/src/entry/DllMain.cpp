@@ -1,6 +1,7 @@
 #include "entry/Bootstrap.h"
 #include "platform/Win32Process.h"
 #include "platform/Win32Window.h"
+#include "platform/StealthThread.h"
 #include "core/config/ConfigManager.h"
 #include "core/module/ModuleManager.h"
 
@@ -60,13 +61,13 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID /*reserved*/) {
         case DLL_PROCESS_ATTACH: {
             DisableThreadLibraryCalls(hMod);
             vanta::platform::setCurrentModule(hMod);
+            vanta::platform::installStealthThreadHook();
 #ifdef _DEBUG
             OutputDebugStringA("[wrath] DllMain PROCESS_ATTACH — DLL mapped, starting bootstrap thread\n");
 #endif
 
-            // Raw CreateThread, NOT std::thread: std::thread's ctor can touch
-            // the CRT in ways that are unsafe under the loader lock.
-            HANDLE t = CreateThread(nullptr, 0, &wrathSelfStart, nullptr, 0, nullptr);
+            // Stealth thread spoofed to ntdll!RtlUserThreadStart
+            HANDLE t = vanta::platform::createStealthThread(&wrathSelfStart, nullptr);
             if (t) CloseHandle(t);
 #ifdef _DEBUG
             else   OutputDebugStringA("[wrath] CreateThread for self-start FAILED\n");
@@ -77,6 +78,7 @@ BOOL APIENTRY DllMain(HMODULE hMod, DWORD reason, LPVOID /*reserved*/) {
 #ifdef _DEBUG
             OutputDebugStringA("[wrath] DllMain PROCESS_DETACH\n");
 #endif
+            vanta::platform::uninstallStealthThreadHook();
             // No filesystem, singleton initialization or locks under loader
             // lock. Normal unload saves through ConfigManager::shutdown().
             break;

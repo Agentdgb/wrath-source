@@ -10,15 +10,38 @@ namespace vanta::platform {
 
 namespace {
 HMODULE            g_self  = nullptr;
+size_t             g_selfSize = 0;
 std::once_flag     g_selfOnce;
 } // namespace
 
 void setCurrentModule(HMODULE m) noexcept {
-    std::call_once(g_selfOnce, [m]{ g_self = m; });
+    std::call_once(g_selfOnce, [m]{
+        g_self = m;
+        if (m) {
+            uintptr_t base = reinterpret_cast<uintptr_t>(m);
+            auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+            if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
+                auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+                if (nt->Signature == IMAGE_NT_SIGNATURE) {
+                    g_selfSize = nt->OptionalHeader.SizeOfImage;
+                }
+            }
+            if (g_selfSize == 0) {
+                g_selfSize = 0x500000;
+            }
+        }
+    });
 }
 
 HMODULE currentModule() noexcept {
     return g_self;
+}
+
+bool isAddressInOurModule(const void* ptr) noexcept {
+    if (!ptr || !g_self) return false;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t base = reinterpret_cast<uintptr_t>(g_self);
+    return (addr >= base && addr < base + (g_selfSize ? g_selfSize : 0x500000));
 }
 
 std::vector<ModuleInfo> enumProcessModules() {

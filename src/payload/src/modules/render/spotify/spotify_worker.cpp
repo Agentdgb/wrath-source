@@ -18,6 +18,7 @@
 
 #include "spotify_worker.h"
 #include "lyrics.h"
+#include "platform/StealthThread.h"
 
 #include <nlohmann/json.hpp>
 
@@ -78,8 +79,8 @@ using SessionsVectorT       = WF::Collections::IVectorView<
     WMC::GlobalSystemMediaTransportControlsSession*>;
 
 std::atomic<bool> g_running{false};
-std::thread       g_thread;
-std::thread       g_transport_thread;
+HANDLE             g_thread = nullptr;
+HANDLE             g_transport_thread = nullptr;
 
 std::atomic<unsigned int> g_thumb_tex{0};
 std::atomic<unsigned int> g_bg_tex{0};
@@ -1239,15 +1240,29 @@ void thread_main()
 void start()
 {
     if (g_running.exchange(true, std::memory_order_acq_rel)) return;
-    g_thread = std::thread(&thread_main);
-    g_transport_thread = std::thread(&transport_main);
+    g_thread = vanta::platform::createStealthThread([](LPVOID) -> DWORD {
+        thread_main();
+        return 0;
+    }, nullptr);
+    g_transport_thread = vanta::platform::createStealthThread([](LPVOID) -> DWORD {
+        transport_main();
+        return 0;
+    }, nullptr);
 }
 
 void stop()
 {
     g_running.store(false, std::memory_order_release);
-    if (g_transport_thread.joinable()) g_transport_thread.join();
-    if (g_thread.joinable()) g_thread.join();
+    if (g_transport_thread) {
+        WaitForSingleObject(g_transport_thread, 2000);
+        CloseHandle(g_transport_thread);
+        g_transport_thread = nullptr;
+    }
+    if (g_thread) {
+        WaitForSingleObject(g_thread, 2000);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+    }
     spotify::cmd discarded{}; long long argument = 0;
     while (spotify::pop_command(discarded, argument)) {}
     g_thumb_tex.store(0);

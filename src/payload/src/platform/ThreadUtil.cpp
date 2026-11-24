@@ -1,4 +1,5 @@
 #include "platform/ThreadUtil.h"
+#include "platform/StealthThread.h"
 #include "jvm/JvmContext.h"
 
 // windows.h MUST come first — it defines the target-architecture symbols
@@ -75,15 +76,15 @@ bool spawnNamed(std::string name, std::function<void()> fn) {
 
        The reference is real and is released when the thread returns normally,
        which is what liveThreadCount() below lets the unload path wait for. */
-    uintptr_t t = _beginthreadex(nullptr, 0, &threadEntry, p, 0, nullptr);
-    if (t == 0) {
+    HANDLE t = createStealthThread(reinterpret_cast<LPTHREAD_START_ROUTINE>(&threadEntry), p);
+    if (!t) {
         const auto error = GetLastError();
         g_live.fetch_sub(1, std::memory_order_release);
         delete p;
         SetLastError(error ? error : ERROR_NOT_ENOUGH_MEMORY);
         return false;
     }
-    CloseHandle(reinterpret_cast<HANDLE>(t));
+    CloseHandle(t);
     return true;
 }
 
