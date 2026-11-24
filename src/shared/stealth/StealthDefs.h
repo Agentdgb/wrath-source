@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <string>
 
+#include "shared/stealth/Naming.h"
+
 namespace wrath::bypass {
 
 using NTSTATUS = LONG;
@@ -38,13 +40,10 @@ using pfnNtCreateThreadEx = NTSTATUS(NTAPI*)(
 // No hide flag.
 constexpr ULONG kThreadCreateFlagsHideFromDebugger = 0;
 
-// Sentinel / heartbeat names -- plain strings, no obfuscation.
+// Sentinel / heartbeat names -- centralized in Naming.h.
 inline std::wstring sentinelMutexNameForPid(DWORD pid) {
-    return L"Local\\wrath_sentinel_" + std::to_wstring(pid);
+    return std::wstring(kSentinelPrefix) + std::to_wstring(pid);
 }
-
-constexpr uint32_t kHeartbeatMagic   = 0x57525448; // 'WRTH'
-constexpr uint32_t kHeartbeatVersion = 2;
 
 #pragma pack(push, 8)
 struct HeartbeatSharedContext {
@@ -61,7 +60,7 @@ struct HeartbeatSharedContext {
 #pragma pack(pop)
 
 inline std::wstring heartbeatSectionNameForPid(DWORD pid) {
-    return L"Local\\wrath_hb_" + std::to_wstring(pid);
+    return std::wstring(kHeartbeatPrefix) + std::to_wstring(pid);
 }
 
 } // namespace wrath::bypass
