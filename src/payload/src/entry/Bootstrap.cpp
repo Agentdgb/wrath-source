@@ -29,7 +29,7 @@
 #include "vgui/vgui.h"
 
 #include "shared/stealth/StealthDefs.h"
-#include "diagnostics/SessionDiagnostics.h"
+#include "shared/diagnostics/SessionDiagnostics.h"
 #include <jnihook.h>
 #include <windows.h>
 #include <shlobj.h>

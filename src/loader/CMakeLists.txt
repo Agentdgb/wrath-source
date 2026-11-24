@@ -8,10 +8,10 @@ set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
 add_subdirectory(dependencies/freetype EXCLUDE_FROM_ALL)
 
 add_executable(WrathLoader WIN32
-    src/main.cpp
-    src/auth/AuthClient.cpp
-    src/injector/NtInjector.cpp
-    src/version.rc
+    main.cpp
+    auth/AuthClient.cpp
+    ${CMAKE_SOURCE_DIR}/src/inject/NtInjector.cpp
+    version.rc
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp

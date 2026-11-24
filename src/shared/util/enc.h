@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "payload/src/core/hash.h"
-#include "strings/build_salt.h"
+#include "shared/strings/build_salt.h"
 
 #ifndef BUILD_SALT
 #define BUILD_SALT 0xA5C3E1F9D4B28766ULL

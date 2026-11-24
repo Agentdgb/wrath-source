@@ -1,4 +1,4 @@
 #pragma once
 
-#include "../../../bypass/StringScrub.h"
+#include "../../../shared/stealth/StringScrub.h"
 

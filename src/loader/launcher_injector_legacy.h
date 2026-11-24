@@ -13,8 +13,8 @@
 #include <cstring>
 
 #include "shared/stealth/StealthDefs.h"
-#include "injector/ManualMap.h"
-#include "diagnostics/SessionDiagnostics.h"
+#include "inject/map/ManualMap.h"
+#include "shared/diagnostics/SessionDiagnostics.h"
 
 namespace launcher
 {

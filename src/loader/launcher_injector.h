@@ -13,9 +13,9 @@
 #include <cstring>
 
 #include "shared/stealth/StealthDefs.h"
-#include "injector/ManualMap.h"
-#include "injector/NtInjector.h"
-#include "diagnostics/SessionDiagnostics.h"
+#include "inject/map/ManualMap.h"
+#include "inject/NtInjector.h"
+#include "shared/diagnostics/SessionDiagnostics.h"
 
 namespace launcher
 {
