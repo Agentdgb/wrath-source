@@ -12,7 +12,8 @@
 #include <algorithm>
 #include <cstring>
 
-#include "loader/Paths.h"`n#include "shared/stealth/StealthDefs.h"
+#include "loader/Paths.h"
+#include "shared/stealth/StealthDefs.h"
 #include "inject/map/ManualMap.h"
 #include "inject/NtInjector.h"
 #include "inject/Injector.h"
@@ -537,7 +538,7 @@ inline bool InjectPayloadFromMemoryIntoProcess(
 
     // Verificacion del centinela
     bool is_loaded = false;
-    for (int i = 0; i < 40; ++i)
+    for (int i = 0; i < 60; ++i)
     {
         if (IsWrathLoadedInProcess(pid)) { is_loaded = true; break; }
         Sleep(100);
