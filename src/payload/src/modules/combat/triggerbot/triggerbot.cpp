@@ -390,13 +390,13 @@ void shutdown_cache()
 
 // Forward decl of the desktop-.txt logger defined in triggerbot_hook.cpp.
 // Every gate / dispatch site writes into the same file so a single grep-able
-// stream ends up in C:\Users\vldwd\Desktop\vanta_trigger.txt.
+// stream ends up in %USERPROFILE%\Desktop\vanta_trigger.txt.
 extern "C" void vanta_trigger_desktop_log(const char* fmt, ...);
 
 void run()
 {
     // Heartbeat every ~1 s so the user can see run() is even being reached.
-    // Writes to C:\Users\vldwd\Desktop\vanta_trigger.txt via the same file
+    // Writes to %USERPROFILE%\Desktop\vanta_trigger.txt via the same file
     // handle triggerbot_hook uses.
     {
         static unsigned long long s_next = 0;

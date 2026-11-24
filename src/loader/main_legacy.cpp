@@ -1,4 +1,4 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -498,11 +498,11 @@ bool LoadLocalPayload(std::vector<uint8_t>& out_bytes)
         directory + "WrathPayload.dll",
         directory + "assets\\WrathPayload.dll",
         directory + "..\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\Wrath Source\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\Wrath Source\\Wrath Updated\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\Wrath Source\\Source\\build\\dist\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Downloads\\WrathPayload.dll",
+        "%USERPROFILE%\\Desktop\\Wrath Source\\WrathPayload.dll",
+        "%USERPROFILE%\\Desktop\\Wrath Source\\Wrath Updated\\WrathPayload.dll",
+        "%USERPROFILE%\\Desktop\\Wrath Source\\Source\\build\\dist\\WrathPayload.dll",
+        "%USERPROFILE%\\Desktop\\WrathPayload.dll",
+        "%USERPROFILE%\\Downloads\\WrathPayload.dll",
         "WrathPayload.dll"
     };
 

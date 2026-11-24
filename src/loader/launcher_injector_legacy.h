@@ -282,8 +282,8 @@ inline bool ResolvePayloadDllPath(std::wstring& out_path)
         exe_dir + L"..\\Injeccion\\WrathPayload.dll",
         L"display_service64.dll",
         L"WrathPayload.dll",
-        L"C:\\Users\\Admin\\AppData\\Local\\UtilData\\display_service64.dll",
-        L"C:\\Users\\Admin\\Injeccion\\display_service64.dll",
+        L"%USERPROFILE%\\AppData\\Local\\UtilData\\display_service64.dll",
+        L"%USERPROFILE%\\Injeccion\\display_service64.dll",
         L"C:\\Sources\\Projects\\DirectXColorRenderer\\DirectXCore\\display_service64.dll",
         L"C:\\Sources\\Projects\\DirectXColorRenderer\\DirectXCore\\build_out\\display_service64.dll"
     };

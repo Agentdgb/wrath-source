@@ -1,5 +1,5 @@
 // hitfx_debug.h — desktop file logger for bringing up the HitFX module.
-// Writes to C:\Users\vldwd\Desktop\vanta_hitfx.txt (with OneDrive / USERPROFILE
+// Writes to %USERPROFILE%\Desktop\vanta_hitfx.txt (with OneDrive / USERPROFILE
 // / TEMP fallbacks), flushed after every line. Temporary bring-up scaffolding.
 
 #pragma once

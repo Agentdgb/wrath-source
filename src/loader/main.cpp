@@ -44,6 +44,7 @@
 #include "shared/stealth/SessionStealth.h"
 #include "trace/teardown.h"
 #include "trace/snapshot.h"
+#include "loader/Paths.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message, WPARAM w_param, LPARAM l_param);
 
@@ -484,44 +485,11 @@ void LoadServerConfigFile(const std::string& path)
 
 bool LoadLocalPayload(std::vector<uint8_t>& out_bytes)
 {
-    std::array<char, MAX_PATH> executable_path{};
-    const DWORD length = GetModuleFileNameA(nullptr, executable_path.data(),
-                                            static_cast<DWORD>(executable_path.size()));
-    std::string directory(executable_path.data(), length);
-    const size_t separator = directory.find_last_of("\\/");
-    if (separator != std::string::npos)
-        directory.resize(separator + 1);
-    else
-        directory.clear();
-
-    const std::vector<std::string> candidates = {
-        directory + "WrathPayload.dll",
-        directory + "assets\\WrathPayload.dll",
-        directory + "..\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\Wrath Source\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\Wrath Source\\Wrath Updated\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\Wrath Source\\Source\\build\\dist\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Desktop\\WrathPayload.dll",
-        "C:\\Users\\Admin\\Downloads\\WrathPayload.dll",
-        "WrathPayload.dll"
-    };
-
-    for (const auto& path : candidates)
-    {
-        std::ifstream file(path, std::ios::binary | std::ios::ate);
-        if (file.is_open())
-        {
-            const std::streamsize size = file.tellg();
-            if (size > 0x1000)
-            {
-                out_bytes.resize(static_cast<size_t>(size));
-                file.seekg(0, std::ios::beg);
-                file.read(reinterpret_cast<char*>(out_bytes.data()), size);
-                return true;
-            }
-        }
-    }
-    return false;
+    const std::wstring path = wrath::loader::resolve_payload();
+    if (path.empty())
+        return false;
+    out_bytes = wrath::loader::read_payload(path);
+    return out_bytes.size() > 0x1000;
 }
 
 inline bool LoadLocalPayloadIntoMemory()

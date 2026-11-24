@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cstring>
 
-#include "shared/stealth/StealthDefs.h"
+#include "loader/Paths.h"`n#include "shared/stealth/StealthDefs.h"
 #include "inject/map/ManualMap.h"
 #include "inject/NtInjector.h"
 #include "shared/diagnostics/SessionDiagnostics.h"
@@ -255,46 +255,8 @@ inline std::vector<MinecraftProcess> ScanMinecraftProcesses()
 
 inline bool ResolvePayloadDllPath(std::wstring& out_path)
 {
-    wchar_t exe_path[MAX_PATH]{};
-    GetModuleFileNameW(NULL, exe_path, MAX_PATH);
-    wchar_t* sep = wcsrchr(exe_path, L'\\');
-    std::wstring exe_dir;
-    if (sep)
-    {
-        exe_dir = std::wstring(exe_path, sep - exe_path + 1);
-    }
-
-    std::vector<std::wstring> candidates = {
-        exe_dir + L"display_service64.dll",
-        exe_dir + L"d3dcache.dll",
-        exe_dir + L"WrathPayload.dll",
-        exe_dir + L"assets\\WrathPayload.dll",
-        exe_dir + L"..\\WrathPayload.dll",
-        exe_dir + L"Source\\build\\dist\\WrathPayload.dll",
-        exe_dir + L"..\\Source\\build\\dist\\WrathPayload.dll",
-        L"WrathPayload.dll"
-    };
-
-    wchar_t userProfile[MAX_PATH]{};
-    if (GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) > 0)
-    {
-        std::wstring u(userProfile);
-        candidates.push_back(u + L"\\Desktop\\Wrath Source\\WrathPayload.dll");
-        candidates.push_back(u + L"\\Desktop\\Wrath Source\\Wrath Updated\\WrathPayload.dll");
-        candidates.push_back(u + L"\\Desktop\\Wrath Source\\Source\\build\\dist\\WrathPayload.dll");
-        candidates.push_back(u + L"\\Desktop\\WrathPayload.dll");
-        candidates.push_back(u + L"\\Downloads\\WrathPayload.dll");
-    }
-
-    for (const auto& c : candidates)
-    {
-        if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES)
-        {
-            out_path = c;
-            return true;
-        }
-    }
-    return false;
+    out_path = wrath::loader::resolve_payload();
+    return !out_path.empty();
 }
 
 // dll_override: if non-empty and the file exists it is used directly,

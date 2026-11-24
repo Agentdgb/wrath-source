@@ -51,8 +51,8 @@ namespace triggerbot_hook {
 // log_(fmt, ...) — writes to a plain .txt on the user's desktop.
 //
 // Where it lands is figured out at DLL load, in this order:
-//   1. C:\Users\vldwd\Desktop\vanta_trigger.txt   (classic Desktop)
-//   2. C:\Users\vldwd\OneDrive\Desktop\vanta_trigger.txt
+//   1. %USERPROFILE%\Desktop\vanta_trigger.txt   (classic Desktop)
+//   2. %USERPROFILE%\OneDrive\Desktop\vanta_trigger.txt
 //                                                (OneDrive-redirected Desktop —
 //                                                 this is why the file "wasn't
 //                                                 appearing" for the user)

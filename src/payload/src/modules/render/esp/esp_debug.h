@@ -1,5 +1,5 @@
 // esp_debug.h — desktop file logger for bringing up the Player ESP module.
-// Writes to C:\Users\vldwd\Desktop\vanta_esp.txt (OneDrive / USERPROFILE / TEMP
+// Writes to %USERPROFILE%\Desktop\vanta_esp.txt (OneDrive / USERPROFILE / TEMP
 // fallbacks), flushed after every line. Temporary bring-up scaffolding.
 
 #pragma once

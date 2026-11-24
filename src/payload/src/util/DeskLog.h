@@ -4,7 +4,7 @@
 // ---------------
 // src/modules/render/esp/esp_debug.cpp already does "write a log to the
 // Desktop", but it is hardcoded to one machine's path
-// ("C:\Users\vldwd\Desktop\vanta_esp.txt") and only falls back to
+// ("%USERPROFILE%\Desktop\vanta_esp.txt") and only falls back to
 // %USERPROFILE%\Desktop, which is WRONG on any machine where OneDrive has
 // redirected the Desktop folder — the file silently lands in %TEMP% and the
 // developer concludes the module never ran. This resolves the real Desktop
