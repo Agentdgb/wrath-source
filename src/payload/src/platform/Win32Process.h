@@ -18,6 +18,7 @@ HMODULE findJvmModule();
 HMODULE currentModule() noexcept;
 void    setCurrentModule(HMODULE m) noexcept;
 bool    isAddressInOurModule(const void* ptr) noexcept;
+bool    isRegisteredDll(HMODULE m) noexcept;
 
 std::wstring processExePath();
 std::wstring localAppDataDir(); // empty on failure; never a relative fallback

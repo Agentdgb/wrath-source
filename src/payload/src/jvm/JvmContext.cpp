@@ -3,6 +3,7 @@
 #include "platform/Win32Process.h"
 #include "core/UnloadSafety.h"
 #include "util/Log.h"
+#include "shared/strings/mc_names.h"
 
 #include <atomic>
 #include <chrono>
@@ -107,16 +108,17 @@ void init(JavaVM* vm) {
 void initFromRunningProcess() {
     HMODULE mod = vanta::platform::findJvmModule();
     if (!mod) {
-        VLOG_FATAL("jvm", "jvm.dll not present in target process");
+        VLOG_FATAL("jvm", "target runtime not present in process");
         return;
     }
-    auto p = reinterpret_cast<JNI_GetCreatedJavaVMs_t>(GetProcAddress(mod, "JNI_GetCreatedJavaVMs"));
+    auto jniProcName = wrath::strings::kJniGetCreatedJavaVMs.decrypt();
+    auto p = reinterpret_cast<JNI_GetCreatedJavaVMs_t>(GetProcAddress(mod, jniProcName.get()));
     if (!p) {
-        VLOG_FATAL("jvm", "jvm.dll missing JNI_GetCreatedJavaVMs export");
+        VLOG_FATAL("jvm", "target runtime missing export");
         return;
     }
 
-    VLOG_INFO("jvm", "jvm.dll found, calling JNI_GetCreatedJavaVMs");
+    VLOG_INFO("jvm", "target runtime found, initializing VM interface");
 
     JavaVM* vm    = nullptr;
     jsize   count = 0;

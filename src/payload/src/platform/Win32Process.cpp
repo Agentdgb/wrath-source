@@ -1,5 +1,6 @@
 #include "platform/Win32Process.h"
 #include "core/config/ProfileStorage.h"
+#include "shared/strings/mc_names.h"
 
 #include <psapi.h>
 #include <shlobj.h>
@@ -44,6 +45,18 @@ bool isAddressInOurModule(const void* ptr) noexcept {
     return (addr >= base && addr < base + (g_selfSize ? g_selfSize : 0x500000));
 }
 
+bool isRegisteredDll(HMODULE m) noexcept {
+    if (!m) return false;
+    HMODULE check = nullptr;
+    if (GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(m),
+            &check) && check == m) {
+        return true;
+    }
+    return false;
+}
+
 std::vector<ModuleInfo> enumProcessModules() {
     std::vector<ModuleInfo> out;
     HANDLE  proc = GetCurrentProcess();
@@ -63,10 +76,30 @@ std::vector<ModuleInfo> enumProcessModules() {
 }
 
 HMODULE findJvmModule() {
-    if (auto h = GetModuleHandleW(L"jvm.dll")) return h;
-    for (auto& m : enumProcessModules()) {
-        const wchar_t* leaf = PathFindFileNameW(m.path.c_str());
-        if (leaf && _wcsicmp(leaf, L"jvm.dll") == 0) return m.handle;
+    HANDLE proc = GetCurrentProcess();
+    HMODULE modsStack[1024];
+    DWORD needed = 0;
+
+    if (!EnumProcessModulesEx(proc, modsStack, sizeof(modsStack), &needed, LIST_MODULES_ALL)) {
+        return nullptr;
+    }
+
+    HMODULE* pMods = modsStack;
+    std::vector<HMODULE> modsHeap;
+    if (needed > sizeof(modsStack)) {
+        modsHeap.resize(needed / sizeof(HMODULE));
+        if (EnumProcessModulesEx(proc, modsHeap.data(), static_cast<DWORD>(modsHeap.size() * sizeof(HMODULE)), &needed, LIST_MODULES_ALL)) {
+            pMods = modsHeap.data();
+        }
+    }
+
+    auto jniProcName = wrath::strings::kJniGetCreatedJavaVMs.decrypt();
+    const DWORD count = needed / sizeof(HMODULE);
+    for (DWORD i = 0; i < count; ++i) {
+        if (!pMods[i]) continue;
+        if (GetProcAddress(pMods[i], jniProcName.get()) != nullptr) {
+            return pMods[i];
+        }
     }
     return nullptr;
 }

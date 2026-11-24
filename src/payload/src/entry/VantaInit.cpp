@@ -5,7 +5,7 @@
 
 #include <windows.h>
 
-extern "C" __declspec(dllexport) void WrathBootstrap(void* imageBase) {
+extern "C" void WrathBootstrap(void* imageBase) {
     if (imageBase) {
         vanta::platform::setCurrentModule(reinterpret_cast<HMODULE>(imageBase));
     }
@@ -17,7 +17,7 @@ extern "C" __declspec(dllexport) void WrathBootstrap(void* imageBase) {
     });
 }
 
-extern "C" __declspec(dllexport) void WrathShutdown() {
+extern "C" void WrathShutdown() {
     JavaVM* vm = vanta::jvm::ctx().vm.load(std::memory_order_relaxed);
     JNIEnv* env = nullptr;
     if (vm) {
