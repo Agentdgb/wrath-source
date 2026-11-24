@@ -1,26 +1,8 @@
-# Intermediate build artifacts
-wrath/build/
-build/
-/Backups/
-/Injeccion/Server/.env
-/Injeccion/Server/*.key
-/Injeccion/Server/*.db
-/Injeccion/imgui.ini
-/Injeccion/assets/loader_auth.ini
-*.obj
-*.tlog
-*.idb
-*.ipdb
-*.iobj
-*.res
-
-# Visual Studio cache
+build*/
+dist/
+Injeccion/
 .vs/
 *.user
 *.suo
 *.VC.db
-*.opendb
-
-# Python cache
-__pycache__/
-*.pyc
+CMakeUserPresets.json
