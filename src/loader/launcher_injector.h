@@ -454,7 +454,8 @@ inline bool InjectPayloadFromMemoryIntoProcess(
     const std::string& hwid = "",
     const std::string& session_token = "",
     const std::string& session_id = "",
-    const std::string& client_nonce = "")
+    const std::string& client_nonce = "",
+    const wrath::inject::Options& options = {})
 {
     if (IsWrathLoadedInProcess(pid))
     {
@@ -509,9 +510,8 @@ inline bool InjectPayloadFromMemoryIntoProcess(
         if (hSection) CloseHandle(hSection);
         return false;
     }
-    wrath::inject::Options opts;
     auto res = wrath::inject::inject(
-        hProc, pid, std::span<const uint8_t>(dll_bytes.data(), dll_bytes.size()), opts);
+        hProc, pid, std::span<const uint8_t>(dll_bytes.data(), dll_bytes.size()), options);
     CloseHandle(hProc);
 
     out_status = res.detail;

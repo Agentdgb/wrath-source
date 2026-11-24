@@ -66,6 +66,27 @@ Result inject(HANDLE hProc, DWORD pid, std::span<const uint8_t> payload,
         return result;
     }
 
+    if (options.strategy != Strategy::Auto) {
+        for (const auto& e : kTable) {
+            if (e.strategy == options.strategy) {
+                Attempt a;
+                a.strategy = e.strategy;
+                auto t0 = std::chrono::steady_clock::now();
+                bool ok = e.fn(hProc, pid, payload, options, result);
+                a.ok = ok;
+                a.detail = result.detail;
+                a.elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - t0).count();
+                result.attempts.push_back(a);
+                result.ok = ok;
+                result.chosen = e.strategy;
+                return result;
+            }
+        }
+        result.detail = L"inject: estrategia solicitada no disponible.";
+        return result;
+    }
+
     for (const auto& e : kTable) {
         Attempt a;
         a.strategy = e.strategy;
