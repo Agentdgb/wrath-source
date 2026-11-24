@@ -7,3 +7,5 @@ build*/
 CMakeUserPresets.json
 dist/
 Injeccion/
+
+Backups/*.tar.gz
