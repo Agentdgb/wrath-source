@@ -308,7 +308,89 @@ private:
 };
 
 // Inyección por Manual Mapping directo desde un buffer en memoria RAM
-inline bool ManualMapInMemory(HANDLE hProcess, const uint8_t* dll_bytes, size_t dll_size, std::wstring& out_status)
+// Bug 47: emit the bootstrap stub as an exact byte range. A sentinel placed
+// immediately after RemoteStub lets us measure its real size; we copy only
+// those bytes (no fixed 0x1000 range, no over-read).
+__declspec(noinline) inline void WINAPI RemoteStubSentinel() {}
+
+inline std::vector<BYTE> build_bootstrap_shellcode() {
+    const BYTE* begin = reinterpret_cast<const BYTE*>(&RemoteLoaderStub);
+    const BYTE* end = reinterpret_cast<const BYTE*>(&RemoteStubSentinel);
+    if (end <= begin) return {};
+    size_t n = static_cast<size_t>(end - begin);
+    if (n == 0 || n > 0x1000) n = 0x1000; // bound: stub must stay small
+    return std::vector<BYTE>(begin, begin + n);
+}
+
+// Self-contained remote PEB/EAT resolution (bug 46). Reads the target's own
+// module list and export table; no loader-local GetProcAddress is used for the
+// bootstrap stub.
+inline PVOID ManualMapFindRemoteModule(HANDLE hProc, const wchar_t* name) {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return nullptr;
+    using QIP = LONG(NTAPI*)(HANDLE, DWORD, PVOID, ULONG, PULONG);
+    auto qip = reinterpret_cast<QIP>(GetProcAddress(ntdll, "NtQueryInformationProcess"));
+    if (!qip) return nullptr;
+    struct PBI { PVOID r1; PVOID peb; PVOID r2[2]; ULONG_PTR pid; PVOID r3; } pbi{};
+    ULONG len = 0;
+    if (qip(hProc, 0, &pbi, sizeof(pbi), &len) < 0 || !pbi.peb) return nullptr;
+    PVOID ldr = nullptr;
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(pbi.peb) + 0x18, &ldr, sizeof(ldr), nullptr) || !ldr)
+        return nullptr;
+    struct LDR { LIST_ENTRY in_load, in_mem, in_init; };
+    LDR l{};
+    if (!ReadProcessMemory(hProc, ldr, &l, sizeof(l), nullptr)) return nullptr;
+    LIST_ENTRY* head = reinterpret_cast<LIST_ENTRY*>(reinterpret_cast<BYTE*>(ldr) + offsetof(LDR, in_load));
+    LIST_ENTRY* cur = l.in_load.Flink;
+    PVOID result = nullptr;
+    for (int i = 0; i < 256 && cur && cur != head; ++i) {
+        BYTE* entry = reinterpret_cast<BYTE*>(cur);
+        // LDR_DATA_TABLE_ENTRY: links(3*16) + DllBase + EntryPoint + SizeOfImage + FullName
+        PVOID base = nullptr; USHORT nlen = 0; PWSTR nbuf = nullptr;
+        ReadProcessMemory(hProc, entry + 48, &base, sizeof(base), nullptr);
+        ReadProcessMemory(hProc, entry + 60, &nlen, sizeof(nlen), nullptr);
+        ReadProcessMemory(hProc, entry + 64, &nbuf, sizeof(nbuf), nullptr);
+        if (nbuf && nlen > 0 && nlen <= 8192) {
+            std::wstring mod(nlen / sizeof(wchar_t), L'\0');
+            if (ReadProcessMemory(hProc, nbuf, mod.data(), nlen, nullptr)) {
+                if (_wcsicmp(mod.c_str(), name) == 0) { result = base; break; }
+            }
+        }
+        LIST_ENTRY next{};
+        if (!ReadProcessMemory(hProc, entry, &next, sizeof(next), nullptr)) break;
+        cur = next.Flink;
+    }
+    return result;
+}
+
+inline PVOID ManualMapFindRemoteExport(HANDLE hProc, PVOID base, const char* name) {
+    IMAGE_DOS_HEADER dos{};
+    if (!ReadProcessMemory(hProc, base, &dos, sizeof(dos), nullptr) || dos.e_magic != IMAGE_DOS_SIGNATURE)
+        return nullptr;
+    IMAGE_NT_HEADERS nt{};
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + dos.e_lfanew, &nt, sizeof(nt), nullptr) ||
+        nt.Signature != IMAGE_NT_SIGNATURE) return nullptr;
+    IMAGE_EXPORT_DIRECTORY exp{};
+    DWORD rva = nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (!rva || !ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + rva, &exp, sizeof(exp), nullptr))
+        return nullptr;
+    std::vector<DWORD> names(exp.NumberOfNames), funcs(exp.NumberOfFunctions);
+    std::vector<WORD> ords(exp.NumberOfNames);
+    if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + exp.AddressOfNames, names.data(), names.size()*4, nullptr) ||
+        !ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + exp.AddressOfNameOrdinals, ords.data(), ords.size()*2, nullptr) ||
+        !ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + exp.AddressOfFunctions, funcs.data(), funcs.size()*4, nullptr))
+        return nullptr;
+    for (DWORD i = 0; i < exp.NumberOfNames; ++i) {
+        char buf[128]{};
+        if (!ReadProcessMemory(hProc, reinterpret_cast<BYTE*>(base) + names[i], buf, sizeof(buf)-1, nullptr)) continue;
+        if (std::strcmp(buf, name) == 0 && ords[i] < exp.NumberOfFunctions)
+            return reinterpret_cast<BYTE*>(base) + funcs[ords[i]];
+    }
+    return nullptr;
+}
+
+inline bool ManualMapInMemory(HANDLE hProcess, const uint8_t* dll_bytes, size_t dll_size,
+                              std::wstring& out_status, bool do_wipe = true)
 {
     if (!dll_bytes || dll_size < sizeof(IMAGE_DOS_HEADER))
     {
@@ -398,13 +480,27 @@ inline bool ManualMapInMemory(HANDLE hProcess, const uint8_t* dll_bytes, size_t 
             target_base + nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
     }
 
-    HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
-    mapping_data.load_library_a = reinterpret_cast<ManualMappingData::fnLoadLibraryA>(GetProcAddress(hKernel32, "LoadLibraryA"));
-    mapping_data.get_proc_address = reinterpret_cast<ManualMappingData::fnGetProcAddress>(GetProcAddress(hKernel32, "GetProcAddress"));
-    mapping_data.rtl_add_function_table = reinterpret_cast<ManualMappingData::fnRtlAddFunctionTable>(GetProcAddress(hKernel32, "RtlAddFunctionTable"));
+    // Bug 46: resolve the import APIs INSIDE the target process, never from
+    // the loader's local kernel32. Self-contained helpers below walk the
+    // target PEB and its EAT by name (no dependency on the deleted NtInjector
+    // helpers). If resolution fails, the mapping cannot continue.
+    PVOID remote_k32 = ManualMapFindRemoteModule(hProcess, L"kernel32.dll");
+    if (!remote_k32)
+        out_status = L"No se pudo localizar kernel32.dll en el proceso objetivo.";
+    if (remote_k32)
+    {
+        mapping_data.load_library_a = reinterpret_cast<ManualMappingData::fnLoadLibraryA>(
+            ManualMapFindRemoteExport(hProcess, remote_k32, "LoadLibraryW"));
+        mapping_data.get_proc_address = reinterpret_cast<ManualMappingData::fnGetProcAddress>(
+            ManualMapFindRemoteExport(hProcess, remote_k32, "GetProcAddress"));
+        mapping_data.rtl_add_function_table = reinterpret_cast<ManualMappingData::fnRtlAddFunctionTable>(
+            ManualMapFindRemoteExport(hProcess, remote_k32, "RtlAddFunctionTable"));
+    }
 
     // 5. Reservar memoria remota para la estructura y la función bootstrap stub (RAII)
-    const size_t stub_size = 0x1000;
+    // Bug 47: emitir los bytes reales del stub (sin rango fijo de 0x1000).
+    std::vector<BYTE> stub_bytes = build_bootstrap_shellcode();
+    const size_t stub_size = stub_bytes.size();
     ScopedRemoteMemory stub_mem(
         hProcess, nullptr, sizeof(ManualMappingData) + stub_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 
@@ -417,7 +513,7 @@ inline bool ManualMapInMemory(HANDLE hProcess, const uint8_t* dll_bytes, size_t 
     BYTE* remote_stub = stub_mem.Get();
     BYTE* remote_data = remote_stub + stub_size;
     WriteProcessMemory(hProcess, remote_data, &mapping_data, sizeof(ManualMappingData), nullptr);
-    WriteProcessMemory(hProcess, remote_stub, reinterpret_cast<LPCVOID>(&RemoteLoaderStub), stub_size, nullptr);
+    WriteProcessMemory(hProcess, remote_stub, stub_bytes.data(), stub_bytes.size(), nullptr);
 
     // 6. Ejecutar RemoteLoaderStub con NtCreateThreadEx protegido con ScopedHandle RAII
     ScopedHandle thread_handle;
@@ -493,7 +589,20 @@ inline bool ManualMapInMemory(HANDLE hProcess, const uint8_t* dll_bytes, size_t 
     DWORD old_hdr_prot = 0;
     VirtualProtectEx(hProcess, target_base, nt_headers->OptionalHeader.SizeOfHeaders, PAGE_READONLY, &old_hdr_prot);
 
-    // 10. Limpiar la shellcode de bootstrap y liberarla
+    // 10. Bug 48: wipe PE headers at the end, gated by Options::wipe_headers.
+    if (do_wipe)
+    {
+        DWORD old_prot = 0;
+        const DWORD hdr_sz = nt_headers->OptionalHeader.SizeOfHeaders;
+        if (VirtualProtectEx(hProcess, target_base, hdr_sz, PAGE_READWRITE, &old_prot))
+        {
+            std::vector<BYTE> hdr_zero(hdr_sz, 0);
+            WriteProcessMemory(hProcess, target_base, hdr_zero.data(), hdr_sz, nullptr);
+            VirtualProtectEx(hProcess, target_base, hdr_sz, PAGE_READONLY, &old_prot);
+        }
+    }
+
+    // 11. Limpiar la shellcode de bootstrap y liberarla
     std::vector<BYTE> zeroes(stub_size + sizeof(ManualMappingData), 0);
     WriteProcessMemory(hProcess, remote_stub, zeroes.data(), zeroes.size(), nullptr);
     stub_mem.Release();
