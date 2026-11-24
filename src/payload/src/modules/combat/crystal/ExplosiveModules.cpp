@@ -976,7 +976,7 @@ protected:
         aimPlanSeq=~0u; aimCheck=0;
         // Slot restoration remains owned by the normal idle tick callback.
         silentaim::release_action_rotation(this);
-        setStatus("Anchor out of reach: choosing a new target");
+        setStatus("Anchor beyond range: choosing a new target");
         if(actionLog()) VLOG_INFO("explosives","{}: released distant anchor at {}",name(),at(b));
     }
     std::optional<Placement> chooseAnchorSpot(jobject world,jobject player,Vec eye,double reach,jobject target) {
@@ -1477,7 +1477,7 @@ protected:
                 auto target=a.call<>(hit,"net/minecraft/class_3966","method_17782","()Lnet/minecraft/class_1297;");
                 if(!a.e->IsSameObject(crystalRef,target)) { idle("Look at the crystal"); return; }
             }
-            if(native::distance2(eye,hitPoint(crystalRef,eye))>attackRange*attackRange) { idle("Crystal out of reach"); return; }
+            if(native::distance2(eye,hitPoint(crystalRef,eye))>attackRange*attackRange) { idle("Crystal beyond range"); return; }
             // The crystal stands on the block under it; that base takes the next
             // crystal on the NEXT tick, from the same aim, when everything lines up.
             const Vec pos=native::position(a,crystalRef);
@@ -1653,7 +1653,7 @@ protected:
                     if(!shieldPending && (!reserveAllows(inv,eye,2) ||
                        (!reserveAllows(inv,eye,1,
                            (shieldSlot(inv)>=0 && isGlowstone(item(inv,shieldSlot(inv))))?2:1)))) {
-                        idle("Material reserve reached: waiting for refill or target");
+                        idle("Material reserve full: waiting for refill or target");
                         return;
                     }
                     if(shieldPending) {
@@ -1696,7 +1696,7 @@ protected:
                                 if(!shieldAimFail) { shieldAimFail=now; return; }
                                 if(now-shieldAimFail<300) return;
                                 shieldBlocked=true; shieldAimFail=0; shieldUntil=now+static_cast<ULONGLONG>(kRetryDelay);
-                                idle("Shield support not reachable"); return;
+                                idle("Shield support unavailable"); return;
                             }
                         }
                     }
@@ -1709,7 +1709,7 @@ protected:
                 if(offhandGlowstone(player)) { idle("Remove glowstone from offhand"); return; }
             }
             if(count==0 && !reserveAllows(inv,eye,1)) {
-                idle("Glowstone reserve reached: waiting for refill or target");
+                idle("Glowstone reserve full: waiting for refill or target");
                 return;
             }
             // shouldCancelInteraction: sneaking skips the block's onUse entirely.
@@ -1742,7 +1742,7 @@ protected:
         // `next` before interacting, so rotation and cooldown can overlap.
         const int slot=findSlot(inv,".respawn_anchor"); if(slot<0) { idle("No anchors in hotbar"); return; }
         if(!canStartAnchor(inv,eye)) {
-            idle(combatTargetInRange(eye)?"Material reserve reached":"Waiting for target in range");
+            idle(combatTargetInRange(eye)?"Material reserve full":"Waiting for target in range");
             return;
         }
         if(safe && swap.value()) {

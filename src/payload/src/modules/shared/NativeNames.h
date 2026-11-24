@@ -13,7 +13,7 @@ inline const std::unordered_map<std::string,std::string> names{
     {"field_8547","TRIDENT"},
     {"method_1434","isPressed"},
     {"method_1493","isPaused"},
-    {"method_18798","getVelocity"},
+    {"method_18798","method_18798"},
     {"method_31573","isIn"},
     {"method_31574","isOf"},
     {"method_33571","getEyePos"},

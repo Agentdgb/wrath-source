@@ -5,11 +5,12 @@
 #include "antibot/antibot.h"
 #include "vgui/bridge.h"
 #include "util/Log.h"
+#include "util/XorStr.h"
 #include <atomic>
 #include <chrono>
 
 namespace vanta::modules {
-class AimAssist final : public Module {
+class MotionTuner final : public Module {
     aimassist::simple::Engine simpleEngine;
     aimassist::wind::Engine windEngine;
     std::atomic<const char *> state{"Disabled"};
@@ -182,8 +183,8 @@ class AimAssist final : public Module {
     }
 
   public:
-    AimAssist()
-        : Module("AimAssist", "Readable Aim Fabric controller port with manual mouse priority", Category::Combat) {
+    MotionTuner()
+        : Module(XOR_STR("AimAssist"), XOR_STR("Readable Aim Fabric controller port with manual mouse priority"), Category::Combat) {
         for (Setting *setting : std::initializer_list<Setting *>{
                  &mode, &windVertical, &windCheckBlock,
                  &windHorizontalSpeed, &windVerticalSpeed, &windAngle, &windDistance,
@@ -279,4 +280,4 @@ class AimAssist final : public Module {
     std::string displayInfo() const override { return state.load(); }
 };
 } // namespace vanta::modules
-VANTA_REGISTER_MODULE(vanta::modules::AimAssist)
+VANTA_REGISTER_MODULE(vanta::modules::MotionTuner)

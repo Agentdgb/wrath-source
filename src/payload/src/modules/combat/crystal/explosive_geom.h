@@ -120,6 +120,7 @@ inline bool isAnchorItem(const std::string& k) {
 // Any: a full solid block item.
 inline bool isFullBlock(const std::string& k) {
     if (!blockItem(k) || isAnchorItem(k) || k.ends_with(".air")) return false;
+    if (k.ends_with("olding") && k.find(".scaff") != std::string::npos) return false;
     for (const char* s : {".glowstone", ".obsidian", ".crying_obsidian", ".cobblestone", ".stone",
                           ".deepslate", ".cobbled_deepslate", ".netherrack", ".end_stone", "_planks",
                           ".dirt", ".sand"}) {
@@ -129,7 +130,7 @@ inline bool isFullBlock(const std::string& k) {
                           "_trapdoor", "_button", "_pressure_plate", "_sign", "_torch", "_carpet",
                           "_pane", "_bed", "_banner", "_sapling", "_flower", "_pot", "_rail",
                           "_ladder", "_vine", "_bars", "_chain", "_lantern", "_lever", "_candle",
-                          "_head", "_skull", "_glass", ".scaffolding", ".cobweb", ".snow",
+                          "_head", "_skull", "_glass", ".cobweb", ".snow",
                           ".water", ".lava", "_leaves", ".bell", ".anvil", ".chest", ".hopper",
                           ".cauldron", ".composter", ".grindstone", ".lectern", ".enchanting_table",
                           ".end_rod", ".lightning_rod", "_coral", "_fan", ".bamboo", ".cactus",

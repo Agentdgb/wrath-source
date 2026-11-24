@@ -138,13 +138,13 @@ void ModuleManager::loadAll(const nlohmann::json& j) {
                     if (legacy != settings_obj.end() && legacy->is_number())
                         s->load(legacy->get<double>() / 1000.0);
                 }
-                if (sit == settings_obj.end() && m->name() == "Hit Assist" && s->name() == "WaitForCrit") {
+                if (sit == settings_obj.end() && (m->name() == XOR_STR("Hit Assist") || m->name() == XOR_STR("TriggerBot")) && s->name() == XOR_STR("WaitForCrit")) {
                     const auto recent = settings_obj.find("Attack mode");
                     if (recent != settings_obj.end() && recent->is_string())
                         s->load(recent->get<std::string>() == "Prioritize criticals");
                 }
                 if (sit != settings_obj.end()) {
-                    if (m->name() == "AimAssist" && s->name() == "Focus mode" && sit->is_string())
+                    if (m->name() == XOR_STR("AimAssist") && s->name() == "Focus mode" && sit->is_string())
                         s->load(sit->get<std::string>() != "Off");
                     else
                         s->load(*sit);

@@ -19,25 +19,22 @@
 #include "core/module/Module.h"
 #include "jvm/JvmContext.h"
 #include "util/Log.h"
+#include "util/XorStr.h"
 #include "vgui/bridge.h"   // isOverlayVisible — stand down while the panel is up
 
 #include "triggerbot.h"
 #include "triggerbot_hook.h"
 #include "modules/render/targetesp/target_attack.h"
 
-// Forward decl of the desktop-.txt logger defined in triggerbot_hook.cpp.
-// Used to trace ClickGui-driven onEnable/onDisable so we can tell whether
-// the user's toggle is actually reaching this module.
-extern "C" void vanta_trigger_desktop_log(const char* fmt, ...);
+#define vanta_trigger_desktop_log(...) ((void)0)
 
 namespace vanta::modules {
 
-class TriggerBot : public Module {
+class ActionDispatch : public Module {
 public:
-    TriggerBot() : Module("Hit Assist",
-                          "Hits whatever your crosshair lands on",
-                          Category::Combat) {
-        vanta_trigger_desktop_log("MOD: TriggerBot ctor — module registered under name=\"TriggerBot\" cat=Combat");
+    ActionDispatch() : Module(XOR_STR("TriggerBot"),
+                              XOR_STR("Hits whatever your crosshair lands on"),
+                              Category::Combat) {
         registerSetting(&cooldownThreshold_);
         registerSetting(&randomizeCooldown_);
         randomizeCooldown_.setLabel("Randomization");
@@ -184,6 +181,6 @@ private:
     BoolSetting  focusDistance_     {this, "Focus Distance", true};
 };
 
-VANTA_REGISTER_MODULE(TriggerBot);
+VANTA_REGISTER_MODULE(ActionDispatch);
 
 } // namespace vanta::modules

@@ -1,6 +1,6 @@
 #include "../../includes.hh"
-
 #include "../../bridge.h"
+#include "util/XorStr.h"
 
 namespace vanta
 {
@@ -91,7 +91,7 @@ namespace vanta
 
 		/* --- combat --- */
 		{
-			auto auto_clicker = add("ClickAssist", "Automatically clicks when holding down attack button", "Combat");
+			auto auto_clicker = add(XOR_STR("ClickAssist"), XOR_STR("Automatically triggers when holding down attack button"), XOR_STR("Combat"));
 			auto_clicker->set_enabled(true)->set_keybind("R")
 				->add_setting(slider("Left CPS", 1.0, 20.0, 14.5, 0.5, ""))
 				->add_setting(slider("Right CPS", 1.0, 20.0, 12.0, 0.5, ""))
@@ -100,22 +100,22 @@ namespace vanta
 				->add_setting(boolean("Inventory Fill", false))
 				->add_setting(mode("Mode", { "Hold", "Toggle", "Dynamic" }, 0));
 
-			add("TargetGuide", "Smoothly guides crosshair towards target players", "Combat")
+			add(XOR_STR("TargetGuide"), XOR_STR("Smoothly guides crosshair towards target players"), XOR_STR("Combat"))
 				->add_setting(slider("Speed", 1.0, 10.0, 4.5, 0.5, ""))
 				->add_setting(slider("Range", 2.0, 6.0, 4.2, 0.1, "m"))
 				->add_setting(boolean("Click Aim", true))
 				->add_setting(mode("Target", { "Players", "Mobs", "All" }, 0));
 
-			add("Reach", "Extends attack reach distance", "Combat")
-				->add_setting(slider("Reach Distance", 3.0, 5.0, 3.8, 0.05, "m"))
+			add(XOR_STR("Reach"), XOR_STR("Extends attack interaction distance"), XOR_STR("Combat"))
+				->add_setting(slider(XOR_STR("Reach Distance"), 3.0, 5.0, 3.8, 0.05, "m"))
 				->add_setting(boolean("Only While Moving", true));
 
-			add("Velocity", "Reduces horizontal and vertical knockback taken", "Combat")
+			add(XOR_STR("Velocity"), XOR_STR("Reduces horizontal and vertical knockback taken"), XOR_STR("Combat"))
 				->add_setting(slider("Horizontal", 0.0, 100.0, 90.0, 1.0, "%"))
 				->add_setting(slider("Vertical", 0.0, 100.0, 100.0, 1.0, "%"))
 				->add_setting(slider("Chance", 0.0, 100.0, 100.0, 1.0, "%"));
 
-			add("HitArea", "Expands player hitbox boundaries for easier hits", "Combat")
+			add(XOR_STR("HitArea"), XOR_STR("Expands player collision boundaries for easier hits"), XOR_STR("Combat"))
 				->add_setting(slider("Expand Size", 0.1, 1.0, 0.35, 0.05, "m"));
 		}
 

@@ -8,6 +8,7 @@
 #include "core/event/Events.h"
 #include "core/module/Module.h"
 #include "util/Log.h"
+#include "util/XorStr.h"
 #include "vgui/bridge.h"   // isOverlayVisible — stand down while the panel is up
 
 #include "silentaim.h"
@@ -17,8 +18,8 @@ namespace vanta::modules {
 
 class SilentAim : public Module {
 public:
-    SilentAim() : Module("Rotation Assist",
-                         "Aims on the server, not on your screen",
+    SilentAim() : Module(XOR_STR("Rotation Assist"),
+                         XOR_STR("Aims on the server, not on your screen"),
                          Category::Combat) {
         registerSetting(&targets_);
         registerSetting(&fov_);
@@ -94,7 +95,7 @@ private:
 
     // Vape's "Extra swing distance": how far PAST the 3.0 base reach the aura
     // will engage a target before attacking becomes possible.
-    FloatSetting extraReach_{this, "Extra Reach", 0.0f, 0.0f, 3.0f};
+    FloatSetting extraReach_{this, XOR_STR("Extra Reach"), 0.0f, 0.0f, 3.0f};
 };
 
 VANTA_REGISTER_MODULE(SilentAim);
