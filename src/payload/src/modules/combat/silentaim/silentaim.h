@@ -28,7 +28,7 @@
 // executes the original on this host. When the probe fails the module keeps
 // working with Rotation=Client and says so in the log. See silentaim.cpp.
 //
-// Everything else runs from Vanta's GameLoopEvent, which is pumped from the
+// Everything else runs from Dt's GameLoopEvent, which is pumped from the
 // wglSwapBuffers detour — in 1.21 that thread IS the game-loop thread, so the
 // JNI work lands on the game thread with no bytecode transform anywhere.
 //
@@ -46,7 +46,7 @@
 #include <atomic>
 #include <functional>
 
-namespace vanta::modules::silentaim {
+namespace dt::modules::silentaim {
 
 // What the aura is allowed to lock onto.
 enum class Targets : int {
@@ -190,7 +190,7 @@ struct jni_cache {
 // of how the motion reads as a hand, not things to tune per-fight.
 struct settings {
     inline static std::atomic<bool> enabled       { false };
-    inline static std::atomic<bool> overlay_open  { false };   // Vanta ClickGui up
+    inline static std::atomic<bool> overlay_open  { false };   // Dt ClickGui up
 
     inline static std::atomic<int>  targets       { 0 };       // Targets
 
@@ -403,4 +403,4 @@ bool attack_would_be_unjustified();
 
 inline std::atomic<bool> g_shutting_down{ false };
 
-} // namespace vanta::modules::silentaim
+} // namespace dt::modules::silentaim

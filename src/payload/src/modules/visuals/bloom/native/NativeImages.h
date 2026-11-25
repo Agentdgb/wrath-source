@@ -1,6 +1,6 @@
 #pragma once
 #include "../BloomCompat.h"
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 namespace palette {
 extern int W;
 extern int H;
@@ -586,4 +586,4 @@ extern int H;
 extern Array<int> b;
 Array<int> a();
 } // namespace slice
-} // namespace vanta::modules::bloom
+} // namespace dt::modules::bloom

@@ -1,6 +1,6 @@
 #pragma once
 #include <cmath>
-namespace vanta {
+namespace dt {
 inline int numericDecimalPlaces(double step) {
     if (!std::isfinite(step) || step<=0) return 1;
     int places = 0;

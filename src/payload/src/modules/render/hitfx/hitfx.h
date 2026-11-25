@@ -13,7 +13,7 @@
 
 #include <functional>
 
-namespace vanta::modules::hitfx {
+namespace dt::modules::hitfx {
 
 extern bool g_enabled;
 
@@ -44,4 +44,4 @@ void shutdown();
 // new hits, advances + projects + draws all live particles. No-op when disabled.
 void render_text(int display_w, int display_h);
 
-} // namespace vanta::modules::hitfx
+} // namespace dt::modules::hitfx

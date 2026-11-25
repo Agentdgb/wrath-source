@@ -6,9 +6,9 @@
 #include "modules/render/chams/item_shader_gl.h"
 #include "modules/render/chams/item_shader_hook.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
-namespace cgl = ::vanta::modules::itemshader;
+namespace cgl = ::dt::modules::itemshader;
 
 class ItemShader : public Module {
 public:
@@ -43,6 +43,6 @@ public:
 
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::ItemShader)
+DT_REGISTER_MODULE(dt::modules::ItemShader)

@@ -23,7 +23,7 @@
 
 #pragma once
 
-namespace vanta::modules::chams::crash {
+namespace dt::modules::chams::crash {
 
 // Idempotent. Safe to call before anything else is installed.
 void install();
@@ -34,7 +34,7 @@ void shutdown();
 // atomic store, so it is affordable on a per-frame path but NOT per draw call.
 void mark(const char* where);
 
-} // namespace vanta::modules::chams::crash
+} // namespace dt::modules::chams::crash
 
 // Per-frame breadcrumb. Compiles to a single relaxed store.
-#define CHAMS_MARK(where) ::vanta::modules::chams::crash::mark(where)
+#define CHAMS_MARK(where) ::dt::modules::chams::crash::mark(where)

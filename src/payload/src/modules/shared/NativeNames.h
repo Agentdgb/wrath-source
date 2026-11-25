@@ -2,7 +2,7 @@
 // Generated from cached Yarn 1.21.1/1.21.11 by tools/gen_native_names.py.
 #include <string>
 #include <unordered_map>
-namespace vanta::modules::native {
+namespace dt::modules::native {
 inline const std::unordered_map<std::string,std::string> names{
     {"field_1333","MISS"},
     {"field_17558","COLLIDER"},

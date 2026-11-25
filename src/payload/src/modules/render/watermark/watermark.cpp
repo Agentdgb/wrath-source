@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::watermark {
+namespace dt::modules::watermark {
 
 bool     g_enabled = false;
 settings g_settings{};
@@ -196,7 +196,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     const float logo_w = title_size * 1.80f + 5.f * dpi * g_settings.scale +
                          title_f->CalcTextSizeA(title_size, FLT_MAX, -1.f, "Nexus").x;
 
-    const std::string minecraft_user = vanta::profile::name();
+    const std::string minecraft_user = dt::profile::name();
     const char* user = minecraft_user.empty() ? "Player" : minecraft_user.c_str();
 
     const std::string session = format_session_time(elapsed_seconds());
@@ -382,7 +382,7 @@ void render_text(int display_w, int display_h)
 
     // Username — same muted tone as the version. Drawn INSIDE the font
     // texture push scope so the atlas is still active.
-    const std::string minecraft_user = vanta::profile::name();
+    const std::string minecraft_user = dt::profile::name();
     const char* user = minecraft_user.empty() ? "Player" : minecraft_user.c_str();
     const ImVec2 us = ver_f->CalcTextSizeA(ver_size, FLT_MAX, -1.f, user);
     const float sep_x  = ver_x + sep_gap;
@@ -410,7 +410,7 @@ void render_text(int display_w, int display_h)
     dl->PopTextureID();
 
     // Use the same vector logo texture as the GUI, tinted by the selected accent.
-    const unsigned long long logo_tex = vanta::vgui::bridge::iconTexture("logo", logo_px);
+    const unsigned long long logo_tex = dt::vgui::bridge::iconTexture("logo", logo_px);
     if (logo_tex) {
         const float logo_size = static_cast<float>(logo_px);
         dl->PushTextureID(static_cast<ImTextureID>(logo_tex));
@@ -461,5 +461,5 @@ void set_top_left(float x, float y)
     g_override_y = y;
 }
 
-} // namespace vanta::modules::watermark
+} // namespace dt::modules::watermark
 

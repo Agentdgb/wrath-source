@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace vanta::modules::chams::pose {
+namespace dt::modules::chams::pose {
 
 namespace {
 constexpr float kPi  = 3.14159265358979323846f;
@@ -227,4 +227,4 @@ void part_corners(const part_def& def, const part_pose& pose, float dilation,
     }
 }
 
-} // namespace vanta::modules::chams::pose
+} // namespace dt::modules::chams::pose

@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::appearance {
+namespace dt::appearance {
 enum class State { loading, ready, unavailable };
 struct CapeRecord { std::string id, firstSeen, lastSeen; bool active = false; };
 struct NameRecord { std::string name, changedAt; bool accurate = false; };
@@ -24,4 +24,4 @@ const std::string& selectedName();
 Snapshot get(const std::string& name, const std::string& uuid,
              const std::string& textures, bool detailsReady, const std::string& historyCape = {});
 void shutdown();
-} // namespace vanta::appearance
+} // namespace dt::appearance

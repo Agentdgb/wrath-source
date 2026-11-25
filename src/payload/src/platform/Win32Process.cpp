@@ -1,18 +1,72 @@
 #include "platform/Win32Process.h"
 #include "core/config/ProfileStorage.h"
-#include "shared/strings/mc_names.h"
 
-#include <psapi.h>
+#include <winternl.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <mutex>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 namespace {
 HMODULE            g_self  = nullptr;
 size_t             g_selfSize = 0;
 std::once_flag     g_selfOnce;
+
+struct LdrEntryFull {
+    LIST_ENTRY InLoadOrderLinks;
+    LIST_ENTRY InMemoryOrderLinks;
+    LIST_ENTRY InInitializationOrderLinks;
+    PVOID      DllBase;
+    PVOID      EntryPoint;
+    ULONG      SizeOfImage;
+    UNICODE_STRING FullDllName;
+    UNICODE_STRING BaseDllName;
+};
+
+struct PebLdrFull {
+    ULONG      Length;
+    BOOLEAN    Initialized;
+    PVOID      SsHandle;
+    LIST_ENTRY InLoadOrderModuleList;
+    LIST_ENTRY InMemoryOrderModuleList;
+    LIST_ENTRY InInitializationOrderModuleList;
+};
+
+struct PebFull {
+    BYTE       Reserved1[2];
+    BYTE       BeingDebugged;
+    BYTE       Reserved2[1];
+    PVOID      Reserved3[2];
+    PebLdrFull* Ldr;
+};
+
+consteval uint64_t fnv1aUpper(const wchar_t* s) noexcept {
+    uint64_t h = 14695981039346656037ULL;
+    for (size_t i = 0; s[i] != L'\0'; ++i) {
+        wchar_t c = s[i];
+        if (c >= L'a' && c <= L'z') c = static_cast<wchar_t>(c - L'a' + L'A');
+        h ^= static_cast<uint64_t>(c & 0xFFFFu);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+uint64_t hashUnicodeUpper(const UNICODE_STRING& u) noexcept {
+    uint64_t h = 14695981039346656037ULL;
+    if (!u.Buffer || u.Length == 0) return h;
+    const size_t count = u.Length / sizeof(wchar_t);
+    for (size_t i = 0; i < count; ++i) {
+        wchar_t c = u.Buffer[i];
+        if (c >= L'a' && c <= L'z') c = static_cast<wchar_t>(c - L'a' + L'A');
+        h ^= static_cast<uint64_t>(c & 0xFFFFu);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+constexpr uint64_t kJvmDllHash = fnv1aUpper(L"JVM.DLL");
+
 } // namespace
 
 void setCurrentModule(HMODULE m) noexcept {
@@ -59,46 +113,37 @@ bool isRegisteredDll(HMODULE m) noexcept {
 
 std::vector<ModuleInfo> enumProcessModules() {
     std::vector<ModuleInfo> out;
-    HANDLE  proc = GetCurrentProcess();
-    HMODULE mods[1024];
-    DWORD   needed = 0;
-    if (!EnumProcessModulesEx(proc, mods, sizeof(mods), &needed, LIST_MODULES_ALL)) return out;
-    DWORD n = needed / sizeof(HMODULE);
-    out.reserve(n);
-    for (DWORD i = 0; i < n; ++i) {
-        wchar_t buf[MAX_PATH];
-        if (GetModuleFileNameExW(proc, mods[i], buf, MAX_PATH) == 0) continue;
-        MODULEINFO mi{};
-        GetModuleInformation(proc, mods[i], &mi, sizeof(mi));
-        out.push_back({mods[i], buf, static_cast<std::uint8_t*>(mi.lpBaseOfDll), mi.SizeOfImage});
+    auto* peb = reinterpret_cast<const PebFull*>(NtCurrentTeb()->ProcessEnvironmentBlock);
+    if (!peb || !peb->Ldr) return out;
+
+    const LIST_ENTRY* head = &peb->Ldr->InMemoryOrderModuleList;
+    for (const LIST_ENTRY* cur = head->Flink; cur != head; cur = cur->Flink) {
+        const auto* entry = CONTAINING_RECORD(cur, LdrEntryFull, InMemoryOrderLinks);
+        if (!entry->DllBase) continue;
+        std::wstring fullPath;
+        if (entry->FullDllName.Buffer && entry->FullDllName.Length > 0) {
+            fullPath.assign(entry->FullDllName.Buffer, entry->FullDllName.Length / sizeof(wchar_t));
+        }
+        out.push_back({
+            static_cast<HMODULE>(entry->DllBase),
+            std::move(fullPath),
+            static_cast<std::uint8_t*>(entry->DllBase),
+            entry->SizeOfImage
+        });
     }
     return out;
 }
 
 HMODULE findJvmModule() {
-    HANDLE proc = GetCurrentProcess();
-    HMODULE modsStack[1024];
-    DWORD needed = 0;
+    auto* peb = reinterpret_cast<const PebFull*>(NtCurrentTeb()->ProcessEnvironmentBlock);
+    if (!peb || !peb->Ldr) return nullptr;
 
-    if (!EnumProcessModulesEx(proc, modsStack, sizeof(modsStack), &needed, LIST_MODULES_ALL)) {
-        return nullptr;
-    }
-
-    HMODULE* pMods = modsStack;
-    std::vector<HMODULE> modsHeap;
-    if (needed > sizeof(modsStack)) {
-        modsHeap.resize(needed / sizeof(HMODULE));
-        if (EnumProcessModulesEx(proc, modsHeap.data(), static_cast<DWORD>(modsHeap.size() * sizeof(HMODULE)), &needed, LIST_MODULES_ALL)) {
-            pMods = modsHeap.data();
-        }
-    }
-
-    auto jniProcName = wrath::strings::kJniGetCreatedJavaVMs.decrypt();
-    const DWORD count = needed / sizeof(HMODULE);
-    for (DWORD i = 0; i < count; ++i) {
-        if (!pMods[i]) continue;
-        if (GetProcAddress(pMods[i], jniProcName.get()) != nullptr) {
-            return pMods[i];
+    const LIST_ENTRY* head = &peb->Ldr->InMemoryOrderModuleList;
+    for (const LIST_ENTRY* cur = head->Flink; cur != head; cur = cur->Flink) {
+        const auto* entry = CONTAINING_RECORD(cur, LdrEntryFull, InMemoryOrderLinks);
+        if (!entry->DllBase) continue;
+        if (hashUnicodeUpper(entry->BaseDllName) == kJvmDllHash) {
+            return static_cast<HMODULE>(entry->DllBase);
         }
     }
     return nullptr;
@@ -156,4 +201,4 @@ std::wstring logDir() {
 #endif
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

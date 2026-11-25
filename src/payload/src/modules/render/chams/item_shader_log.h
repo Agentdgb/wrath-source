@@ -13,20 +13,20 @@
 
 #include "util/DeskLog.h"
 
-namespace vanta::modules::itemshader {
+namespace dt::modules::itemshader {
 
-inline ::vanta::desklog::Channel log_ch() {
-    static ::vanta::desklog::Channel ch = ::vanta::desklog::open("gl_shader_trace");
+inline ::dt::desklog::Channel log_ch() {
+    static ::dt::desklog::Channel ch = ::dt::desklog::open("gl_shader_trace");
     return ch;
 }
 
-} // namespace vanta::modules::itemshader
+} // namespace dt::modules::itemshader
 
 // printf-style, one line, flushed immediately.
 #define ITEMSHADER_LOG(...) \
-    ::vanta::desklog::logf(::vanta::modules::itemshader::log_ch(), __VA_ARGS__)
+    ::dt::desklog::logf(::dt::modules::itemshader::log_ch(), __VA_ARGS__)
 
 // Rate-limited by call site (collision-proof; see VDESK_RL_SITE in DeskLog.h).
 #define ITEMSHADER_RL(ms, ...) \
-    VDESK_RL_SITE(::vanta::modules::itemshader::log_ch(), (ms), __VA_ARGS__)
+    VDESK_RL_SITE(::dt::modules::itemshader::log_ch(), (ms), __VA_ARGS__)
 

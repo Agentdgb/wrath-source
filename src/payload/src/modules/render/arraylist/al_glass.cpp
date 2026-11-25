@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace vanta::al {
+namespace dt::al {
 
 using gl::api;
 
@@ -220,4 +220,4 @@ void al_glass::render(const std::vector<al_rect>& rects,
     if (depth_was) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
 }
 
-} // namespace vanta::al
+} // namespace dt::al

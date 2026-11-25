@@ -4,7 +4,7 @@
 #include "jvm/JniRef.h"
 #include "mappings/MappingRegistry.h"
 
-namespace vanta::jvm::packet {
+namespace dt::jvm::packet {
 
 bool instanceOf(JNIEnv* env, jobject packet, std::string_view canonName) {
     if (!env || !packet) return false;
@@ -99,4 +99,4 @@ std::string chatIncomingPlainText(JNIEnv* env, jobject packet) {
     return {};
 }
 
-} // namespace vanta::jvm::packet
+} // namespace dt::jvm::packet

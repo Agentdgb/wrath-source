@@ -1,7 +1,7 @@
 #pragma once
 #include <utility>
 
-namespace vanta {
+namespace dt {
 
 template <class Fn>
 class ScopeGuard {
@@ -19,8 +19,8 @@ public:
 template <class Fn>
 ScopeGuard(Fn) -> ScopeGuard<Fn>;
 
-} // namespace vanta
+} // namespace dt
 
-#define VANTA_CAT2(a, b) a##b
-#define VANTA_CAT(a, b)  VANTA_CAT2(a, b)
-#define VANTA_DEFER(...) ::vanta::ScopeGuard VANTA_CAT(_scope_, __LINE__)([&](){ __VA_ARGS__; })
+#define DT_CAT2(a, b) a##b
+#define DT_CAT(a, b)  DT_CAT2(a, b)
+#define DT_DEFER(...) ::dt::ScopeGuard DT_CAT(_scope_, __LINE__)([&](){ __VA_ARGS__; })

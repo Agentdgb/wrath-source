@@ -7,7 +7,7 @@
 #include <mutex>
 #include <string>
 
-namespace vanta::modules::spotify {
+namespace dt::modules::spotify {
 
 extern bool g_enabled;
 void set_chat_open(bool open);

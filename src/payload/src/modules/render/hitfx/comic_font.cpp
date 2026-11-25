@@ -9,7 +9,7 @@
 #include <windows.h>
 #include <gl/GL.h>
 
-namespace vanta::modules::hitfx {
+namespace dt::modules::hitfx {
 
 namespace {
 // The hit words render large and are scaled per particle, so bake a spread of
@@ -131,4 +131,4 @@ void hit_font::destroy()
     built_ = false;
 }
 
-} // namespace vanta::modules::hitfx
+} // namespace dt::modules::hitfx

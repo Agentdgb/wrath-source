@@ -339,7 +339,7 @@ struct fonts_t {
 	c_font f_oof_arrow{};
 
 	inline void build_fonts(ImFontAtlas* atlas) {
-		// vanta port: the atlas is baked with the stb backend, freetype is not linked in
+		// dt port: the atlas is baked with the stb backend, freetype is not linked in
 		atlas->Build();
 	}
 };

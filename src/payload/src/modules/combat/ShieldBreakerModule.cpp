@@ -4,7 +4,7 @@
 #include "jvm/JniHelper.h"
 #include <sdk/mappings/mappings.hpp>
 
-namespace vanta::modules {
+namespace dt::modules {
 class ShieldBreaker final : public Module {
 public:
     ShieldBreaker() : Module("ShieldBreaker", "Switches visibly to a hotbar axe against raised shields", Category::Combat) {
@@ -51,5 +51,5 @@ private:
     void onEnable() override { mirror(); shieldbreaker::set_enabled(true); }
     void onDisable() override { shieldbreaker::set_enabled(false); }
 };
-VANTA_REGISTER_MODULE(ShieldBreaker);
+DT_REGISTER_MODULE(ShieldBreaker);
 }

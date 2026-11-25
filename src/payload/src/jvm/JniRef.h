@@ -3,7 +3,7 @@
 #include <string>
 #include <utility>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 // RAII local reference — freed automatically when the scope exits. Move-only.
 template <class J>
@@ -67,4 +67,4 @@ using GlobalClass  = GlobalRef<jclass>;
 // Convert jstring -> std::string via GetStringUTFChars. Safe on null.
 std::string toStdString(JNIEnv* env, jstring js);
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

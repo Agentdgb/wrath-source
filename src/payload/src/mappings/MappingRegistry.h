@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace vanta::mappings {
+namespace dt::mappings {
 
 // Runtime name reference returned by lookups. Both members point at string
 // literals owned by the generated TU (.rodata) or by the caller's arena;
@@ -31,7 +31,7 @@ namespace gen { struct VersionTable; }
 // The registry translates them into Fabric intermediary runtime names for the
 // running MC version.
 //
-// Post-pivot: Fabric-only. All data is embedded in vantaclient.dll as sorted
+// Post-pivot: Fabric-only. All data is embedded in dt_core.dll as sorted
 // constexpr arrays in .rdata; init() picks the right table by MC version
 // string. No disk I/O, no heap allocation, no ankerl::unordered_dense.
 //
@@ -82,4 +82,4 @@ private:
     std::string              mcVer_;
 };
 
-} // namespace vanta::mappings
+} // namespace dt::mappings

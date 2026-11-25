@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-namespace vanta::jvm::packet {
+namespace dt::jvm::packet {
 
 // Typed views over jobject packets. Each helper returns std::nullopt-equivalent
 // (empty string / default) when the runtime class does not match the canonical
@@ -23,4 +23,4 @@ std::string chatOutgoingCommand(JNIEnv* env, jobject packet);
 // Incoming chat family — extract Text component as plain string.
 std::string chatIncomingPlainText(JNIEnv* env, jobject packet);
 
-} // namespace vanta::jvm::packet
+} // namespace dt::jvm::packet

@@ -11,7 +11,7 @@
 // std::format_string with /std:c++20). Uses a tiny "{}" placeholder replacer
 // with std::ostringstream stringification per arg.
 
-namespace vanta::log {
+namespace dt::log {
 
 enum class Level : int { Trace = 0, Debug, Info, Warn, Error, Fatal };
 
@@ -68,15 +68,15 @@ inline void writef(Level lvl, std::string_view scope, std::string_view msg) noex
     write(lvl, scope, std::string(msg));
 }
 
-} // namespace vanta::log
+} // namespace dt::log
 
 #ifdef _DEBUG
-#define VLOG_TRACE(scope, ...) ::vanta::log::writef(::vanta::log::Level::Trace, scope, __VA_ARGS__)
-#define VLOG_DEBUG(scope, ...) ::vanta::log::writef(::vanta::log::Level::Debug, scope, __VA_ARGS__)
-#define VLOG_INFO(scope, ...)  ::vanta::log::writef(::vanta::log::Level::Info,  scope, __VA_ARGS__)
-#define VLOG_WARN(scope, ...)  ::vanta::log::writef(::vanta::log::Level::Warn,  scope, __VA_ARGS__)
-#define VLOG_ERR(scope, ...)   ::vanta::log::writef(::vanta::log::Level::Error, scope, __VA_ARGS__)
-#define VLOG_FATAL(scope, ...) ::vanta::log::writef(::vanta::log::Level::Fatal, scope, __VA_ARGS__)
+#define VLOG_TRACE(scope, ...) ::dt::log::writef(::dt::log::Level::Trace, scope, __VA_ARGS__)
+#define VLOG_DEBUG(scope, ...) ::dt::log::writef(::dt::log::Level::Debug, scope, __VA_ARGS__)
+#define VLOG_INFO(scope, ...)  ::dt::log::writef(::dt::log::Level::Info,  scope, __VA_ARGS__)
+#define VLOG_WARN(scope, ...)  ::dt::log::writef(::dt::log::Level::Warn,  scope, __VA_ARGS__)
+#define VLOG_ERR(scope, ...)   ::dt::log::writef(::dt::log::Level::Error, scope, __VA_ARGS__)
+#define VLOG_FATAL(scope, ...) ::dt::log::writef(::dt::log::Level::Fatal, scope, __VA_ARGS__)
 #else
 // Release's sink is disabled; do not allocate/format its discarded messages.
 #define VLOG_TRACE(...) ((void)0)

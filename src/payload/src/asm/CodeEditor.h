@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 // Emit method-entry INVOKESTATIC to HookBridge.<name><desc> and branch out of
 // the method with the appropriate RETURN opcode when the bridge returns nonzero.
@@ -22,4 +22,4 @@ bool emitRecipeA_PreCancel(
     std::uint8_t     returnOpcode,         // OP_RETURN / OP_IRETURN / OP_ARETURN / ...
     RewriteOneMethod& r);
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

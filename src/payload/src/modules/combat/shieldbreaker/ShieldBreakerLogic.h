@@ -2,7 +2,7 @@
 #include <string_view>
 #include <cmath>
 
-namespace vanta::modules::shieldbreaker {
+namespace dt::modules::shieldbreaker {
 inline bool shield_faces_attacker(float yaw, double dx, double dz) noexcept {
     if (!std::isfinite(yaw) || !std::isfinite(dx) || !std::isfinite(dz)) return false;
     const double radians = static_cast<double>(yaw) * 0.017453292519943295;

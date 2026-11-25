@@ -12,7 +12,7 @@
 #include <mutex>
 #include <chrono>
 
-namespace vanta::modules::targetesp::attack {
+namespace dt::modules::targetesp::attack {
 namespace {
 std::atomic<bool> enabled{false};
 std::atomic<Observer> observer{nullptr};
@@ -24,7 +24,7 @@ std::mutex mutex;
 std::chrono::steady_clock::time_point next_attempt{};
 
 void JNICALL on_attack(JNIEnv* env, jobject manager, jobject player, jobject target) {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     // Preserve vanilla's attack and any exception; observation never cancels it.
     env->CallNonvirtualVoidMethod(manager, manager_class, original, player, target);
     if (env->ExceptionCheck() || !target) return;

@@ -52,6 +52,8 @@ enum StrategyFlag : uint32_t {
     Strategy_MapStomp        = 3,
 };
 
+constexpr uint32_t kHeartbeatFlagAttached = 1u << 0;
+
 #pragma pack(push, 8)
 struct HeartbeatSharedContext {
     uint32_t magic;

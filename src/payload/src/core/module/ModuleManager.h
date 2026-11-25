@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 class ModuleManager {
 public:
@@ -36,4 +36,4 @@ private:
     std::atomic<bool> panicked_{false};
 };
 
-} // namespace vanta
+} // namespace dt

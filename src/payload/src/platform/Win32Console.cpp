@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <windows.h>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 namespace { bool g_owned = false; }
 
@@ -31,4 +31,4 @@ void closeConsole() {
     g_owned = false;
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

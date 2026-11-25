@@ -2,7 +2,7 @@
 
 // The friend list.
 //
-// WHY IT IS IN core/ AND NOT IN src/vgui/vanta/state/social.hh:
+// WHY IT IS IN core/ AND NOT IN src/vgui/dt/state/social.hh:
 //
 //   * src/vgui writes it   — the player list's Status combobox, chat's "Add friend".
 //   * src/modules reads it — targeting and the ESP, on threads the GUI does not
@@ -35,7 +35,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 class FriendList {
 public:
@@ -83,4 +83,4 @@ private:
     std::atomic<std::size_t>   count_{ 0 };
 };
 
-} // namespace vanta
+} // namespace dt

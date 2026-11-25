@@ -9,7 +9,7 @@ per-version exports into a version-string → table lookup.
 
 Runtime lookup (`src/mappings/MappingRegistry.cpp`): FNV1a-64 the canonical
 string, `std::lower_bound` over the sorted array. All strings live in `.rdata`
-inside `vantaclient.dll`.
+inside `dt_core.dll`.
 
 ## Files
 
@@ -27,11 +27,11 @@ nothing. Modules degrade to "unresolved" traces; the client still boots.
 ## Regenerate
 
 ```powershell
-cmake -S . -B build -DVANTA_REGEN_MAPS=ON
-cmake --build build --target vanta_genmaps
+cmake -S . -B build -DDT_REGEN_MAPS=ON
+cmake --build build --target dt_genmaps
 ```
 
-Then rebuild `vantaclient` — CMake's `CONFIGURE_DEPENDS` glob picks up the
+Then rebuild `dt_core` — CMake's `CONFIGURE_DEPENDS` glob picks up the
 newly emitted files without you having to touch `CMakeLists.txt`.
 
 See `tools/genmaps/README.md` for the full pipeline and how to add new MC

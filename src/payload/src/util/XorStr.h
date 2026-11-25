@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace vanta::crypto {
+namespace dt::crypto {
 
 template <size_t N, uint32_t Seed = 0x5A5A5A5Au>
 class XorString {
@@ -27,11 +27,11 @@ public:
     }
 };
 
-} // namespace vanta::crypto
+} // namespace dt::crypto
 
 #define XOR_STR(s) ([]() -> std::string { \
     constexpr uint32_t _seed = static_cast<uint32_t>((__LINE__ * 0x1E35A7BDu) ^ (__COUNTER__ * 0x85EBCA6Bu) ^ 0xA55AA55Au); \
-    static constexpr ::vanta::crypto::XorString<sizeof(s), _seed> xs(s); \
+    static constexpr ::dt::crypto::XorString<sizeof(s), _seed> xs(s); \
     return xs.str(); \
 }())
 

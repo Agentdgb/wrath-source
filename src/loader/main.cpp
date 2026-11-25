@@ -2364,153 +2364,46 @@ int RunDaemonMode()
     return watcher.RunBlocking(config, std::move(payload_bytes));
 }
 
-int RunCliInjector(bool self_delete)
+int RunCliInjector(bool /*self_delete*/)
 {
-    bool has_console = (AttachConsole(ATTACH_PARENT_PROCESS) != FALSE);
-    if (!has_console)
-    {
-        has_console = (AllocConsole() != FALSE);
-    }
-
-    FILE* fp_out = nullptr;
-    FILE* fp_err = nullptr;
-    if (has_console)
-    {
-        freopen_s(&fp_out, "CONOUT$", "w", stdout);
-        freopen_s(&fp_err, "CONOUT$", "w", stderr);
-    }
-
-    std::wcout << L"\n  [+] DisplayTuner Service [Stealth Injector]" << std::endl;
-    std::wcout << L"  --------------------------------------------" << std::endl;
-    std::wcout << L"  [*] Scanning for Minecraft 1.21 (javaw.exe)..." << std::endl;
-
+    // C-1: /SUBSYSTEM:WINDOWS, no AllocConsole/AttachConsole (no conhost.exe child),
+    // no DX11 window, immediate ExitProcess(0) after inject().
     const auto procs = launcher::ScanMinecraftProcesses();
     if (procs.empty())
     {
-        std::wcout << L"  [-] Minecraft process not found." << std::endl << std::endl;
-        return 1;
+        ExitProcess(1);
     }
 
     const DWORD pid = procs.front().pid;
-    std::wcout << L"  [+] Target located: " << procs.front().exe_name << L" (PID: " << pid << L")" << std::endl;
-
-    if (launcher::IsWrathLoadedInProcess(pid))
-    {
-        std::wcout << L"  [*] Wrath is already active in target process." << std::endl << std::endl;
-        return 0;
-    }
-
-    // ── Forensic snapshot BEFORE injection ───────────────────────────────────
-    wchar_t self_path_snap[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, self_path_snap, MAX_PATH);
-    wrath::trace::snapshot_t snap{};
-    wrath::trace::snapshot_artifacts(self_path_snap, &snap);
-
     std::wstring dll_path;
     launcher::ResolvePayloadDllPath(dll_path);
 
-    std::vector<uint8_t> dll_bytes;
-    if (!dll_path.empty())
+    if (dll_path.empty())
     {
-        std::ifstream file(dll_path, std::ios::binary | std::ios::ate);
-        if (file.is_open())
-        {
-            const std::streamsize size = file.tellg();
-            if (size > 0)
-            {
-                file.seekg(0, std::ios::beg);
-                dll_bytes.resize(static_cast<size_t>(size));
-                file.read(reinterpret_cast<char*>(dll_bytes.data()), size);
-            }
-            file.close();
-        }
+        ExitProcess(1);
     }
 
-    if (dll_bytes.empty())
+    HANDLE hProc = OpenProcess(
+        PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
+        PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
+        FALSE, pid);
+    if (!hProc)
     {
-        std::lock_guard lock(g_state.auth_payload_mutex);
-        if (!g_state.in_memory_payload.empty())
-        {
-            dll_bytes = g_state.in_memory_payload;
-        }
+        ExitProcess(1);
     }
 
-    std::wstring status;
-    bool ok = false;
+    auto opts = GetCurrentInjectionOptions();
+    opts.dll_path = dll_path;
 
-    if (!dll_bytes.empty())
-    {
-        std::wcout << L"  [*] Injecting via in-memory section (TxF / Module Stomp)..." << std::endl;
-        ok = launcher::InjectPayloadFromMemoryIntoProcess(
-            pid, dll_bytes, status,
-            g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-            "", "", "", GetCurrentInjectionOptions());
+    std::vector<uint8_t> pe_bytes = wrath::loader::read_payload(dll_path);
+    wrath::inject::Result res = wrath::inject::inject(hProc, pid, pe_bytes, opts);
 
-        SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
-        dll_bytes.clear();
+    if (!pe_bytes.empty()) {
+        SecureZeroMemory(pe_bytes.data(), pe_bytes.size());
     }
-    else if (!dll_path.empty())
-    {
-        std::ifstream file(dll_path, std::ios::binary | std::ios::ate);
-        if (file.is_open())
-        {
-            const std::streamsize size = file.tellg();
-            if (size > 0)
-            {
-                dll_bytes.resize(static_cast<size_t>(size));
-                file.seekg(0, std::ios::beg);
-                file.read(reinterpret_cast<char*>(dll_bytes.data()), size);
-            }
-            file.close();
-        }
+    CloseHandle(hProc);
 
-        if (!dll_bytes.empty())
-        {
-            std::wcout << L"  [*] Injecting payload via in-memory reflective injection..." << std::endl;
-            ok = launcher::InjectPayloadFromMemoryIntoProcess(
-                pid, dll_bytes, status,
-                g_state.server_host, g_state.server_port, wrath::auth::GetMachineHWID(),
-                "", "", "", GetCurrentInjectionOptions());
-
-            SecureZeroMemory(dll_bytes.data(), dll_bytes.size());
-            dll_bytes.clear();
-        }
-        else
-        {
-            status = L"Fallo al leer la DLL en memoria para la inyeccion.";
-        }
-    }
-    else
-    {
-        status = L"No payload binary found (neither in memory nor on disk).";
-    }
-
-    if (ok)
-    {
-        std::wcout << L"  [+] Injected successfully into Minecraft 1.21." << std::endl;
-        std::wcout << L"  [*] Session active. Hotkey: Right Shift / Insert." << std::endl << std::endl;
-    }
-    else
-    {
-        std::wcout << L"  [-] Injection failed: " << status << std::endl << std::endl;
-        return 1;
-    }
-
-    if (self_delete)
-    {
-        wchar_t self_path[MAX_PATH]{};
-        if (GetModuleFileNameW(nullptr, self_path, MAX_PATH) > 0)
-        {
-            wrath::bypass::ScheduleDeletion(self_path);
-            std::wcout << L"  [*] Scheduled loader self-deletion on close." << std::endl;
-        }
-    }
-
-    // ── Forensic teardown AFTER injection ────────────────────────────────────
-    wrath::trace::teardown(snap);
-    wrath::trace::free_snapshot(&snap);
-
-    return 0;
+    ExitProcess(res.ok ? 0u : 1u);
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int)

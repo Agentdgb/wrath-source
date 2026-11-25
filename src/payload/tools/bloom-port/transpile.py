@@ -40,7 +40,7 @@ body = re.sub(r'private DriftPassCache\(\)\s*\{\s*\}', '', body)
 methods = list(re.finditer(r'(?:public|private) static ([\w\[\]]+) (\w+)\(([^)]*)\)\s*\{', body))
 prototypes = [convert(m.group(0)[:-1].strip())+';' for m in methods]
 result = ('// Generated from the supplied WorldParticles engine. Runtime: C++ only.\n'
-          '#include "BloomCompat.h"\nnamespace vanta::modules::bloom::world {\n'
+          '#include "BloomCompat.h"\nnamespace dt::modules::bloom::world {\n'
           + '\n'.join(prototypes) + '\n' + convert(body) + '\nbool visible(){return am>0 || RegionPassCache::bh;}\nvoid seedForTest(std::uint64_t seed){al.setSeed(seed);}\n}\n')
 if re.search(r'\b(?:new|instanceof|RuntimeException|assert)\b', result):
     raise SystemExit('Untranslated Java construct in WorldParticles')

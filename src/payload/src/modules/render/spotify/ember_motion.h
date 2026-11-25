@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 #include <cmath>
-namespace vanta::modules::spotify {
+namespace dt::modules::spotify {
 // Slow independent waves bend the artwork without exposing texture edges.
 inline std::array<float,2> ember_uv(float u,float v,double seconds) {
     const double t=seconds*.50;

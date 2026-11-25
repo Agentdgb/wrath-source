@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace vanta::appearance {
+namespace dt::appearance {
 namespace {
 struct Image { std::vector<unsigned char> pixels; int w = 0, h = 0; unsigned texture = 0; };
 struct CapeRender { Image image; bool pending=true; std::uint64_t used=0; std::chrono::steady_clock::time_point retryAt{}; };
@@ -254,4 +254,4 @@ void shutdown() {
     { std::lock_guard lock(mutex); running.store(false); for (auto& [key, entry] : entries) destroy(entry); entries.clear(); jobs.clear(); }
     wake.notify_all();
 }
-} // namespace vanta::appearance
+} // namespace dt::appearance

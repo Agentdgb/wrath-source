@@ -3,7 +3,7 @@
 #include <imgui.h>
 #include <algorithm>
 
-namespace vanta {
+namespace dt {
 
 ColorSetting::ColorSetting(Module* o, std::string n, RGBA d)
     : Setting(o, std::move(n), SettingType::Color), v_(d) {}
@@ -33,4 +33,4 @@ void ColorSetting::load(const nlohmann::json& j) {
     v_ = {j.value("r", v_.r), j.value("g", v_.g), j.value("b", v_.b), j.value("a", v_.a)};
 }
 
-} // namespace vanta
+} // namespace dt

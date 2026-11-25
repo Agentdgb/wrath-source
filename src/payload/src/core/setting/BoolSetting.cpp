@@ -2,7 +2,7 @@
 
 #include <imgui.h>
 
-namespace vanta {
+namespace dt {
 
 BoolSetting::BoolSetting(Module* o, std::string n, bool d)
     : Setting(o, std::move(n), SettingType::Bool), value_(d) {}
@@ -22,4 +22,4 @@ void BoolSetting::load(const nlohmann::json& j) {
     if (j.is_boolean()) value_ = j.get<bool>();
 }
 
-} // namespace vanta
+} // namespace dt

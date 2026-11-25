@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <unordered_set>
 #include <windows.h>
-namespace vanta::jvm {
+namespace dt::jvm {
 JvmContext state;
 JvmContext &ctx() noexcept { return state; }
 JNIEnv *thisThreadEnv() {
@@ -26,20 +26,20 @@ jclass findClassAnyLoader(JNIEnv *e, const char *n) {
         e->ExceptionClear();
     return c;
 }
-} // namespace vanta::jvm
-namespace vanta::desklog {
+} // namespace dt::jvm
+namespace dt::desklog {
 void logf(Channel, const char *, ...) {}
 void logf_site(Channel, const void *, unsigned, const char *, ...) {}
 void section(Channel, const char *) {}
 void jni_lookup(Channel, const char *, const char *, const char *, const char *, bool) {}
-} // namespace vanta::desklog
-namespace vanta::modules::chams::dbg {
-vanta::desklog::Channel ch() { return {}; }
-} // namespace vanta::modules::chams::dbg
-namespace vanta::modules::chams::gl {
+} // namespace dt::desklog
+namespace dt::modules::chams::dbg {
+dt::desklog::Channel ch() { return {}; }
+} // namespace dt::modules::chams::dbg
+namespace dt::modules::chams::gl {
 bool player = false;
 void set_rendering_player(bool value) { player = value; }
-} // namespace vanta::modules::chams::gl
+} // namespace dt::modules::chams::gl
 namespace {
 jclass rendererClass = nullptr;
 jmethodID legacyOriginal = nullptr;
@@ -69,8 +69,8 @@ int main(int argc, char **) {
         JavaVMOption options[] = {{cp.data(), nullptr}, {const_cast<char *>("-Xverify:all"), nullptr}};
         JavaVMInitArgs args{JNI_VERSION_1_8, 2, options, JNI_FALSE};
         require(create && create(&vm, reinterpret_cast<void **>(&e), &args) == JNI_OK, "Create JVM");
-        vanta::jvm::ctx().vm.store(vm);
-        namespace cull = vanta::modules::chams::cull;
+        dt::jvm::ctx().vm.store(vm);
+        namespace cull = dt::modules::chams::cull;
         auto entityClass = e->FindClass("net/minecraft/class_1297"),
              playerClass = e->FindClass("net/minecraft/class_1657"),
              dispatcherClass = e->FindClass("net/minecraft/class_898");

@@ -2,7 +2,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::backtrack {
+namespace dt::modules::backtrack {
 
 // Called in the existing foreground world-overlay pass (gl_hook.cc), after
 // the ESP and before BlockESP. Draws the ghost hitbox.
@@ -20,4 +20,4 @@ void render(int width, int height);
 // -1 when the crosshair is not on `entity`'s ghost right now.
 double ghost_hit_distance(JNIEnv* env, jobject entity);
 
-} // namespace vanta::modules::backtrack
+} // namespace dt::modules::backtrack

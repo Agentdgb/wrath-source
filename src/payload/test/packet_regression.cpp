@@ -13,7 +13,7 @@
 #include <thread>
 #include <atomic>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 JvmContext testContext;
 JvmContext& ctx() noexcept { return testContext; }
 JNIEnv* thisThreadEnv() {
@@ -67,19 +67,19 @@ int main() {
     JavaVMOption options[] = {{classpath.data(), nullptr}, {const_cast<char*>("-Xverify:all"), nullptr}};
     JavaVMInitArgs arguments{JNI_VERSION_1_8, 2, options, JNI_FALSE};
     if (!create || create(&vm, reinterpret_cast<void**>(&env), &arguments) != JNI_OK) return 1;
-    vanta::jvm::ctx().vm.store(vm);
+    dt::jvm::ctx().vm.store(vm);
     int result = 0;
     try {
         auto cls = env->FindClass("net/minecraft/class_2535");
         auto packetClass = env->FindClass("net/minecraft/class_2596");
         require(cls && packetClass && !env->ExceptionCheck(), "fixture classes not loaded");
-        auto cachedClass = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2535");
-        auto cachedAgain = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2535");
+        auto cachedClass = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2535");
+        auto cachedAgain = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2535");
         require(cachedClass && cachedAgain && env->IsSameObject(cachedClass, cachedAgain)
             && env->GetObjectRefType(cachedAgain) == JNILocalRefType, "runtime cache did not return owned local references");
         env->DeleteLocalRef(cachedClass); env->DeleteLocalRef(cachedAgain);
-        require(!vanta::jvm::findClassAnyLoader(env, "net/minecraft/missing_test_class")
-            && !vanta::jvm::findClassAnyLoader(env, "net/minecraft/missing_test_class")
+        require(!dt::jvm::findClassAnyLoader(env, "net/minecraft/missing_test_class")
+            && !dt::jvm::findClassAnyLoader(env, "net/minecraft/missing_test_class")
             && !env->ExceptionCheck(), "missing lookup leaked an exception or failed retry caching");
         auto object = env->NewObject(cls, env->GetMethodID(cls, "<init>", "()V"));
         auto packet = env->NewObject(packetClass, env->GetMethodID(packetClass, "<init>", "()V"));
@@ -112,17 +112,17 @@ int main() {
             vm->DetachCurrentThread();
         });
         trafficStarted.wait();
-        vanta::hook::packets::install();
+        dt::hook::packets::install();
         installationDone.store(true, std::memory_order_release);
         traffic.join();
         const bool allForwarded = !trafficFailed.load() && installCalls > 0
             && env->GetIntField(installObject, sends) == static_cast<jint>(installCalls);
         env->DeleteGlobalRef(installObject); env->DeleteGlobalRef(installPacket);
-        require(vanta::hook::packets::ready(), "packet event installation failed");
+        require(dt::hook::packets::ready(), "packet event installation failed");
         require(allForwarded, "installation dropped a concurrent vanilla packet call");
         {
             int queuedEvents = 0;
-            auto queuedListener = vanta::EventBus::get().subscribe<vanta::events::PacketSendEvent>(
+            auto queuedListener = dt::EventBus::get().subscribe<dt::events::PacketSendEvent>(
                 [&](auto&) { ++queuedEvents; });
             auto queued = env->NewObject(cls, env->GetMethodID(cls, "<init>", "()V"));
             auto connected = env->GetFieldID(cls, "connected", "Z");
@@ -143,10 +143,10 @@ int main() {
         }
         int sentEvents = 0, receivedEvents = 0;
         bool cancel = false;
-        auto outgoing = vanta::EventBus::get().subscribe<vanta::events::PacketSendEvent>([&](auto& event) {
+        auto outgoing = dt::EventBus::get().subscribe<dt::events::PacketSendEvent>([&](auto& event) {
             ++sentEvents; if (cancel) event.cancel();
         });
-        auto incoming = vanta::EventBus::get().subscribe<vanta::events::PacketReceiveEvent>([&](auto& event) {
+        auto incoming = dt::EventBus::get().subscribe<dt::events::PacketReceiveEvent>([&](auto& event) {
             ++receivedEvents; if (cancel) event.cancel();
         });
         env->CallVoidMethod(object, send, packet, nullptr, JNI_TRUE);
@@ -165,7 +165,7 @@ int main() {
         env->ExceptionClear();
         env->SetBooleanField(packet, fail, JNI_FALSE);
         std::latch entered(1), release(1);
-        auto blocker = vanta::EventBus::get().subscribe<vanta::events::PacketSendEvent>([&] {
+        auto blocker = dt::EventBus::get().subscribe<dt::events::PacketSendEvent>([&] {
             entered.count_down(); release.wait();
         });
         auto retainedObject = env->NewGlobalRef(object);
@@ -179,8 +179,8 @@ int main() {
         entered.wait();
         // Packet shutdown must drain BEFORE detaching: the blocked listener's
         // original method must remain usable after the timeout and on retry.
-        const bool blockedShutdown = vanta::hook::packets::shutdown();
-        const bool stopped = !vanta::hook::packets::ready();
+        const bool blockedShutdown = dt::hook::packets::shutdown();
+        const bool stopped = !dt::hook::packets::ready();
         // New traffic bypasses listeners while shutdown waits, but still forwards.
         env->CallVoidMethod(object, send, packet, nullptr, JNI_FALSE);
         const bool forwardedWhileStopping = !env->ExceptionCheck()
@@ -191,8 +191,8 @@ int main() {
         require(forwardedWhileStopping, "stopping dropped vanilla traffic or dispatched listeners");
         blocker.reset();
         env->DeleteGlobalRef(retainedObject); env->DeleteGlobalRef(retainedPacket);
-        require(vanta::hook::packets::shutdown(), "packet event detach failed");
-        require(vanta::hook::packets::shutdown(), "packet shutdown was not idempotent");
+        require(dt::hook::packets::shutdown(), "packet event detach failed");
+        require(dt::hook::packets::shutdown(), "packet shutdown was not idempotent");
         require(JNIHook_Shutdown() == JNIHOOK_OK, "JNIHook shutdown failed");
         env->CallVoidMethod(object, send, packet, nullptr, JNI_FALSE);
         require(env->GetIntField(object, sends) == 4 && sentEvents == 4, "vanilla behavior not restored after detach");
@@ -202,7 +202,7 @@ int main() {
         if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
         std::cerr << error.what() << '\n'; result = 1;
     }
-    vanta::jvm::invalidateCaches();
+    dt::jvm::invalidateCaches();
     vm->DestroyJavaVM();
     return result;
 }

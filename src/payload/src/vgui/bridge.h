@@ -1,7 +1,7 @@
 #pragma once
 
-// Bridge between the ported GUI (src/vgui, "vanta::c_module") and the real
-// client module system (src/core, "vanta::Module").
+// Bridge between the ported GUI (src/vgui, "dt::c_module") and the real
+// client module system (src/core, "dt::Module").
 //
 // The GUI owns presentation-only cards. This header lets the card layer push
 // user intent (toggle, slider change, keybind) into the real Module and pull
@@ -14,13 +14,13 @@
 #include <string>
 #include <vector>
 
-namespace vanta { class Module; class c_module; class c_setting; }
+namespace dt { class Module; class c_module; class c_setting; }
 
-namespace vanta::vgui::bridge {
+namespace dt::vgui::bridge {
 
 // Build one c_module card per real Module, mirroring its settings.
 // Called by c_module_manager::build_default_modules().
-std::vector<std::shared_ptr<::vanta::c_module>> buildCardsFromRealModules();
+std::vector<std::shared_ptr<::dt::c_module>> buildCardsFromRealModules();
 
 // Push a card's toggle state into the real Module.
 void applyToggle(const std::string& moduleName, bool enabled);
@@ -31,7 +31,7 @@ void applyNumeric(const std::string& moduleName, const std::string& settingName,
 // Push a card's boolean setting into the real Module.
 void applyBool(const std::string& moduleName, const std::string& settingName, bool value);
 
-// Push a card's range slider (min, max ints) into the real vanta::RangeSetting.
+// Push a card's range slider (min, max ints) into the real dt::RangeSetting.
 void applyRange(const std::string& moduleName, const std::string& settingName,
                 int minValue, int maxValue);
 
@@ -192,4 +192,4 @@ std::string vkToString(int vk);
 void setMenuKeyBinding(bool active);
 bool isMenuKeyBinding();
 
-} // namespace vanta::vgui::bridge
+} // namespace dt::vgui::bridge

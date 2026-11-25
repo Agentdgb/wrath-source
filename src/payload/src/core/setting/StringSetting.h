@@ -1,7 +1,7 @@
 #pragma once
 #include "core/setting/Setting.h"
 
-namespace vanta {
+namespace dt {
 
 class StringSetting : public Setting {
 public:
@@ -18,4 +18,4 @@ private:
     std::size_t maxLen_;
 };
 
-} // namespace vanta
+} // namespace dt

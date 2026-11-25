@@ -1,14 +1,14 @@
 // font_pool.h — dedicated ImFontAtlas for the ArrayList.
 //
-// The vanta gui atlas is DPI-adaptive and rebakes every scale change, but it
+// The dt gui atlas is DPI-adaptive and rebakes every scale change, but it
 // only ever bakes a narrow window of small sizes (9.5..16.5 nominal, scaled
 // by the current panel_scale). Anything bigger than the top of that window
 // gets rendered by ImGui upsampling small glyphs, and the result reads as
 // low-resolution — the "pixelated fonts" the user reports.
 //
 // This pool keeps a SEPARATE atlas backing a spread of larger sizes at high
-// oversampling, uploads its own GL texture, and is picked over the vanta
-// atlas by the arraylist. The vanta atlas keeps doing its own thing for the
+// oversampling, uploads its own GL texture, and is picked over the dt
+// atlas by the arraylist. The dt atlas keeps doing its own thing for the
 // panel itself, unaffected.
 
 #pragma once
@@ -17,7 +17,7 @@
 
 #include "imgui.h"
 
-namespace vanta::modules::arraylist {
+namespace dt::modules::arraylist {
 
 class font_pool {
 public:
@@ -83,4 +83,4 @@ private:
 // Singleton instance the renderer talks to.
 font_pool& shared_pool();
 
-} // namespace vanta::modules::arraylist
+} // namespace dt::modules::arraylist

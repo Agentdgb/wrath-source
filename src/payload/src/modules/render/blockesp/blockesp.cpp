@@ -66,10 +66,10 @@
 #include <unordered_set>
 #include <vector>
 
-namespace hf = vanta::modules::hitfx;
-namespace cap = vanta::modules::hitfx::capture;
+namespace hf = dt::modules::hitfx;
+namespace cap = dt::modules::hitfx::capture;
 
-namespace vanta::modules::blockesp {
+namespace dt::modules::blockesp {
 
 settings          g_settings;
 std::mutex        g_settings_mx;
@@ -262,7 +262,7 @@ struct jni_cache {
 // Registry snapshot — populated once per world load, read every frame by the
 // block-picker widget via bridge::blockPickerRows().
 std::mutex                                g_reg_mx;
-std::vector<vanta::vgui::bridge::BlockPickerRow> g_reg_rows;
+std::vector<dt::vgui::bridge::BlockPickerRow> g_reg_rows;
 std::unordered_map<std::string, std::uint32_t>    g_reg_color;   // id → rgb
 
 // Cache of "we've seen this block, here's its stateId + block-id (interned)."
@@ -389,7 +389,7 @@ void resolve_all(JNIEnv* env)
     // MinecraftClient — each ID individually gated (see the Entity block
     // above for the reasoning; same class of bug).
     if (!C.mc_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_310")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_310")) {
             C.mc_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -411,7 +411,7 @@ void resolve_all(JNIEnv* env)
 
     // ClientWorld / getBlockState (defined on BlockView interface, class_1922).
     if (!C.world_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_638")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_638")) {
             C.world_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -428,7 +428,7 @@ void resolve_all(JNIEnv* env)
     // call they'd stay null forever and live_scan would call a null
     // jmethodID (UB, JVM crash) on the second sibling.
     if (!C.ent_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1297")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1297")) {
             C.ent_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -450,7 +450,7 @@ void resolve_all(JNIEnv* env)
 
     // BlockPos
     if (!C.bp_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2338")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2338")) {
             C.bp_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -462,7 +462,7 @@ void resolve_all(JNIEnv* env)
 
     // BlockState
     if (!C.bs_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2680")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2680")) {
             C.bs_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -485,7 +485,7 @@ void resolve_all(JNIEnv* env)
 
     // Block
     if (!C.block_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2248")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2248")) {
             C.block_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -501,7 +501,7 @@ void resolve_all(JNIEnv* env)
 
     // MapColor (class_3620) — the palette entry with an `int color` field.
     if (!C.mc_color_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_3620")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_3620")) {
             C.mc_color_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -516,7 +516,7 @@ void resolve_all(JNIEnv* env)
 
     // Registries + Registry.BLOCK — class_7923.field_41175 (static Registry<Block>).
     if (!C.registries_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_7923")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_7923")) {
             C.registries_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -545,7 +545,7 @@ void resolve_all(JNIEnv* env)
 
     // Registry — walks are via Iterable.iterator(), id lookups via method_10221.
     if (!C.registry_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2378")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2378")) {
             C.registry_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -561,7 +561,7 @@ void resolve_all(JNIEnv* env)
 
     // Identifier
     if (!C.id_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2960")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2960")) {
             C.id_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -573,7 +573,7 @@ void resolve_all(JNIEnv* env)
 
     // BlockUpdateS2CPacket (class_2626) — the primary anti-xray reveal leak.
     if (!C.bu_pkt_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2626")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2626")) {
             C.bu_pkt_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -615,7 +615,7 @@ void resolve_all(JNIEnv* env)
     // without this, the classic Paper anti-xray engine-2 pattern (explosion
     // exposes an ore, server sends a bulk delta) is silently dropped.
     if (!C.cd_pkt_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2637")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2637")) {
             C.cd_pkt_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -653,7 +653,7 @@ void resolve_all(JNIEnv* env)
     // ChunkSectionPos (class_4076) — decode absolute origin of a section for
     // ChunkDeltaUpdate. getMinX/Y/Z return the world-coord origin of the 16x16x16 section.
     if (!C.csp_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4076")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4076")) {
             C.csp_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -676,7 +676,7 @@ void resolve_all(JNIEnv* env)
     // ── Palette-walk chain (replaces the per-position live scan) ────────────
     // ChunkDataS2CPacket
     if (!C.cd_pkt2_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2672")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2672")) {
             C.cd_pkt2_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -705,7 +705,7 @@ void resolve_all(JNIEnv* env)
     }
     // Chunk (class_2791)
     if (!C.chunk_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2791")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2791")) {
             C.chunk_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -723,7 +723,7 @@ void resolve_all(JNIEnv* env)
     }
     // ChunkSection (class_2826)
     if (!C.section_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2826")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2826")) {
             C.section_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -744,7 +744,7 @@ void resolve_all(JNIEnv* env)
     }
     // PalettedContainer (class_2841)
     if (!C.pc_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2841")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2841")) {
             C.pc_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -759,7 +759,7 @@ void resolve_all(JNIEnv* env)
     }
     // PalettedContainer.Data record (class_2841$class_6561)
     if (!C.pcdata_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env,
+        if (jclass k = dt::jvm::findClassAnyLoader(env,
                        "net/minecraft/class_2841$class_6561")) {
             C.pcdata_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
@@ -785,7 +785,7 @@ void resolve_all(JNIEnv* env)
     }
     // Palette
     if (!C.palette_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2837")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2837")) {
             C.palette_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -803,7 +803,7 @@ void resolve_all(JNIEnv* env)
     }
     // PaletteStorage
     if (!C.pstor_class) {
-        if (jclass k = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_6490")) {
+        if (jclass k = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_6490")) {
             C.pstor_class = static_cast<jclass>(env->NewGlobalRef(k));
             env->DeleteLocalRef(k);
         }
@@ -1000,7 +1000,7 @@ void enumerate_registry(JNIEnv* env)
     jmethodID has_next = env->GetMethodID(iter_cls, "hasNext", "()Z");
     jmethodID next     = env->GetMethodID(iter_cls, "next", "()Ljava/lang/Object;");
 
-    std::vector<vanta::vgui::bridge::BlockPickerRow> rows;
+    std::vector<dt::vgui::bridge::BlockPickerRow> rows;
     std::unordered_map<std::string, std::uint32_t>   colors;
     rows.reserve(1024);
     // Track which colour path each block took so the log can say whether the
@@ -1166,7 +1166,7 @@ void live_scan(JNIEnv* env)
     // Y slab, we cap at 3ms of JNI work so the render thread's headroom is
     // preserved. Whatever the loop hasn't covered rolls into the next tick
     // via the slice cursor. Rough goal: 100+ FPS at max range.
-    vanta::util::TimeBudget budget(std::chrono::microseconds(3000));
+    dt::util::TimeBudget budget(std::chrono::microseconds(3000));
     bool budget_hit = false;
 
     // Reusable BlockPos to avoid NewObject per cell — BlockPos is immutable
@@ -1848,7 +1848,7 @@ void drain_chunk_queue(JNIEnv* env)
     // Time budget: checked between complete chunks; one chunk can overrun. A typical chunk walks in 200-800 μs so a
     // burst of ~10 chunks per tick fits comfortably; anything more rolls to
     // the next tick.
-    vanta::util::TimeBudget budget(std::chrono::microseconds(4000));
+    dt::util::TimeBudget budget(std::chrono::microseconds(4000));
     std::vector<std::pair<std::int64_t, std::uint32_t>> hits;
     hits.reserve(1024);
     // Chunks walked as a REFRESH. Their old cache contents must be dropped
@@ -2009,7 +2009,7 @@ void prune_far_cache(int px, int pz)
              before - after, before, after);
 }
 
-void on_packet_receive(vanta::events::PacketReceiveEvent& e)
+void on_packet_receive(dt::events::PacketReceiveEvent& e)
 {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
     if (!e.env || !e.packet) return;
@@ -2069,21 +2069,21 @@ void set_focus_block(int x, int y, int z, bool enabled) {
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
-static std::unique_ptr<vanta::IListenerToken> packet_listener;
+static std::unique_ptr<dt::IListenerToken> packet_listener;
 
 void install()
 {
     if (g_installed.exchange(true, std::memory_order_acq_rel)) return;
 
-    vanta::vgui::bridge::setBlockPickerProvider([]() -> const std::vector<vanta::vgui::bridge::BlockPickerRow>& {
+    dt::vgui::bridge::setBlockPickerProvider([]() -> const std::vector<dt::vgui::bridge::BlockPickerRow>& {
         std::lock_guard lk(g_reg_mx);
         return g_reg_rows;
     });
 
     // Retain the subscription: this EventBus unsubscribes when its token dies.
-    packet_listener = vanta::EventBus::get().subscribe<vanta::events::PacketReceiveEvent>(
-        [](vanta::events::PacketReceiveEvent& e) { on_packet_receive(e); },
-        vanta::Priority::Monitor);
+    packet_listener = dt::EventBus::get().subscribe<dt::events::PacketReceiveEvent>(
+        [](dt::events::PacketReceiveEvent& e) { on_packet_receive(e); },
+        dt::Priority::Monitor);
 
     // NOTE: there is deliberately NO events::WorldChangeEvent subscription
     // here. That event is declared in core/event/Events.h but is never posted
@@ -2106,13 +2106,13 @@ void shutdown()
 {
     g_enabled.store(false);
     packet_listener.reset();
-    vanta::vgui::bridge::setBlockPickerProvider(nullptr);
+    dt::vgui::bridge::setBlockPickerProvider(nullptr);
     // Cache + registry stay allocated so a re-enable is instant. The
     // vgui provider callback also stays — it's read every frame regardless
     // of module state, and returning an empty list is the correct behaviour
     // when the engine hasn't populated it yet.
     if (g_last_world) {
-        ::vanta::jvm::JniScope s;
+        ::dt::jvm::JniScope s;
         if (s) s.get()->DeleteGlobalRef(g_last_world);
         g_last_world = nullptr;
     }
@@ -2121,7 +2121,7 @@ void shutdown()
 
 void enqueue_loaded_chunks()
 {
-    ::vanta::jvm::JniScope s;
+    ::dt::jvm::JniScope s;
     if (!s) return;
     // If the player isn't ready (enabled from the menu, or mid server
     // transfer), arm the deferred retry instead of silently doing nothing.
@@ -2266,7 +2266,7 @@ void render_text(int display_w, int display_h)
     // Snapshot camera + settings colour choice.
     hf::render_frame f{};
     {
-        ::vanta::jvm::JniScope s;
+        ::dt::jvm::JniScope s;
         if (!s) return;
         JNIEnv* env = s.get();
         if (!cap::is_installed()) {
@@ -2720,5 +2720,5 @@ void render_text(int display_w, int display_h)
     dl->PopClipRect();
 }
 
-} // namespace vanta::modules::blockesp
+} // namespace dt::modules::blockesp
 

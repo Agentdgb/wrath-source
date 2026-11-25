@@ -1,7 +1,7 @@
 #pragma once
 #include <atomic>
 
-namespace vanta {
+namespace dt {
 // Once teardown leaves a callback or hook reachable, caches and the image
 // must remain alive. A timeout is a failure, never permission to free memory.
 inline std::atomic<bool> g_unloadSafe{true};

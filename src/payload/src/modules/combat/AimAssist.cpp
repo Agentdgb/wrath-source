@@ -9,7 +9,7 @@
 #include <atomic>
 #include <chrono>
 
-namespace vanta::modules {
+namespace dt::modules {
 class MotionTuner final : public Module {
     aimassist::simple::Engine simpleEngine;
     aimassist::wind::Engine windEngine;
@@ -216,7 +216,7 @@ class MotionTuner final : public Module {
         windTeams.setDescription("Wind only: auto-detecta y no asiste contra companeros de equipo (Scoreboard, prefijos y color de nametag).");
         windFocus.setLabel("Focus mode");
         mode.setDescription(
-            "Simple provides smooth tracking for the selected targets. Wind uses the original Vanta Regular controller");
+            "Simple provides smooth tracking for the selected targets. Wind uses the original Dt Regular controller");
         speed1.setLabel("Fuerza");
         speed1.setDescription("How strongly Simple follows the selected target. Higher values pull faster.");
         smoothing.setLabel("Suavidad");
@@ -279,5 +279,5 @@ class MotionTuner final : public Module {
     }
     std::string displayInfo() const override { return state.load(); }
 };
-} // namespace vanta::modules
-VANTA_REGISTER_MODULE(vanta::modules::MotionTuner)
+} // namespace dt::modules
+DT_REGISTER_MODULE(dt::modules::MotionTuner)

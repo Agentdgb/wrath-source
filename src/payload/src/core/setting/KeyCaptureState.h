@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 #include <optional>
-namespace vanta {
+namespace dt {
 struct CapturedKey { int virtualKey = 0; bool cancelled = false; };
 class KeyCaptureState {
 public:

@@ -19,7 +19,7 @@
 
 #include <cstddef>
 
-namespace vanta::modules::targethud {
+namespace dt::modules::targethud {
 
 /* @the faces on offer.
 
@@ -76,4 +76,4 @@ ImTextureID texture_id();
 
 void destroy();
 
-} // namespace vanta::modules::targethud
+} // namespace dt::modules::targethud

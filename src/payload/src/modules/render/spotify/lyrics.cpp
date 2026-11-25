@@ -5,7 +5,7 @@
 #include <charconv>
 #include <vector>
 
-namespace vanta::modules::spotify {
+namespace dt::modules::spotify {
 
 namespace {
 
@@ -292,4 +292,4 @@ lyrics_doc parse_plain(const std::string& body, const std::string& key)
     return doc;
 }
 
-} // namespace vanta::modules::spotify
+} // namespace dt::modules::spotify

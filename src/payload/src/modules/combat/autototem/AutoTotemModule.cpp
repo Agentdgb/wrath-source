@@ -14,7 +14,7 @@
 #include "autototem.h"
 #include "autototem_tick.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class AutoTotem : public Module {
 public:
@@ -29,8 +29,8 @@ public:
         registerSetting(&silentMove_);
         registerSetting(&returnOriginal_);
 
-        using ::vanta::modules::autototem::Mode;
-        using ::vanta::modules::autototem::OpenMode;
+        using ::dt::modules::autototem::Mode;
+        using ::dt::modules::autototem::OpenMode;
 
         const auto inventoryMode = [this] {
             return mode_.index() == static_cast<int>(Mode::Inventory);
@@ -57,18 +57,18 @@ public:
     void onInit() override {
         listen<events::GameLoopEvent>([this](events::GameLoopEvent& e){
             mirror();
-            ::vanta::modules::autototem::ensure_installed();
-            ::vanta::modules::autototem_tick::pump(e.deltaMs);
+            ::dt::modules::autototem::ensure_installed();
+            ::dt::modules::autototem_tick::pump(e.deltaMs);
         });
     }
 
     void onEnable() override {
-        ::vanta::modules::autototem::settings::enabled.store(true, std::memory_order_relaxed);
+        ::dt::modules::autototem::settings::enabled.store(true, std::memory_order_relaxed);
         mirror();
     }
 
     void onDisable() override {
-        ::vanta::modules::autototem::settings::enabled.store(false, std::memory_order_relaxed);
+        ::dt::modules::autototem::settings::enabled.store(false, std::memory_order_relaxed);
         // Do NOT reset() here. The pump has to run at least once more to hand
         // the movement keys back if a Silent session was live — resetting from
         // this thread would clear the flag that tells it to.
@@ -77,7 +77,7 @@ public:
 private:
     // Render thread writes, game thread reads — hence the atomic mirror.
     void mirror() {
-        using S = ::vanta::modules::autototem::settings;
+        using S = ::dt::modules::autototem::settings;
 
         S::mode.store(mode_.index(),                       std::memory_order_relaxed);
         S::open_mode.store(openMode_.index(),              std::memory_order_relaxed);
@@ -91,7 +91,7 @@ private:
         S::silent_move_min_ms.store(silentMove_.min(),     std::memory_order_relaxed);
         S::silent_move_max_ms.store(silentMove_.max(),     std::memory_order_relaxed);
 
-        S::overlay_open.store(::vanta::vgui::bridge::isOverlayVisible(),
+        S::overlay_open.store(::dt::vgui::bridge::isOverlayVisible(),
                               std::memory_order_relaxed);
     }
 
@@ -115,7 +115,7 @@ private:
     // in between. Wide beats narrow: a tight range gives consecutive intervals
     // an almost identical spread, which is precisely what the stddev-based
     // totem checks are built to notice.
-    ::vanta::RangeSetting cooldown_ {this, "Cooldown (ms)", 60, 660, 20, 1500};
+    ::dt::RangeSetting cooldown_ {this, "Cooldown (ms)", 60, 660, 20, 1500};
 
     // Master switch: flat random reaction + random totem pick. Off = fixed
     // midpoint and always the leftmost totem.
@@ -124,18 +124,18 @@ private:
     // Inventory mode only.
     EnumSetting openMode_         {this, "Open Mode", {"Auto Open", "On Open"}, 0};
 
-    // Inventory + On Open only. Note this gives up On Open's main advantage:
+    // Inventory + On Open only. Note this gives up On Open's main addtge:
     // closing emits a CloseHandledScreen, the extra traffic On Open avoids.
     BoolSetting autoClose_        {this, "Auto Close", false};
 
     // Silent mode only: how long movement stays suppressed after the session.
-    ::vanta::RangeSetting silentMove_ {this, "Silent Move Delay (ms)", 100, 200, 50, 400};
+    ::dt::RangeSetting silentMove_ {this, "Silent Move Delay (ms)", 100, 200, 50, 400};
 
     // Hotbar mode only: switch back to the slot you were holding.
 
     BoolSetting returnOriginal_   {this, "Return Original", true};
 };
 
-VANTA_REGISTER_MODULE(AutoTotem);
+DT_REGISTER_MODULE(AutoTotem);
 
-} // namespace vanta::modules
+} // namespace dt::modules

@@ -25,9 +25,9 @@
 #include <cstring>
 #include <random>
 
-namespace vanta::modules::autototem_tick {
+namespace dt::modules::autototem_tick {
 
-namespace tb = ::vanta::modules::autototem;
+namespace tb = ::dt::modules::autototem;
 
 static constexpr int TICK_MS       = 50;
 static constexpr int RESEND_TICKS  = 20;   // 1 s
@@ -128,7 +128,7 @@ static void apply_lock_level(int level)
 {
     if (level == g_lock_level) return;
     g_lock_level = level;
-    ::vanta::vgui::bridge::setInputFilter(level);
+    ::dt::vgui::bridge::setInputFilter(level);
 }
 
 // Raise the filter, or extend it. Never shortens a hold and never downgrades a
@@ -1210,7 +1210,7 @@ static void step_silent(JNIEnv* env, const tb::jni_cache& c, jobject mc, LocalRe
 // ── dispatch ─────────────────────────────────────────────────────────────────
 static void step(JNIEnv* env, const tb::jni_cache& c, jobject mc)
 {
-    // Vanta's ClickGui is an ImGui surface drawn inside the GL frame, NOT a
+    // Dt's ClickGui is an ImGui surface drawn inside the GL frame, NOT a
     // Minecraft Screen — currentScreen stays null while it is open, so the
     // screen checks below cannot see it.
     if (tb::settings::overlay_open.load(std::memory_order_relaxed)) return;
@@ -1264,7 +1264,7 @@ void pump(float delta_ms)
     auto& c = tb::mutable_cache();
     if (!c.initialized || !c.minecraft_class || !c.mc_player_fid) return;
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) return;
 
     LocalRef mc(env, resolve_minecraft(env, c));
@@ -1309,4 +1309,4 @@ void pump(float delta_ms)
     step(env, c, mc.get());
 }
 
-} // namespace vanta::modules::autototem_tick
+} // namespace dt::modules::autototem_tick

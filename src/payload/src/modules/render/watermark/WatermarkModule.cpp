@@ -7,7 +7,7 @@
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Watermark : public Module {
 public:
@@ -61,6 +61,6 @@ private:
     void onDisable() override { watermark::g_enabled = false; }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::Watermark)
+DT_REGISTER_MODULE(dt::modules::Watermark)

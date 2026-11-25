@@ -62,10 +62,10 @@ int main() {
         require(JNIHook_Shutdown() == JNIHOOK_OK && deletedRefs == 4 && !g_jnihook,
             "partial shutdown could not be retried");
 
-        seed(); vanta::g_nativeCallbacks.store(1);
+        seed(); dt::g_nativeCallbacks.store(1);
         require(JNIHook_Shutdown() != JNIHOOK_OK && deletedRefs == 0 && g_class_file_cache.size() == 2,
             "active callback lost its class cache or original references");
-        vanta::g_nativeCallbacks.store(0);
+        dt::g_nativeCallbacks.store(0);
         require(JNIHook_Shutdown() == JNIHOOK_OK, "drain failure was not retryable");
 
         seed(); failDisable = true;

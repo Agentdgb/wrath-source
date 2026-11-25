@@ -7,7 +7,7 @@
 #include <thread>
 #include <windows.h>
 
-namespace vanta::log {
+namespace dt::log {
 
 namespace {
 
@@ -49,13 +49,13 @@ void init(Level minLevel, std::filesystem::path logFile) {
         if (!g_sink) {
             char buf[256];
             std::snprintf(buf, sizeof(buf),
-                "[vanta] log file open FAILED (errno=%d): %ls\n",
+                "[dt] log file open FAILED (errno=%d): %ls\n",
                 errno, logFile.wstring().c_str());
             OutputDebugStringA(buf);
         } else {
             char buf[512];
             std::snprintf(buf, sizeof(buf),
-                "[vanta] log opened at %ls\n", logFile.wstring().c_str());
+                "[dt] log opened at %ls\n", logFile.wstring().c_str());
             OutputDebugStringA(buf);
         }
     }
@@ -126,4 +126,4 @@ void shutdown() noexcept {
     g_initDone.store(false, std::memory_order_release);
 }
 
-} // namespace vanta::log
+} // namespace dt::log

@@ -9,7 +9,7 @@
 #include <mutex>
 #include <string>
 
-namespace vanta::modules::hitfx::dbg {
+namespace dt::modules::hitfx::dbg {
 
 namespace {
 
@@ -38,9 +38,9 @@ void open_once()
     if (g_tried) return;
     g_tried = true;
 
-    const std::wstring dir = vanta::platform::logDir();
+    const std::wstring dir = dt::platform::logDir();
     if (!dir.empty()) {
-        const std::wstring full = dir + L"\\vanta_hitfx.txt";
+        const std::wstring full = dir + L"\\dt_hitfx.txt";
         FILE* fp = nullptr;
         if (_wfopen_s(&fp, full.c_str(), L"w") == 0 && fp) {
             g_fp = fp;
@@ -53,7 +53,7 @@ void open_once()
     if (!g_fp) {
         char buf[512]; size_t need = 0;
         if (getenv_s(&need, buf, sizeof(buf), "TEMP") == 0 && need) {
-            std::string p(buf); p += "\\vanta_hitfx.txt";
+            std::string p(buf); p += "\\dt_hitfx.txt";
             try_open(p.c_str());
         }
     }
@@ -67,7 +67,7 @@ void open_once()
             g_path, (unsigned long)GetCurrentProcessId());
         std::fflush(g_fp);
     } else {
-        OutputDebugStringA("[vanta_hitfx] FAILED to open any log file\n");
+        OutputDebugStringA("[dt_hitfx] FAILED to open any log file\n");
     }
 #endif
 }
@@ -109,5 +109,5 @@ void log_rl(int slot, unsigned min_ms, const char* fmt, ...)
 #endif
 }
 
-} // namespace vanta::modules::hitfx::dbg
+} // namespace dt::modules::hitfx::dbg
 

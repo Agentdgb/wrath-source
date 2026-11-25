@@ -1,7 +1,7 @@
 #include "asm/Opcodes.h"
 #include "hook/HookRow.h"
 
-namespace vanta::hook {
+namespace dt::hook {
 
 static HookRow buildAttackSite() {
     return HookRow{
@@ -12,11 +12,11 @@ static HookRow buildAttackSite() {
         },
         Recipe::A_PreCancel,
         HookLoad::Installed,
-        vanta::asm_::OP_RETURN,
+        dt::asm_::OP_RETURN,
         "onAttackEntity",
         "(Ljava/lang/Object;)I",
     };
 }
-VANTA_REGISTER_HOOK_SITE(buildAttackSite);
+DT_REGISTER_HOOK_SITE(buildAttackSite);
 
-} // namespace vanta::hook
+} // namespace dt::hook

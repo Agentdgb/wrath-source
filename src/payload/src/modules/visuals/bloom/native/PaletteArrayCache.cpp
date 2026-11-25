@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::palette {
+namespace dt::modules::bloom::palette {
 
 int W = 512;
 int H = 512;
@@ -1057,4 +1057,4 @@ double z(int var0, int var1, int var2) {
     var3 ^= (static_cast<std::uint32_t>(var3) >> 15);
     return (double)(var3 & (-1331375991 ^ -1336201354)) / 8388607.0 - 1.0;
 }
-} // namespace vanta::modules::bloom::palette
+} // namespace dt::modules::bloom::palette

@@ -4,7 +4,7 @@
 #include "core/event/Events.h"
 #include "util/Log.h"
 
-namespace vanta::hook::bridge {
+namespace dt::hook::bridge {
 
 // Each native trampoline builds a stack-local event, dispatches, returns the
 // cancel/continue code. Zero heap allocation on the hot path.
@@ -111,4 +111,4 @@ void registerNatives(JNIEnv* env, jclass cls) {
     }
 }
 
-} // namespace vanta::hook::bridge
+} // namespace dt::hook::bridge

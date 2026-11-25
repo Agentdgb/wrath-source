@@ -14,7 +14,7 @@
 
 #include <functional>
 
-namespace vanta::modules::radar {
+namespace dt::modules::radar {
 
 extern bool g_enabled;
 
@@ -71,4 +71,4 @@ void set_top_left(float x, float y);
    does not flash the last server's players onto the dial. */
 void reset();
 
-} // namespace vanta::modules::radar
+} // namespace dt::modules::radar

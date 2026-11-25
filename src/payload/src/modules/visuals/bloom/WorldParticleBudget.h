@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstddef>
 
-namespace vanta::modules::bloom::world {
+namespace dt::modules::bloom::world {
 inline constexpr int maxLines = 512, maxQuads = 128, maxSprites = 256, maxTrailSprites = 128;
 // Fixed storage and a hard query budget keep mass respawns from stalling a frame.
 class TerrainCache {
@@ -28,4 +28,4 @@ public:
         return height;
     }
 };
-} // namespace vanta::modules::bloom::world
+} // namespace dt::modules::bloom::world

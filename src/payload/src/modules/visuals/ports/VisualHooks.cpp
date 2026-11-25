@@ -9,7 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <jnihook.h>
-namespace vanta::modules::visualports {
+namespace dt::modules::visualports {
 namespace {
 jclass livingOwner = nullptr, fogOwner = nullptr;
 jmethodID durationOriginal = nullptr, fogOriginal = nullptr;
@@ -207,4 +207,4 @@ void shutdownCache() {
             *c = nullptr;
         }
 }
-} // namespace vanta::modules::visualports
+} // namespace dt::modules::visualports

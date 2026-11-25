@@ -1,7 +1,7 @@
 // Generated from the supplied WorldParticles engine. Runtime: C++ only.
 #include "BloomCompat.h"
 #include "WorldParticleBudget.h"
-namespace vanta::modules::bloom::world {
+namespace dt::modules::bloom::world {
 
 namespace {
 TerrainCache terrain;
@@ -1683,4 +1683,4 @@ void r(int var0, bool var1) {
 
 bool visible() { return am > 0 || RegionPassCache::bh; }
 void seedForTest(std::uint64_t seed) { al.setSeed(seed); }
-} // namespace vanta::modules::bloom::world
+} // namespace dt::modules::bloom::world

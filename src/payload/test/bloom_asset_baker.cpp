@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-using namespace vanta::modules::bloom;
+using namespace dt::modules::bloom;
 using Microsoft::WRL::ComPtr;
 void check(HRESULT result){if(FAILED(result))throw std::runtime_error("Native PNG encoder failed");}
 void png(const std::filesystem::path&file,const Array<int>&pixels,int width,int height){

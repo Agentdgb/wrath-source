@@ -4,7 +4,7 @@
 #include <array>
 #include <functional>
 #include <jni.h>
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 struct WorldSettings {
     bool enabled = false, stars = true, spark = false, flame = false, runes = false, snow = false, theme = true;
     float density = .35f;
@@ -33,4 +33,4 @@ const char *runtimeStatus();
 void worldFrame(JNIEnv *, jobject world, jobject self, const hitfx::render_frame &, const Canvas &);
 void resetWorld();
 void shutdown();
-} // namespace vanta::modules::bloom
+} // namespace dt::modules::bloom

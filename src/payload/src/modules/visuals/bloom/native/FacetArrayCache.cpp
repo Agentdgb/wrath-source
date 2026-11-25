@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::facet {
+namespace dt::modules::bloom::facet {
 
 int W = 1024;
 int H = 1024;
@@ -1056,4 +1056,4 @@ const bool initialized = []() {
     V1[23] = ((float)(CY[23] + CH[23]) - 17.0F) / 1024.0F;
     return true;
 }();
-} // namespace vanta::modules::bloom::facet
+} // namespace dt::modules::bloom::facet

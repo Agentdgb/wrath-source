@@ -4,7 +4,7 @@
 #include "core/setting/NumericPrecision.h"
 #include <cstdio>
 
-namespace vanta {
+namespace dt {
 
 IntSetting::IntSetting(Module* o, std::string n, int d, int mn, int mx)
     : Setting(o, std::move(n), SettingType::Int), value_(d), min_(mn), max_(mx) {}
@@ -30,4 +30,4 @@ void FloatSetting::load(const nlohmann::json& j) {
     if (j.is_number()) set(j.get<float>());
 }
 
-} // namespace vanta
+} // namespace dt

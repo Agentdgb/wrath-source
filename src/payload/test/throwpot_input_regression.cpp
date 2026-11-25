@@ -11,7 +11,7 @@ static void require(bool condition, const char *message) {
 }
 
 int main() {
-    using namespace vanta::modules::throwpot;
+    using namespace dt::modules::throwpot;
     const std::filesystem::path runtimePath(WRATH_TEST_JVM_DLL);
     const auto bin = runtimePath.parent_path().parent_path();
     SetDllDirectoryW(bin.c_str());

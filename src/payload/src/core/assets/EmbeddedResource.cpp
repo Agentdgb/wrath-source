@@ -4,9 +4,9 @@
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
-namespace vanta::assets {
+namespace dt::assets {
 std::span<const unsigned char> embeddedResource(int id) {
-    HMODULE image = vanta::platform::currentModule();
+    HMODULE image = dt::platform::currentModule();
     if (!image) {
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                                 reinterpret_cast<LPCWSTR>(&embeddedResource), &image)) {
@@ -19,4 +19,4 @@ std::span<const unsigned char> embeddedResource(int id) {
     auto data = LoadResource(image, resource);
     return {static_cast<const unsigned char *>(LockResource(data)), SizeofResource(image, resource)};
 }
-} // namespace vanta::assets
+} // namespace dt::assets

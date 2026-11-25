@@ -2,7 +2,7 @@
 
 #include <imgui.h>
 
-namespace vanta {
+namespace dt {
 
 SlotMapSetting::SlotMapSetting(Module* o, std::string n, std::vector<std::string> options)
     : Setting(o, std::move(n), SettingType::SlotMap),
@@ -103,4 +103,4 @@ void SlotMapSetting::load(const nlohmann::json& j)
     }
 }
 
-} // namespace vanta
+} // namespace dt

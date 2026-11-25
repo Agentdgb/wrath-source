@@ -27,7 +27,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::antiaction {
+namespace dt::modules::antiaction {
 
 bool should_block_attack(JNIEnv* env, jobject mc);
 bool should_block_use(JNIEnv* env, jobject mc);
@@ -46,4 +46,4 @@ void set_use_observer(UseObserver fn, void* user);
 // the click has to watch the use key itself.
 bool use_hook_live();
 
-} // namespace vanta::modules::antiaction
+} // namespace dt::modules::antiaction

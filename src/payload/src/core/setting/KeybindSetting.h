@@ -1,7 +1,7 @@
 #pragma once
 #include "core/setting/Setting.h"
 
-namespace vanta {
+namespace dt {
 
 enum class BindMode : std::uint8_t { Toggle, Hold, Once, Disabled, Always };
 
@@ -28,4 +28,4 @@ private:
     bool     capturing_ = false;
 };
 
-} // namespace vanta
+} // namespace dt

@@ -33,7 +33,7 @@
 
 #pragma once
 
-namespace vanta::modules::chams::pose {
+namespace dt::modules::chams::pose {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parts, in the order every array in this module uses.
@@ -160,4 +160,4 @@ float block_of_z(float model_z);
 void part_corners(const part_def& def, const part_pose& pose, float dilation,
                   float scale, float out_xyz[8][3]);
 
-} // namespace vanta::modules::chams::pose
+} // namespace dt::modules::chams::pose

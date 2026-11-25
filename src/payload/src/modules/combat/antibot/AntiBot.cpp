@@ -4,7 +4,7 @@
 #include <atomic>
 #include <mutex>
 
-namespace vanta::modules::antibot {
+namespace dt::modules::antibot {
 namespace {
 std::atomic<bool> enabled{false};
 std::atomic<unsigned> timeout_ms{300};
@@ -92,5 +92,5 @@ protected:
 private:
     FloatSetting idleDelay_{this, "Inactividad (segundos)", 0.3f, 0.1f, 2.0f, 0.1f};
 };
-VANTA_REGISTER_MODULE(AntiBot);
+DT_REGISTER_MODULE(AntiBot);
 }

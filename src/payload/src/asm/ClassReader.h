@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 // Non-owning view over a Java class file. Parses just enough to locate methods
 // and their Code attributes; leaves the rest as opaque byte spans that
@@ -53,4 +53,4 @@ public:
     static bool parse(const std::uint8_t* bytes, std::size_t len, ClassView& out);
 };
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

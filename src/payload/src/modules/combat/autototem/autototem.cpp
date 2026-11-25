@@ -12,7 +12,7 @@
 #include <string>
 #include <mutex>
 
-namespace vanta::modules::autototem {
+namespace dt::modules::autototem {
 
 static jni_cache  g_cache;
 static std::mutex s_cache_mx;
@@ -25,7 +25,7 @@ jni_cache&       mutable_cache() { return g_cache; }
 static bool cache_class(JNIEnv* env, const char* sig, jclass& out)
 {
     if (!sig) return false;
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return false; }
     out = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -401,9 +401,9 @@ void shutdown_cache()
 
     std::scoped_lock lk(s_cache_mx);
     if (!g_cache.initialized) return;
-    if (!vanta::jvm::ctx().vm.load()) { g_cache = jni_cache{}; return; }
+    if (!dt::jvm::ctx().vm.load()) { g_cache = jni_cache{}; return; }
 
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     if (!scope) { g_cache = jni_cache{}; return; }
     JNIEnv* env = scope.get();
 
@@ -437,13 +437,13 @@ void shutdown_cache()
 void ensure_installed()
 {
     if (g_shutting_down.load(std::memory_order_acquire)) return;
-    if (!vanta::jvm::ctx().vm.load()) return;
+    if (!dt::jvm::ctx().vm.load()) return;
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) return;
 
     if (!settings::enabled.load(std::memory_order_relaxed)) return;
     if (!g_cache.initialized) init_cache(env);
 }
 
-} // namespace vanta::modules::autototem
+} // namespace dt::modules::autototem

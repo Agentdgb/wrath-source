@@ -10,7 +10,7 @@ namespace {
 JNIEnv *activeEnv = nullptr;
 bool friendFilter = false;
 } // namespace
-namespace vanta::jvm {
+namespace dt::jvm {
 JniScope::JniScope() : env_(activeEnv) {}
 JniScope::~JniScope() = default;
 jclass findClassAnyLoader(JNIEnv *env, const char *name) { return env->FindClass(name); }
@@ -23,21 +23,21 @@ std::string toStdString(JNIEnv *env, jstring value) {
         env->ReleaseStringUTFChars(value, chars);
     return result;
 }
-} // namespace vanta::jvm
-namespace vanta::vgui::bridge { bool isOverlayVisible(){return false;} bool isEnabled(const std::string&){return false;} }
-namespace vanta::log { void write(Level, std::string_view, std::string) noexcept {} }
-namespace vanta::modules::aimassist::debug {
+} // namespace dt::jvm
+namespace dt::vgui::bridge { bool isOverlayVisible(){return false;} bool isEnabled(const std::string&){return false;} }
+namespace dt::log { void write(Level, std::string_view, std::string) noexcept {} }
+namespace dt::modules::aimassist::debug {
 void setEnabled(bool) {} bool active(){return false;}
 void workerStage(const char*) {} void renderStage(const char*) {} void frameStatus(const char*,bool,bool) {}
 void sessionOpen(int,float,float,bool,bool,float) {} void sessionClose() {} void resolveLine(const char*) {}
 void workerTick(double) {} void opts(int,float,float,bool,bool) {} void optsTick() {} void setQuantum(float) {}
 void emit(float,float,float,float,float,float,float,float) {} void ctrlAdaptive(const AdaptiveSnap&) {}
 }
-namespace vanta::jvm { JvmContext& ctx() noexcept { static JvmContext value; return value; } }
-namespace vanta::social {
+namespace dt::jvm { JvmContext& ctx() noexcept { static JvmContext value; return value; } }
+namespace dt::social {
 bool isFriend(JNIEnv *, jobject) { return friendFilter; }
 bool isTeammate(JNIEnv *, jobject, jobject) { return false; }
-} // namespace vanta::social
+} // namespace dt::social
 void require(bool value, const char *message) {
     if (!value)
         throw std::runtime_error(message);
@@ -71,7 +71,7 @@ int main() {
         };
         auto read = [&](int field) { return env->CallStaticDoubleMethod(fixture, get, field); };
         {
-            using namespace vanta::modules::aimassist;
+            using namespace dt::modules::aimassist;
             env->CallStaticVoidMethod(fixture, reset);
             require(ensure_cache(env), "OG legacy JNI cache unavailable");
             const auto& c=cache();
@@ -98,7 +98,7 @@ int main() {
             require(shared.targetRef && read(1)<-65, "Unmodified OG Regular does not acquire and rotate");
             regular::onDisable(env,shared);
             put(2,-40);
-            vanta::jvm::ctx().vm.store(vm);
+            dt::jvm::ctx().vm.store(vm);
             Runtime threaded;
             threaded.settings=sv;
             threaded.moduleEnabled.store(true);
@@ -141,7 +141,7 @@ int main() {
         }
         {
             using namespace readableaim;
-            vanta::modules::aimassist::simple::Engine game;
+            dt::modules::aimassist::simple::Engine game;
             Settings settings;
             double time = 1;
             auto start = [&] {

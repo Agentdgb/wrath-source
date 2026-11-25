@@ -1,6 +1,6 @@
-# Wrath Client (Vanta Core) - Documentación Técnica y Arquitectura
+# Wrath Client (Dt Core) - Documentación Técnica y Arquitectura
 
-Bienvenido a la documentación técnica del cliente in-game **Wrath** (`vantaclient` / `WrathPayload.dll`). Este componente es una biblioteca dinámica nativa escrita en C++20 que se ejecuta directamente dentro del proceso de Java (`javaw.exe`) de Minecraft (enfocado en Fabric 1.21+).
+Bienvenido a la documentación técnica del cliente in-game **Wrath** (`dt_core` / `WrathPayload.dll`). Este componente es una biblioteca dinámica nativa escrita en C++20 que se ejecuta directamente dentro del proceso de Java (`javaw.exe`) de Minecraft (enfocado en Fabric 1.21+).
 
 ---
 
@@ -25,7 +25,7 @@ wrath/client/src/
 ├── entry/              # Punto de entrada y bootstrap
 │   ├── DllMain.cpp     # DLL_PROCESS_ATTACH asíncrono
 │   ├── Bootstrap.cpp   # Hilo desacoplado de inicialización
-│   ├── VantaInit.cpp   # Orquestador del arranque de subsistemas
+│   ├── DtInit.cpp   # Orquestador del arranque de subsistemas
 │   ├── Shutdown.cpp    # Procedimiento de apagado limpio
 │   └── version.rc      # Metadatos del recurso PE de Windows
 │
@@ -101,7 +101,7 @@ wrath/client/src/
    ```cpp
    #include "core/module/Module.h"
 
-   namespace vanta::modules {
+   namespace dt::modules {
        class MiNuevoModulo : public Module {
        public:
            MiNuevoModulo() : Module("MiNuevoModulo", Category::Combat, "Descripción del módulo") {}

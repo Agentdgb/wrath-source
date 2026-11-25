@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace vanta {
+namespace dt {
 
 namespace {
 
@@ -127,4 +127,4 @@ void FriendList::replaceAll(std::vector<std::string> names)
     VLOG_INFO("friends", "loaded {} friend(s)", count_.load(std::memory_order_relaxed));
 }
 
-} // namespace vanta
+} // namespace dt

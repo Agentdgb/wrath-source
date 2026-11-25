@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 class BlockSetSetting : public Setting {
 public:
@@ -35,4 +35,4 @@ private:
     std::vector<std::string> ids_;
 };
 
-} // namespace vanta
+} // namespace dt

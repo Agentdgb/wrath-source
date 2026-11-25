@@ -9,21 +9,21 @@
 #include <limits>
 
 namespace {
-vanta::modules::triggerbot::jni_cache cache;
+dt::modules::triggerbot::jni_cache cache;
 bool friend_target = false;
 void require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
 }
 }
-namespace vanta::modules::triggerbot {
+namespace dt::modules::triggerbot {
 const jni_cache& get_cache() { return cache; }
 }
-namespace vanta::social {
+namespace dt::social {
 bool isFriend(JNIEnv*, jobject) { return friend_target; }
 }
 
 int main() {
-    using namespace vanta::modules::shieldbreaker;
+    using namespace dt::modules::shieldbreaker;
     const std::filesystem::path runtimePath(WRATH_TEST_JVM_DLL);
     SetDllDirectoryW(runtimePath.parent_path().parent_path().c_str());
     auto runtime = LoadLibraryExW(runtimePath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);

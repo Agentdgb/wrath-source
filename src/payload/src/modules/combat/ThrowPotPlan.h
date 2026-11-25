@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <span>
 
-namespace vanta::modules::throwpot {
+namespace dt::modules::throwpot {
 struct Potion { int slot = -1; int healing = 0; };
 struct Plan { std::array<Potion, 2> potions{}; unsigned count = 0; };
 inline constexpr unsigned maxThrows = 2;

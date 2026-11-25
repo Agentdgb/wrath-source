@@ -12,7 +12,7 @@
 
 #include <functional>
 
-namespace vanta::modules::targethud {
+namespace dt::modules::targethud {
 
 extern bool g_enabled;
 
@@ -74,4 +74,4 @@ void render_text(int display_w, int display_h);
 void query_bbox(float& x, float& y, float& w, float& h);
 void set_top_left(float x, float y);
 
-} // namespace vanta::modules::targethud
+} // namespace dt::modules::targethud

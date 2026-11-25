@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::spotify {
+namespace dt::modules::spotify {
 
 namespace { std::atomic<bool> g_chat_open{false}; }
 void set_chat_open(bool open) { g_chat_open.store(open, std::memory_order_relaxed); }
@@ -570,8 +570,8 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     /* @the row's height is only spent when the row exists. */
     {
         float px = 0.f, py = 0.f, pw = 0.f, ph = 0.f;
-        const bool can_press = has_track && (vanta::vgui::bridge::panelRect(px, py, pw, ph) || chat_open())
-                            && !vanta::vgui::bridge::isHudEditorActive();
+        const bool can_press = has_track && (dt::vgui::bridge::panelRect(px, py, pw, ph) || chat_open())
+                            && !dt::vgui::bridge::isHudEditorActive();
 
         const float dt = std::clamp(ImGui::GetIO().DeltaTime, 0.0001f, 0.1f);
         const float want = can_press ? 1.f : 0.f;
@@ -701,10 +701,10 @@ bool interaction_allowed(float& mx, float& my)
 {
     float px = 0.f, py = 0.f, pw = 0.f, ph = 0.f;
 
-    const bool panel_open = vanta::vgui::bridge::panelRect(px, py, pw, ph);
+    const bool panel_open = dt::vgui::bridge::panelRect(px, py, pw, ph);
     if (!panel_open && !chat_open()) return false;
 
-    if (vanta::vgui::bridge::isHudEditorActive())
+    if (dt::vgui::bridge::isHudEditorActive())
         return false;
 
     const ImVec2 m = ImGui::GetMousePos();
@@ -743,7 +743,7 @@ void transport_icon(ImDrawList* dl, const char* name, float cx, float cy,
     const int size = static_cast<int>(std::lround(px));
     if (size < 3) return;
 
-    const unsigned long long tex = ::vanta::vgui::bridge::iconTexture(name, size);
+    const unsigned long long tex = ::dt::vgui::bridge::iconTexture(name, size);
     if (!tex) return;
 
     /* Snapped to whole pixels. The bake is one texel per pixel, and landing it
@@ -1829,7 +1829,7 @@ void render_text(int display_w, int display_h)
             static bool manual = false;
             static std::string browse_key;
             if (browse_key != doc->key
-                || (!vanta::vgui::bridge::isOverlayVisible() && !chat_open())) {
+                || (!dt::vgui::bridge::isOverlayVisible() && !chat_open())) {
                 manual = false;
                 if (browse_key != doc->key) {
                     s_scroll = 0.f;

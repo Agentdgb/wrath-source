@@ -1,12 +1,12 @@
 #pragma once
-#ifndef VANTA_CORE_HEARTBEAT_WATCHDOG_H
-#define VANTA_CORE_HEARTBEAT_WATCHDOG_H
+#ifndef DT_CORE_HEARTBEAT_WATCHDOG_H
+#define DT_CORE_HEARTBEAT_WATCHDOG_H
 
 #include <string>
 #include <atomic>
 #include <cstdint>
 
-namespace vanta::sync {
+namespace dt::sync {
 
 class HeartbeatWatchdog {
 public:
@@ -34,7 +34,7 @@ private:
     std::atomic<bool> m_authorized{false};
 };
 
-} // namespace vanta::sync
+} // namespace dt::sync
 
-#endif // VANTA_CORE_HEARTBEAT_WATCHDOG_H
+#endif // DT_CORE_HEARTBEAT_WATCHDOG_H
 

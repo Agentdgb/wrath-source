@@ -3,9 +3,9 @@ scrub_eh_typeinfo.py - Neutralize EH catch type descriptor and template signatur
 
 MSVC /EHsc emits:
   1. __CatchableType / __ThrowInfo records in .data for every type that appears
-     in a catch clause (".?AUGameLoopEvent@events@vanta@@").
+     in a catch clause (".?AUGameLoopEvent@events@dt@@").
   2. Mangled function pointer / prototype signatures in .rdata for templated
-     callbacks (".P6AX...URGBA@vanta@@@Z").
+     callbacks (".P6AX...URGBA@dt@@@Z").
 
 Both embed decorated mangled names that string scanners (detect-scanner, Echo,
 Paladin) can grep.
@@ -31,7 +31,7 @@ PATTERNS = [
 ]
 
 TARGET_NAMESPACES = [
-    b'vanta', b'sync', b'events', b'modules',
+    b'dt', b'sync', b'events', b'modules',
     b'config', b'jvm', b'mappings', b'hook',
     b'WrathPayload', b'display_service',
 ]

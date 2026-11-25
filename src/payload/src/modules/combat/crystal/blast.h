@@ -22,7 +22,7 @@
 #include <cmath>
 #include "modules/shared/NativeAccess.h"
 
-namespace vanta::modules::blast {
+namespace dt::modules::blast {
 
 constexpr float kAnchorPower  = 5.f;   // RespawnAnchorBlock.explode -> createExplosion(..., 5.0F, true, BLOCK)
 constexpr float kCrystalPower = 6.f;   // EndCrystalEntity -> createExplosion(..., 6.0F, false, BLOCK)
@@ -46,4 +46,4 @@ inline double estimate(native::Vec centre,float power,native::Vec feet) {
     return (impact*impact+impact)/2.0*7.0*radius+1.0;
 }
 
-} // namespace vanta::modules::blast
+} // namespace dt::modules::blast

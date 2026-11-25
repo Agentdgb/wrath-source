@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 // String-backed enum. Modules typically declare a static array of option names
 // and pass indices in/out.
@@ -41,4 +41,4 @@ private:
     int                      index_;
 };
 
-} // namespace vanta
+} // namespace dt

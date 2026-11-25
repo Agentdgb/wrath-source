@@ -1,10 +1,10 @@
-// HitFxModule.cpp — Vanta module wrapper for the comic hit-effects engine.
+// HitFxModule.cpp — Dt module wrapper for the comic hit-effects engine.
 
 #include "hitfx.h"
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class HitFx : public Module {
 public:
@@ -72,6 +72,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::HitFx)
+DT_REGISTER_MODULE(dt::modules::HitFx)

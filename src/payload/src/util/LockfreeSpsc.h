@@ -5,7 +5,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace vanta {
+namespace dt {
 
 // Single-producer / single-consumer bounded ring buffer.
 // N must be a power of two.
@@ -41,4 +41,4 @@ public:
     static constexpr std::size_t capacity() noexcept { return N; }
 };
 
-} // namespace vanta
+} // namespace dt

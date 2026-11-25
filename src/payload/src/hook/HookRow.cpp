@@ -1,6 +1,6 @@
 #include "hook/HookRow.h"
 
-namespace vanta::hook {
+namespace dt::hook {
 
 HookRegistry& HookRegistry::get() {
     static HookRegistry g;
@@ -9,4 +9,4 @@ HookRegistry& HookRegistry::get() {
 
 void HookRegistry::addRow(HookRow r) { rows_.push_back(std::move(r)); }
 
-} // namespace vanta::hook
+} // namespace dt::hook

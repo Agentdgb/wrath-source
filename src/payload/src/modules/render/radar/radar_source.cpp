@@ -10,7 +10,7 @@
 #include <chrono>
 #include <cmath>
 
-namespace vanta::modules::radar {
+namespace dt::modules::radar {
 
 namespace {
 
@@ -62,7 +62,7 @@ constexpr double k_pi = 3.14159265358979323846;
 
 jclass global_class(JNIEnv* env, const char* sig)
 {
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
 
     if (local == nullptr)
     {
@@ -138,7 +138,7 @@ bool init_cache(JNIEnv* env)
     g_cache.mc_getRenderTickCounter = env->GetMethodID(g_cache.mc_class,
         "method_61966", "()Lnet/minecraft/class_9779;");
 
-    if (jclass rtc = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_9779"))
+    if (jclass rtc = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_9779"))
     {
         g_cache.rtc_getTickProgress = env->GetMethodID(rtc, "method_60637", "(Z)F");
         env->DeleteLocalRef(rtc);
@@ -171,7 +171,7 @@ bool init_cache(JNIEnv* env)
     g_cache.ent_lastY = env->GetFieldID(g_cache.entity_class, "field_5971", "D");
     g_cache.ent_lastZ = env->GetFieldID(g_cache.entity_class, "field_5989", "D");
 
-    if (jclass world = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_638"))
+    if (jclass world = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_638"))
     {
         g_cache.world_getPlayers = env->GetMethodID(world, "method_18456", "()Ljava/util/List;");
         env->DeleteLocalRef(world);
@@ -295,7 +295,7 @@ void poll(float range)
     if (range <= 0.f)
         return;
 
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
 
     if (!scope)
         return;
@@ -435,4 +435,4 @@ void reset_source()
     g_yaw = 0.f;
 }
 
-} // namespace vanta::modules::radar
+} // namespace dt::modules::radar

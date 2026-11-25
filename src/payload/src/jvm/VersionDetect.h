@@ -4,7 +4,7 @@
 #include <jni.h>
 #include <string>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 struct RuntimeInfo {
     std::string mcVersion;   // e.g. "1.21.4"
@@ -15,4 +15,4 @@ struct RuntimeInfo {
 RuntimeInfo        detectRuntime(JNIEnv* env);
 const RuntimeInfo& currentRuntime();
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

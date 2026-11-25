@@ -18,7 +18,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::hitfx::capture {
+namespace dt::modules::hitfx::capture {
 
 // Resolves all reflection IDs (classes/methods/fields). Idempotent. Returns true
 // once everything resolved. Safe once a world is loaded (GameRenderer/Camera
@@ -37,4 +37,4 @@ void set_capture_enabled(bool on);
 
 unsigned long long debug_fire_count();
 
-} // namespace vanta::modules::hitfx::capture
+} // namespace dt::modules::hitfx::capture

@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace vanta {
+namespace dt {
 
 class Module;
 
@@ -17,9 +17,9 @@ public:
     Setting(Module* owner, std::string name, SettingType type);
     Setting(Module* owner, std::string name, SettingType type, std::string description);
     virtual ~Setting() {
-        vanta::util::scrubString(name_);
-        vanta::util::scrubString(label_);
-        vanta::util::scrubString(description_);
+        dt::util::scrubString(name_);
+        dt::util::scrubString(label_);
+        dt::util::scrubString(description_);
     }
 
     std::string_view name()  const noexcept { return name_; }
@@ -55,4 +55,4 @@ protected:
     std::function<bool()>         visible_;
 };
 
-} // namespace vanta
+} // namespace dt

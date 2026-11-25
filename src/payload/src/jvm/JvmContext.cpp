@@ -12,7 +12,7 @@
 #include <thread>
 #include <windows.h>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 namespace {
 
@@ -106,7 +106,7 @@ void init(JavaVM* vm) {
 }
 
 void initFromRunningProcess() {
-    HMODULE mod = vanta::platform::findJvmModule();
+    HMODULE mod = dt::platform::findJvmModule();
     if (!mod) {
         VLOG_FATAL("jvm", "target runtime not present in process");
         return;
@@ -202,7 +202,7 @@ JniScope::~JniScope() = default;
 void shutdown() {
     if (g_ctx.jvmti.load()) {
         if (g_ctx.jvmti.load()->DisposeEnvironment() != JVMTI_ERROR_NONE) {
-            vanta::blockUnload();
+            dt::blockUnload();
             return;
         }
         g_ctx.jvmti.store(nullptr);
@@ -210,4 +210,4 @@ void shutdown() {
     g_ctx.vm.store(nullptr);
 }
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

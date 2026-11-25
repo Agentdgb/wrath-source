@@ -1,6 +1,6 @@
 // Generated from the supplied target visual engine. Runtime: C++ only.
 #include "BloomCompat.h"
-namespace vanta::modules::bloom::halo {
+namespace dt::modules::bloom::halo {
 void a();
 void b(int var0);
 void c(int var0);
@@ -2329,4 +2329,4 @@ const bool initialized = []() {
     return true;
 }();
 bool visible() { return dt > 0 || RegionPassCache::ah; }
-} // namespace vanta::modules::bloom::halo
+} // namespace dt::modules::bloom::halo

@@ -43,7 +43,7 @@
 #include <string>
 #include <utility>
 
-namespace vanta {
+namespace dt {
 namespace modules {
 namespace triggerbot_hook {
 
@@ -51,13 +51,13 @@ namespace triggerbot_hook {
 // log_(fmt, ...) — writes to a plain .txt on the user's desktop.
 //
 // Where it lands is figured out at DLL load, in this order:
-//   1. %USERPROFILE%\Desktop\vanta_trigger.txt   (classic Desktop)
-//   2. %USERPROFILE%\OneDrive\Desktop\vanta_trigger.txt
+//   1. %USERPROFILE%\Desktop\dt_trigger.txt   (classic Desktop)
+//   2. %USERPROFILE%\OneDrive\Desktop\dt_trigger.txt
 //                                                (OneDrive-redirected Desktop —
 //                                                 this is why the file "wasn't
 //                                                 appearing" for the user)
-//   3. %USERPROFILE%\Desktop\vanta_trigger.txt   (whatever the profile says)
-//   4. %TEMP%\vanta_trigger.txt                  (guaranteed writable fallback)
+//   3. %USERPROFILE%\Desktop\dt_trigger.txt   (whatever the profile says)
+//   4. %TEMP%\dt_trigger.txt                  (guaranteed writable fallback)
 //
 // The first fopen_s that succeeds wins. The final path is written back to
 // disk in the header line so you can see WHERE the log actually is by
@@ -85,14 +85,14 @@ static bool try_open_at(const char* path) {
     return true;
 }
 
-#define VANTA_TB_QUIET 1
+#define DT_TB_QUIET 1
 
 inline void log_(const char*, ...) {}
 
 static void log_open_once() {}
 namespace { struct _log_boot { _log_boot() {} } _log_boot_inst; }
 
-extern "C" void vanta_trigger_desktop_log(const char* fmt, ...) {
+extern "C" void dt_trigger_desktop_log(const char* fmt, ...) {
     (void)fmt;
 }
 
@@ -103,14 +103,14 @@ extern "C" void vanta_trigger_desktop_log(const char* fmt, ...) {
 // literal pointer. The FIRST call for a tag always prints. After that, the
 // same tag re-prints at most once every 500 ms — that keeps a hot-loop
 // gate (which fires 240× per second) from flooding the log while still
-// giving a heartbeat you can grep for. Grep '[trigger] TB:' in vanta.log.
+// giving a heartbeat you can grep for. Grep '[trigger] TB:' in dt.log.
 //
 // Every diagnostic point in the trigger flow goes through this so you can
 // see EXACTLY where the pipeline dies: run() entry, tick_from_render()
 // entry, each of the ~12 gates inside try_trigger_attack, and the actual
-// SendInput call. Turn debug off later by defining VANTA_TB_QUIET.
+// SendInput call. Turn debug off later by defining DT_TB_QUIET.
 // ─────────────────────────────────────────────────────────────────────────────
-#ifndef VANTA_TB_QUIET
+#ifndef DT_TB_QUIET
 #define TB_DBG(tag, fmt_str, ...)                                          \
     do {                                                                   \
         static std::atomic<unsigned long long> _tb_next_ms{0};             \
@@ -809,7 +809,7 @@ static bool holding_weapon(JNIEnv* env, const triggerbot::jni_cache& c, jobject 
     bool is_weapon = false;
     if (k)
     {
-        is_weapon = ::vanta::modules::triggerbot::is_weapon_key(k);
+        is_weapon = ::dt::modules::triggerbot::is_weapon_key(k);
         env->ReleaseStringUTFChars((jstring)key.get(), k);
     }
     return is_weapon;
@@ -847,10 +847,10 @@ static bool target_passes_validation(JNIEnv* env, const triggerbot::jni_cache& c
     jobject local_player, jobject target)
 {
     // A friend is not a target — checked first, before anything that costs JNI.
-    if (::vanta::social::isFriend(env, target)) return false;
+    if (::dt::social::isFriend(env, target)) return false;
 
     // A teammate is not a target when check_teams is active.
-    if (triggerbot::settings::check_teams && ::vanta::social::isTeammate(env, local_player, target))
+    if (triggerbot::settings::check_teams && ::dt::social::isTeammate(env, local_player, target))
         return false;
 
     if (target_in_invuln(env, c, target)) return false;
@@ -869,7 +869,7 @@ static bool target_passes_validation(JNIEnv* env, const triggerbot::jni_cache& c
         // matters is the one to the ghost — the body itself may already have
         // run past the range, and measuring it is what made the bot go quiet
         // on every backtracked hit.
-        const double ghost = ::vanta::modules::backtrack::ghost_hit_distance(env, target);
+        const double ghost = ::dt::modules::backtrack::ghost_hit_distance(env, target);
         if (ghost >= 0.0 && (dist < 0.0 || ghost < dist)) dist = ghost;
         if (dist < 0.0) return false;
         double reach = (double)triggerbot::settings::attack_range;
@@ -1190,7 +1190,7 @@ static bool gate_attack_in_gui(JNIEnv* env, const triggerbot::jni_cache& c, jobj
     return true;
 }
 
-// vanta-c target type: 0 = All, 1 = Players, 2 = Mobs (non-player living).
+// dt-c target type: 0 = All, 1 = Players, 2 = Mobs (non-player living).
 static bool gate_target_type(JNIEnv* env, const triggerbot::jni_cache& c, jobject target)
 {
     const bool is_player = (c.player_class &&
@@ -1216,7 +1216,7 @@ static bool gate_check_shield(JNIEnv* env, const triggerbot::jni_cache& c, jobje
     return blocking == JNI_FALSE;
 }
 
-// Friend check: kept as a stub — Vanta has no friends module, so every
+// Friend check: kept as a stub — Dt has no friends module, so every
 // target is treated as "not a friend" and passes through.
 static bool gate_not_friend(JNIEnv* /*env*/, jobject /*target*/) { return true; }
 
@@ -1255,7 +1255,7 @@ static bool gate_module_enabled()
         return false;
     }
 
-    HWND mc_window = vanta::platform::findGameWindow();
+    HWND mc_window = dt::platform::findGameWindow();
     HWND fg        = GetForegroundWindow();
     if (!mc_window) {
         TB_DBG("gate", "findGameWindow() returned null — game window not resolved yet");
@@ -1363,7 +1363,7 @@ static jboolean hkDoAttackBody(JNIEnv* env, jobject thiz)
     if (!ORIG_doAttack || !g_minecraft_class) return JNI_FALSE;
 
     // Guard de shutdown: pasar el ataque al original sin más.
-    if (vanta::modules::triggerbot::g_shutting_down.load(std::memory_order_acquire))
+    if (dt::modules::triggerbot::g_shutting_down.load(std::memory_order_acquire))
     {
         jboolean r = JNI_FALSE;
         __try {
@@ -1378,7 +1378,7 @@ static jboolean hkDoAttackBody(JNIEnv* env, jobject thiz)
     // no original, so no attack packet and no swing -- exactly as if the
     // click had not happened. Cheap and exception-safe; answers false the
     // moment the module is off.
-    if (::vanta::modules::antiaction::should_block_attack(env, thiz)) {
+    if (::dt::modules::antiaction::should_block_attack(env, thiz)) {
         return JNI_FALSE;
     }
 
@@ -1409,7 +1409,7 @@ static jboolean hkDoAttackBody(JNIEnv* env, jobject thiz)
     // swing at air". Same two calls vanilla's own doAttack makes, in the same
     // order, then the original is skipped.
     if (!g_silentaim_active.load(std::memory_order_acquire)
-        && ::vanta::modules::silentaim::attack_would_be_unjustified()) {
+        && ::dt::modules::silentaim::attack_would_be_unjustified()) {
         const auto& c_sw = triggerbot::get_cache();
         if (c_sw.minecraft_player_fid) {
             jobject p = env->GetObjectField(thiz, c_sw.minecraft_player_fid);
@@ -1669,7 +1669,7 @@ static jboolean hkDoAttackBody(JNIEnv* env, jobject thiz)
     // while the player's velocity had already been cut to 0.6. See
     // request_sprint_reset() for why that is what Simulation sees.
     if ((was_sprinting || dropped_sprint_for_crit) && !read_player_sprinting(env, thiz))
-        ::vanta::shared::request_sprint_reset(env, thiz);
+        ::dt::shared::request_sprint_reset(env, thiz);
 
     // Restore crosshair (silent aim NOT owner of sa_target lifecycle here).
     if (sa_target) {
@@ -1734,7 +1734,7 @@ static jboolean JNICALL hkDoAttack(JNIEnv* env, jobject thiz) {
 // lookup builds.
 static bool freecam_active()
 {
-    return ::vanta::vgui::bridge::isEnabled("Freecam");
+    return ::dt::vgui::bridge::isEnabled("Freecam");
 }
 
 static void JNICALL hkHandleBlockBreaking(JNIEnv* env, jobject thiz, jboolean breaking)
@@ -1751,7 +1751,7 @@ static void JNICALL hkHandleBlockBreaking(JNIEnv* env, jobject thiz, jboolean br
     //
     // Called before the early-out below on purpose: the suppression path is
     // exactly the case where silent aim HAS a target and most needs the frame.
-    ::vanta::modules::silentaim::on_pre_player_tick(env, thiz);
+    ::dt::modules::silentaim::on_pre_player_tick(env, thiz);
 
     // Freecam: vanilla path only (the attack key never reaches the game while
     // the capture is up, so `breaking` is false and the original just resets).
@@ -1776,7 +1776,7 @@ static void JNICALL hkHandleBlockBreaking(JNIEnv* env, jobject thiz, jboolean br
     // NO llamamos ORIG_handleBlockBreaking → nada de packets START_DIGGING /
     // block-break-progress → nada de flags.
     if (g_silentaim_active.load(std::memory_order_acquire)
-        || ::vanta::modules::silentaim::rotation_spoof_active()) {
+        || ::dt::modules::silentaim::rotation_spoof_active()) {
         return;
     }
 
@@ -2047,13 +2047,13 @@ static void try_trigger_attack(JNIEnv* env, jobject local_player)
         g_dbg_skipped_shield.fetch_add(1, std::memory_order_relaxed);
         return;
     }
-    if (::vanta::social::isFriend(env, target.get()))
+    if (::dt::social::isFriend(env, target.get()))
     {
         TB_DBG("try", "target is a friend — skipping");
         g_dbg_skipped_validation.fetch_add(1, std::memory_order_relaxed);
         return;
     }
-    if (triggerbot::settings::check_teams && ::vanta::social::isTeammate(env, local_player, target.get()))
+    if (triggerbot::settings::check_teams && ::dt::social::isTeammate(env, local_player, target.get()))
     {
         TB_DBG("try", "target is a teammate — skipping");
         g_dbg_skipped_validation.fetch_add(1, std::memory_order_relaxed);
@@ -2134,17 +2134,17 @@ static void try_trigger_attack(JNIEnv* env, jobject local_player)
 
         // ── Sample rotation speed (deg/sec) ──────────────────────
         // enhance's sdk::entity_client wrapper is replaced by direct
-        // field reads through Vanta's canonical mapping registry — same
+        // field reads through Dt's canonical mapping registry — same
         // two intermediary field IDs (Entity.yaw / Entity.pitch), no
         // wrapper allocation per frame.
         double rot_speed = 0.0;
         {
             float yaw = 0.f, pitch = 0.f;
-            if (jfieldID yawF = ::vanta::jvm::fieldCanon(env, "Entity", "yaw")) {
+            if (jfieldID yawF = ::dt::jvm::fieldCanon(env, "Entity", "yaw")) {
                 yaw = env->GetFloatField(local_player, yawF);
                 if (env->ExceptionCheck()) env->ExceptionClear();
             }
-            if (jfieldID pitchF = ::vanta::jvm::fieldCanon(env, "Entity", "pitch")) {
+            if (jfieldID pitchF = ::dt::jvm::fieldCanon(env, "Entity", "pitch")) {
                 pitch = env->GetFloatField(local_player, pitchF);
                 if (env->ExceptionCheck()) env->ExceptionClear();
             }
@@ -2238,7 +2238,7 @@ static void try_trigger_attack(JNIEnv* env, jobject local_player)
 static void JNICALL hkTickMovement(JNIEnv* env, jobject thiz)
 {
     // Guard de shutdown: pasar al original sin tocar el cache.
-    if (vanta::modules::triggerbot::g_shutting_down.load(std::memory_order_acquire))
+    if (dt::modules::triggerbot::g_shutting_down.load(std::memory_order_acquire))
     {
         if (ORIG_tickMovement && g_clientplayer_class) {
             __try {
@@ -2349,7 +2349,7 @@ void tick_from_render(JNIEnv* env)
 
     // Sample vertical state here too, at render rate. The proper place
     // for this is tick_from_movement_packets (world-tick aligned = same
-    // vy the server sees), but Vanta has no sendMovementPackets JNIHook
+    // vy the server sees), but Dt has no sendMovementPackets JNIHook
     // to piggyback on. Sampling at render rate loses a tick of server-
     // alignment but the gravity-shifted threshold below still keeps
     // Priorize Crits honest: the state only flips to DESCENDING once
@@ -2504,13 +2504,13 @@ void on_entity_attacked(JNIEnv* env, jobject target)
     triggerbot::init_cache(env);
     const auto& c = triggerbot::get_cache();
     if (!c.minecraft_world_fid || !gate_target_type(env, c, target) ||
-        ::vanta::social::isFriend(env, target)) return;
+        ::dt::social::isFriend(env, target)) return;
     LocalRef minecraft(env, resolve_minecraft(env, c));
     if (!minecraft) return;
     if (triggerbot::settings::check_teams && c.minecraft_player_fid) {
         LocalRef local_player(env, env->GetObjectField(minecraft.get(), c.minecraft_player_fid));
         if (env->ExceptionCheck()) env->ExceptionClear();
-        if (local_player && ::vanta::social::isTeammate(env, local_player.get(), target)) return;
+        if (local_player && ::dt::social::isTeammate(env, local_player.get(), target)) return;
     }
     LocalRef world(env, env->GetObjectField(minecraft.get(), c.minecraft_world_fid));
     if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
@@ -2546,9 +2546,9 @@ void notify_disabled()
     g_last_combat_time_ms.store(0, std::memory_order_release);
     g_last_moving_time_ms.store(0, std::memory_order_release);
 
-    if (vanta::jvm::ctx().vm)
+    if (dt::jvm::ctx().vm)
     {
-        JNIEnv* env = vanta::jvm::thisThreadEnv();
+        JNIEnv* env = dt::jvm::thisThreadEnv();
         if (env)
         {
             clear_focused_entity(env);
@@ -2566,10 +2566,10 @@ void notify_disabled()
 bool init()
 {
     if (g_attached) { TB_ONCE("init", "init() called, already attached"); return true; }
-    if (!vanta::jvm::ctx().vm) { TB_ONCE("init", "init() failed: ctx().vm is null"); return false; }
+    if (!dt::jvm::ctx().vm) { TB_ONCE("init", "init() failed: ctx().vm is null"); return false; }
 
-    auto env = vanta::jvm::thisThreadEnv();
-    auto jvm = vanta::jvm::ctx().vm.load();
+    auto env = dt::jvm::thisThreadEnv();
+    auto jvm = dt::jvm::ctx().vm.load();
     if (!env || !jvm) { TB_ONCE("init", "init() failed: env=%p vm=%p", (void*)env, (void*)jvm); return false; }
 
     TB_ONCE("init", "calling JNIHook_Init(vm=%p)", (void*)jvm);
@@ -2587,7 +2587,7 @@ bool init()
     // en los logs.
     bool hostile = false;
     if (hostile) {
-        vanta::modules::triggerbot_hook::log_("triggerbot_hook: host has class mixins — JNIHook_Attach calls "
+        dt::modules::triggerbot_hook::log_("triggerbot_hook: host has class mixins — JNIHook_Attach calls "
                    "are SEH-protected; doAttack hook may fall back to render-rate "
                    "dispatch only on aggressive-mixin hosts");
     }
@@ -2622,7 +2622,7 @@ bool init()
         // wants to call ClientPlayerEntity methods non-virtually
         // (currently nothing — but kept for symmetry with shutdown())
         // doesn't crash on null.
-        jclass cpe = vanta::jvm::findClassAnyLoader(env,
+        jclass cpe = dt::jvm::findClassAnyLoader(env,
             sdk::mappings::clientplayerentity_class_sig);
         if (cpe) {
             g_clientplayer_class = (jclass)env->NewGlobalRef(cpe);
@@ -2639,7 +2639,7 @@ bool init()
     // funcional con solo Hook 1 + render dispatch en Feather. En
     // Lunar/Vanilla/Modrinth este hook 2 instala normal y mejora el
     // timing al world-tick rate como antes.
-    jclass mc_cls = vanta::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
+    jclass mc_cls = dt::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
     if (mc_cls)
     {
         jmethodID da_mid = env->GetMethodID(mc_cls,
@@ -2656,7 +2656,7 @@ bool init()
                     &ORIG_doAttack);
             }
             __except (EXCEPTION_EXECUTE_HANDLER) {
-                vanta::modules::triggerbot_hook::log_("triggerbot_hook: JNIHook_Attach(doAttack) SEH crash "
+                dt::modules::triggerbot_hook::log_("triggerbot_hook: JNIHook_Attach(doAttack) SEH crash "
                            "code=0x%08lx — host has aggressive class_310 mixins "
                            "(Feather?). Falling back to render-rate dispatch.",
                            (unsigned long)GetExceptionCode());
@@ -2676,7 +2676,7 @@ bool init()
                     // en línea ~709).
                     JNIHook_Detach(da_mid);
                     ORIG_doAttack = nullptr;
-                    vanta::modules::triggerbot_hook::log_("triggerbot_hook: NewGlobalRef(class_310) failed — "
+                    dt::modules::triggerbot_hook::log_("triggerbot_hook: NewGlobalRef(class_310) failed — "
                                "dropping doAttack hook (Hook 1 + render dispatch "
                                "still active)");
                 }
@@ -2686,14 +2686,14 @@ bool init()
                 // Asegura ORIG_doAttack=null para que el callback (si llegase
                 // por alguna razón) rebote sin crash.
                 ORIG_doAttack = nullptr;
-                vanta::modules::triggerbot_hook::log_("triggerbot_hook: doAttack attach failed (r=%d) — "
+                dt::modules::triggerbot_hook::log_("triggerbot_hook: doAttack attach failed (r=%d) — "
                            "continuing with tickMovement-only + render dispatch",
                            (int)r2);
             }
         }
         else
         {
-            vanta::modules::triggerbot_hook::log_("triggerbot_hook: doAttack methodID lookup failed — "
+            dt::modules::triggerbot_hook::log_("triggerbot_hook: doAttack methodID lookup failed — "
                        "skipping hook 2 (render dispatch still works)");
         }
 
@@ -2715,7 +2715,7 @@ bool init()
                         &ORIG_handleBlockBreaking);
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER) {
-                    vanta::modules::triggerbot_hook::log_("triggerbot_hook: JNIHook_Attach(handleBlockBreaking) "
+                    dt::modules::triggerbot_hook::log_("triggerbot_hook: JNIHook_Attach(handleBlockBreaking) "
                                "SEH crash code=0x%08lx — skipping. Silent aim will "
                                "still work, but Grim may flag RotationBreak on block "
                                "clicks.", (unsigned long)GetExceptionCode());
@@ -2723,16 +2723,16 @@ bool init()
                 }
                 if (r3 == JNIHOOK_OK) {
                     g_hbb_method_id = hbb_mid;
-                    vanta::modules::triggerbot_hook::log_("triggerbot_hook: hkHandleBlockBreaking attached OK");
+                    dt::modules::triggerbot_hook::log_("triggerbot_hook: hkHandleBlockBreaking attached OK");
                 } else {
                     ORIG_handleBlockBreaking = nullptr;
-                    vanta::modules::triggerbot_hook::log_("triggerbot_hook: handleBlockBreaking attach failed "
+                    dt::modules::triggerbot_hook::log_("triggerbot_hook: handleBlockBreaking attach failed "
                                "(r=%d) — silent aim may flag RotationBreak", (int)r3);
                 }
             }
             else
             {
-                vanta::modules::triggerbot_hook::log_("triggerbot_hook: handleBlockBreaking methodID lookup "
+                dt::modules::triggerbot_hook::log_("triggerbot_hook: handleBlockBreaking methodID lookup "
                            "failed (method_1590 missing?) — silent aim may flag "
                            "RotationBreak on block clicks");
             }
@@ -2742,7 +2742,7 @@ bool init()
     }
     else
     {
-        vanta::modules::triggerbot_hook::log_("triggerbot_hook: class_310 not found — skipping hook 2 "
+        dt::modules::triggerbot_hook::log_("triggerbot_hook: class_310 not found — skipping hook 2 "
                    "(render dispatch still works)");
     }
 
@@ -2786,11 +2786,11 @@ void shutdown()
     detach(g_doattack_method_id, "attack_hook_release");
     detach(g_tick_method_id,     "tick_hook_release");
 
-    if (vanta::jvm::ctx().vm)
+    if (dt::jvm::ctx().vm)
     {
         try
         {
-            auto env = vanta::jvm::thisThreadEnv();
+            auto env = dt::jvm::thisThreadEnv();
             if (env)
             {
                 if (g_clientplayer_class) env->DeleteGlobalRef(g_clientplayer_class);
@@ -2817,9 +2817,9 @@ void shutdown()
     // Clear silent aim spoof state on shutdown (release el global ref si queda).
     {
         jobject old = g_silentaim_spoof_target.exchange(nullptr, std::memory_order_acq_rel);
-        if (old && vanta::jvm::ctx().vm) {
+        if (old && dt::jvm::ctx().vm) {
             try {
-                auto env = vanta::jvm::thisThreadEnv();
+                auto env = dt::jvm::thisThreadEnv();
                 if (env) env->DeleteGlobalRef(old);
             } catch (...) {}
         }

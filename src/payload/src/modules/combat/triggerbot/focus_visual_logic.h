@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace vanta::modules::triggerbot::focus_visual {
+namespace dt::modules::triggerbot::focus_visual {
 inline bool expired(std::uint64_t now, std::uint64_t started, float seconds) {
     return seconds > 0.f && now >= started && now - started >= static_cast<std::uint64_t>(seconds * 1000.f);
 }

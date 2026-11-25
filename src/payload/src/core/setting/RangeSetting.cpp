@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace vanta {
+namespace dt {
 
 RangeSetting::RangeSetting(Module* o, std::string n,
                            int defMin, int defMax,
@@ -44,4 +44,4 @@ void RangeSetting::load(const nlohmann::json& j) {
     set(a, b);
 }
 
-} // namespace vanta
+} // namespace dt

@@ -10,7 +10,7 @@
 #include <chrono>
 #include <cmath>
 
-namespace vanta::modules::targethud {
+namespace dt::modules::targethud {
 
 namespace {
 
@@ -84,7 +84,7 @@ bool g_swing_latched = false;
 
 jclass global_class(JNIEnv* env, const char* sig)
 {
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
 
     if (local == nullptr)
     {
@@ -181,7 +181,7 @@ bool init_cache(JNIEnv* env)
     g_cache.mc_getRenderTickCounter = env->GetMethodID(g_cache.mc_class,
         "method_61966", "()Lnet/minecraft/class_9779;");
 
-    if (jclass rtc = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_9779"))
+    if (jclass rtc = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_9779"))
     {
         g_cache.rtc_getTickProgress = env->GetMethodID(rtc, "method_60637", "(Z)F");
         env->DeleteLocalRef(rtc);
@@ -227,7 +227,7 @@ bool init_cache(JNIEnv* env)
     g_cache.liv_swingTicks = env->GetFieldID(g_cache.living_class,
         hand_swing_ticks_name, hand_swing_ticks_sig);
 
-    if (jclass world = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_638"))
+    if (jclass world = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_638"))
     {
         g_cache.world_getPlayers = env->GetMethodID(world, "method_18456", "()Ljava/util/List;");
         env->DeleteLocalRef(world);
@@ -243,7 +243,7 @@ bool init_cache(JNIEnv* env)
     g_cache.player_getProfile = env->GetMethodID(g_cache.player_class,
         player_get_gameprofile_name, player_get_gameprofile_sig);
 
-    if (jclass profile = vanta::jvm::findClassAnyLoader(env, gameprofile_class_sig))
+    if (jclass profile = dt::jvm::findClassAnyLoader(env, gameprofile_class_sig))
     {
         /* GameProfile is authlib, not Minecraft — its method name is the real
            one on every launcher, mapped or not. This is why the username comes
@@ -547,7 +547,7 @@ void poll(float delta, float linger, float range)
     bool out_of_range = false;
 
     {
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
 
         if (scope && init_cache(scope.get()))
         {
@@ -763,4 +763,4 @@ void reset()
     g_swing_latched = false;
 }
 
-} // namespace vanta::modules::targethud
+} // namespace dt::modules::targethud

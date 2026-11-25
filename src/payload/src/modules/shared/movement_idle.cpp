@@ -10,7 +10,7 @@
 #include <atomic>
 #include <cstring>
 
-namespace vanta::shared {
+namespace dt::shared {
 
 namespace {
 
@@ -60,7 +60,7 @@ std::atomic<bool> g_sprint_key_owned{ false };
 
 jclass global_class(JNIEnv* env, const char* sig)
 {
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return nullptr; }
     jclass g = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -436,4 +436,4 @@ bool movement_is_idle(JNIEnv* env, jobject mc)
     return idle;
 }
 
-} // namespace vanta::shared
+} // namespace dt::shared

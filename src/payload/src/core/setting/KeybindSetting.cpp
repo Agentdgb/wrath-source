@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <string>
 
-namespace vanta {
+namespace dt {
 
 namespace {
 
@@ -59,4 +59,4 @@ void KeybindSetting::load(const nlohmann::json& j) {
     }
 }
 
-} // namespace vanta
+} // namespace dt

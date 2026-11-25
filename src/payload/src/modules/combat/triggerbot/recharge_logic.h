@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
 #include <cstdint>
-namespace vanta::modules::triggerbot {
+namespace dt::modules::triggerbot {
 struct RechargeConfirmation {
     bool waiting = false;
     float before = 0.f;

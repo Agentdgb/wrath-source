@@ -15,9 +15,9 @@
 #include <cmath>
 #include <deque>
 #include <mutex>
-namespace vanta::modules::visualports {
+namespace dt::modules::visualports {
 namespace {
-namespace gl = ::vanta::al::gl;
+namespace gl = ::dt::al::gl;
 jobject level = nullptr;
 GLuint target = 0, vao = 0, vbo = 0, effectsAtlas = 0;
 int width = 0, height = 0;
@@ -370,4 +370,4 @@ void shutdownGl() {
         level = nullptr;
     }
 }
-} // namespace vanta::modules::visualports
+} // namespace dt::modules::visualports

@@ -1,7 +1,7 @@
 #pragma once
 #include "imgui.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 // Foreground overlays share a draw list but may use different font atlases.
 // Geometry must use the white pixel's atlas and geometric line antialiasing.
 class WorldOverlayDrawScope {

@@ -12,7 +12,7 @@
 #include <atomic>
 #include <cmath>
 
-namespace vanta::modules::hitfx::capture {
+namespace dt::modules::hitfx::capture {
 
 namespace {
 
@@ -113,14 +113,14 @@ bool install()
 {
     if (g_ready.load(std::memory_order_acquire)) return true;
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) { dbg::log("capture install: no env"); return false; }
 
-    jclass mc  = vanta::jvm::findClassAnyLoader(env, kMcClass);
-    jclass gr  = vanta::jvm::findClassAnyLoader(env, kGameRenderer);
-    jclass cam = vanta::jvm::findClassAnyLoader(env, kCameraClass);
-    jclass vec = vanta::jvm::findClassAnyLoader(env, kVec3dClass);
-    jclass mat = vanta::jvm::findClassAnyLoader(env, kMatrix4fClass);
+    jclass mc  = dt::jvm::findClassAnyLoader(env, kMcClass);
+    jclass gr  = dt::jvm::findClassAnyLoader(env, kGameRenderer);
+    jclass cam = dt::jvm::findClassAnyLoader(env, kCameraClass);
+    jclass vec = dt::jvm::findClassAnyLoader(env, kVec3dClass);
+    jclass mat = dt::jvm::findClassAnyLoader(env, kMatrix4fClass);
     if (!mc || !gr || !cam || !vec || !mat) {
         dbg::log("capture install: class resolve fail mc=%p gr=%p cam=%p vec=%p mat=%p",
                  (void*)mc, (void*)gr, (void*)cam, (void*)vec, (void*)mat);
@@ -154,7 +154,7 @@ bool install()
 
     // Optional: real render tick-progress for the fov lerp.
     g_mc_getRenderTickCounter = env->GetMethodID(mc, "method_61966", "()Lnet/minecraft/class_9779;");
-    if (jclass rtc = vanta::jvm::findClassAnyLoader(env, kRenderTickCounter)) {
+    if (jclass rtc = dt::jvm::findClassAnyLoader(env, kRenderTickCounter)) {
         g_rtc_getTickProgress = env->GetMethodID(rtc, "method_60637", "(Z)F");
         env->DeleteLocalRef(rtc);
     }
@@ -277,4 +277,4 @@ bool is_installed() { return g_ready.load(std::memory_order_acquire); }
 void set_capture_enabled(bool on) { g_on.store(on, std::memory_order_release); }
 unsigned long long debug_fire_count() { return g_fires.load(std::memory_order_relaxed); }
 
-} // namespace vanta::modules::hitfx::capture
+} // namespace dt::modules::hitfx::capture

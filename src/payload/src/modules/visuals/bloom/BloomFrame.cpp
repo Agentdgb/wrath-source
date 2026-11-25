@@ -6,7 +6,7 @@
 #include "util/Log.h"
 #include "vgui/bridge.h"
 #include <unordered_map>
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 MinecraftClient currentClient;
 WorldSettings worldSettings;
 TargetSettings targetSettings;
@@ -309,4 +309,4 @@ void worldFrame(JNIEnv *e, jobject level, jobject self, const hitfx::render_fram
     activeWorld = heightType = nullptr;
     e->PopLocalFrame(nullptr);
 }
-} // namespace vanta::modules::bloom
+} // namespace dt::modules::bloom

@@ -1,5 +1,13 @@
 #include <jnihook.h>
 #include "core/NativeCallbacks.h"
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <cstdio>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -123,7 +131,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
         // wireó el TLS para ese thread, cualquier toque de STL hace AV.
         Hook::ensure_tls_for_this_thread();
 
-        // VANTA PATCH — JVMTI passes class_being_redefined == NULL for an
+        // DT PATCH — JVMTI passes class_being_redefined == NULL for an
         // ORDINARY class load; it is non-null only for a redefine/retransform.
         // get_class_name() does CallObjectMethod(clazz, ...) with no null check,
         // so every normal class load that happened while this callback was armed
@@ -463,7 +471,7 @@ AttachInternal(jmethodID method, void *native_hook_method, jmethodID *original_m
                 if (!class_copy)
                         return JNIHOOK_ERR_JNI_OPERATION;
 
-                // VANTA PATCH — must be a GLOBAL ref.
+                // DT PATCH — must be a GLOBAL ref.
                 //
                 // DefineClass() above returns a LOCAL reference, valid only until
                 // the current JNI frame pops. Storing it in this process-lifetime
@@ -644,6 +652,9 @@ JNIHook_Shutdown()
                 return JNIHOOK_ERR_GET_JNI;
         }
 
+        // B-2 step 3: drain frames for 50 ms before unpatching.
+        Sleep(50);
+
         jnihook_result_t first_error = JNIHOOK_OK;
         for (auto &[key, _value] : g_class_file_cache) {
                 const auto found = g_declaring_classes.find(key);
@@ -653,14 +664,38 @@ JNIHook_Shutdown()
                 }
                 auto saved = std::move(g_hooks[key]);
                 g_hooks[key].clear();
-                const auto restored = ReapplyClass(found->second, key);
-                if (restored != JNIHOOK_OK) {
+
+                // B-2 steps 4-6: RetransformClasses per class, logging exact jvmtiError.
+                if (g_jnihook->jvmti->SetEventNotificationMode(
+                        JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
                         g_hooks[key] = std::move(saved);
-                        if (first_error == JNIHOOK_OK) first_error = restored;
+                        if (first_error == JNIHOOK_OK) first_error = JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+                        continue;
+                }
+                const jvmtiError rt_err = g_jnihook->jvmti->RetransformClasses(1, &found->second);
+                g_jnihook->jvmti->SetEventNotificationMode(
+                        JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
+
+                char dbg[192]{};
+                std::snprintf(dbg, sizeof(dbg), "[jnihook] RetransformClasses(%s) jvmtiError=%d\n",
+                              key.c_str(), static_cast<int>(rt_err));
+                OutputDebugStringA(dbg);
+
+                if (rt_err == JVMTI_ERROR_MUST_POSSESS_CAPABILITY) {
+                        g_hooks[key] = std::move(saved);
+                        return JNIHOOK_ERR_MUST_POSSESS_CAPABILITY;
+                }
+                if (rt_err == JVMTI_ERROR_UNMODIFIABLE_CLASS) {
+                        // Non-modifiable (hidden/lambda): note and continue with remaining classes.
+                        continue;
+                }
+                if (rt_err != JVMTI_ERROR_NONE) {
+                        g_hooks[key] = std::move(saved);
+                        if (first_error == JNIHOOK_OK) first_error = JNIHOOK_ERR_JVMTI_OPERATION;
                 }
         }
 
-        if (!vanta::drainNativeCallbacks() && first_error == JNIHOOK_OK)
+        if (!dt::drainNativeCallbacks() && first_error == JNIHOOK_OK)
                 first_error = JNIHOOK_ERR_JVMTI_OPERATION;
         if (first_error != JNIHOOK_OK) return first_error;
 

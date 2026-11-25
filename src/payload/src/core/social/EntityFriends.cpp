@@ -9,7 +9,7 @@
 #include <mutex>
 #include <string_view>
 
-namespace vanta::social {
+namespace dt::social {
 
 namespace {
 
@@ -79,10 +79,10 @@ bool ensure(JNIEnv* env)
     if (now < g_next_try) return false;
     g_next_try = now + 2000.0;
 
-    jclass player = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1657");
+    jclass player = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1657");
     if (env->ExceptionCheck()) env->ExceptionClear();
     if (!player) {
-        player = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/world/entity/player/Player");
+        player = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/world/entity/player/Player");
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     if (!player) return false;         /* no world yet; stay at 0 and retry later */
@@ -96,7 +96,7 @@ bool ensure(JNIEnv* env)
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
 
-    if (jclass gp = ::vanta::jvm::findClassAnyLoader(env, "com/mojang/authlib/GameProfile")) {
+    if (jclass gp = ::dt::jvm::findClassAnyLoader(env, "com/mojang/authlib/GameProfile")) {
         C.prof_name = env->GetMethodID(gp, "getName", "()Ljava/lang/String;");
         env->DeleteLocalRef(gp);
     }
@@ -123,13 +123,13 @@ bool ensure(JNIEnv* env)
     }
 
     // AbstractTeam.getColor
-    if (jclass team_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_270")) {
+    if (jclass team_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_270")) {
         C.team_color = env->GetMethodID(team_cls, "method_1203", "()Lnet/minecraft/class_124;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(team_cls);
     }
     if (!C.team_color) {
-        if (jclass team_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/world/scores/Team")) {
+        if (jclass team_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/world/scores/Team")) {
             C.team_color = env->GetMethodID(team_cls, "getColor", "()Lnet/minecraft/ChatFormatting;");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(team_cls);
@@ -137,13 +137,13 @@ bool ensure(JNIEnv* env)
     }
 
     // Formatting.isColor
-    if (jclass fmt_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_124")) {
+    if (jclass fmt_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_124")) {
         C.color_is_color = env->GetMethodID(fmt_cls, "method_542", "()Z");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(fmt_cls);
     }
     if (!C.color_is_color) {
-        if (jclass fmt_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/ChatFormatting")) {
+        if (jclass fmt_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/ChatFormatting")) {
             C.color_is_color = env->GetMethodID(fmt_cls, "isColor", "()Z");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(fmt_cls);
@@ -166,7 +166,7 @@ bool ensure(JNIEnv* env)
     }
 
     // Text / Component.getString & getStyle
-    if (jclass text_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2561")) {
+    if (jclass text_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2561")) {
         C.text_get_string = env->GetMethodID(text_cls, "method_10851", "()Ljava/lang/String;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (!C.text_get_string) {
@@ -178,7 +178,7 @@ bool ensure(JNIEnv* env)
         env->DeleteLocalRef(text_cls);
     }
     if (!C.text_get_string) {
-        if (jclass text_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/network/chat/Component")) {
+        if (jclass text_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/network/chat/Component")) {
             C.text_get_string = env->GetMethodID(text_cls, "getString", "()Ljava/lang/String;");
             if (env->ExceptionCheck()) env->ExceptionClear();
             C.text_get_style = env->GetMethodID(text_cls, "getStyle", "()Lnet/minecraft/network/chat/Style;");
@@ -188,13 +188,13 @@ bool ensure(JNIEnv* env)
     }
 
     // Style.getColor
-    if (jclass style_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2583")) {
+    if (jclass style_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2583")) {
         C.style_get_color = env->GetMethodID(style_cls, "method_10973", "()Lnet/minecraft/class_5251;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(style_cls);
     }
     if (!C.style_get_color) {
-        if (jclass style_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/network/chat/Style")) {
+        if (jclass style_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/network/chat/Style")) {
             C.style_get_color = env->GetMethodID(style_cls, "getColor", "()Lnet/minecraft/network/chat/TextColor;");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(style_cls);
@@ -202,13 +202,13 @@ bool ensure(JNIEnv* env)
     }
 
     // TextColor.getRgb
-    if (jclass color_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_5251")) {
+    if (jclass color_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_5251")) {
         C.color_get_rgb = env->GetMethodID(color_cls, "method_27716", "()I");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(color_cls);
     }
     if (!C.color_get_rgb) {
-        if (jclass color_cls = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/network/chat/TextColor")) {
+        if (jclass color_cls = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/network/chat/TextColor")) {
             C.color_get_rgb = env->GetMethodID(color_cls, "getValue", "()I");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(color_cls);
@@ -474,4 +474,4 @@ bool isTeammate(JNIEnv* env, jobject local_player, jobject target)
     return false;
 }
 
-} // namespace vanta::social
+} // namespace dt::social

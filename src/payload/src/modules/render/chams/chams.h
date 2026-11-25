@@ -41,7 +41,7 @@
 
 #include <functional>
 
-namespace vanta::modules::chams {
+namespace dt::modules::chams {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -79,4 +79,4 @@ void render_text(int display_w, int display_h);
 // read once the hooks are in place.
 void tick_game_context();
 
-} // namespace vanta::modules::chams
+} // namespace dt::modules::chams

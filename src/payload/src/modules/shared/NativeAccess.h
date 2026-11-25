@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <cmath>
 
-namespace vanta::modules::native {
+namespace dt::modules::native {
 struct Failure : std::runtime_error { using std::runtime_error::runtime_error; };
 // Used only on the game/render thread. Local frames bound every JNI allocation.
 struct Frame {

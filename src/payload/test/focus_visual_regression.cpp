@@ -3,7 +3,7 @@
 #include <iostream>
 
 float alpha_text = 1.f;
-using namespace vanta::modules::triggerbot::focus_visual;
+using namespace dt::modules::triggerbot::focus_visual;
 int main() {
     if (!expired(31000, 1000, 30.f) || expired(30999, 1000, 30.f) || expired(99999, 1000, 0.f)) return 1;
     if (!(arrow_size(1) < arrow_size(3) && arrow_size(3) < arrow_size(10))) return 2;

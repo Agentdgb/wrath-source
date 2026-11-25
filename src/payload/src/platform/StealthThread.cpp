@@ -2,10 +2,12 @@
 #include "platform/Win32Process.h"
 #include <MinHook.h>
 
+extern "C" void MH_LockTrampPool(void);
+
 #include <windows.h>
 #include <atomic>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 namespace {
 
@@ -139,6 +141,7 @@ bool installStealthThreadHook() {
         }
     }
 
+    MH_LockTrampPool();
     return true;
 }
 
@@ -162,6 +165,8 @@ void uninstallStealthThreadHook() {
             MH_RemoveHook(targetKb);
         }
     }
+
+    MH_Uninitialize();
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

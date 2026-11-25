@@ -3,7 +3,7 @@
 #include <system_error>
 #include <nlohmann/json.hpp>
 
-namespace vanta::storage {
+namespace dt::storage {
 // Owner token assembled at runtime — never stored as a constexpr literal so
 // it does not survive into .rdata in plaintext. XOR table, key 0x1F.
 // Decodes to: "D3DProfileConfig:v1"

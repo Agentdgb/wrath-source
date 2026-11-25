@@ -4,7 +4,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta::str {
+namespace dt::str {
 
 inline std::vector<std::string_view> split(std::string_view s, char sep) {
     std::vector<std::string_view> out;
@@ -44,4 +44,4 @@ inline std::string replace_all(std::string s, std::string_view what, std::string
     return s;
 }
 
-} // namespace vanta::str
+} // namespace dt::str

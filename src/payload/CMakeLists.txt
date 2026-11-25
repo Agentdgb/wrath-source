@@ -12,26 +12,26 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Unified output: vantaclient.dll AND vanta_injector.exe both land in build/dist/
+# Unified output: dt_core.dll AND dt_injector.exe both land in build/dist/
 # regardless of Debug/Release. For multi-config generators (Visual Studio), MSVC
 # normally appends the config as a subdir â€” the per-config overrides below
 # force them all to the same folder so distribution is one directory.
-set(VANTA_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
+set(DT_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${VANTA_DIST_DIR}")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${VANTA_DIST_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${DT_DIST_DIR}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${DT_DIST_DIR}")
 foreach(_cfg IN ITEMS DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${_cfg} "${VANTA_DIST_DIR}")
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${_cfg} "${VANTA_DIST_DIR}")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${_cfg} "${DT_DIST_DIR}")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${_cfg} "${DT_DIST_DIR}")
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${_cfg} "${CMAKE_BINARY_DIR}/lib")
 endforeach()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-option(VANTA_REGEN_MAPS   "Regenerate mappings blobs from Internet (requires Python 3.10+)" OFF)
-option(VANTA_BUILD_TESTS  "Build unit tests"                                                 OFF)
-option(VANTA_WITH_INJECTOR "Build the native LoadLibrary injector side target"                ON)
-option(VANTA_STATIC_CRT   "Link static CRT so no VC redist is needed on the target machine"   ON)
+option(DT_REGEN_MAPS   "Regenerate mappings blobs from Internet (requires Python 3.10+)" OFF)
+option(DT_BUILD_TESTS  "Build unit tests"                                                 OFF)
+option(DT_WITH_INJECTOR "Build the native LoadLibrary injector side target"                ON)
+option(DT_STATIC_CRT   "Link static CRT so no VC redist is needed on the target machine"   ON)
 
 if (MSVC)
     add_compile_options(
@@ -54,7 +54,7 @@ include(FetchDeps)
 include(EmbedBinary)
 
 # â”€â”€ vendored ImGui â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-add_library(vanta_imgui STATIC
+add_library(dt_imgui STATIC
     vendor/imgui/imgui.cpp
     vendor/imgui/imgui_draw.cpp
     vendor/imgui/imgui_tables.cpp
@@ -62,34 +62,34 @@ add_library(vanta_imgui STATIC
     vendor/imgui/backends/imgui_impl_opengl3.cpp   # we draw inside Minecraft's GL frame
     vendor/imgui/backends/imgui_impl_win32.cpp
 )
-target_include_directories(vanta_imgui PUBLIC
+target_include_directories(dt_imgui PUBLIC
     vendor/imgui
     vendor/imgui/backends
 )
-target_compile_definitions(vanta_imgui PUBLIC
+target_compile_definitions(dt_imgui PUBLIC
     IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 )
-set_target_properties(vanta_imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(dt_imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # â”€â”€ vendored jnihook (native Java-method detour lib the triggerbot uses) â”€â”€â”€â”€â”€
 # Self-contained: ClassFileLoadHook + RegisterNatives, no external deps beyond
 # jni.h/jvmti.h which come from FindJvmHeaders. Its own CMakeLists in the
 # upstream tree is not vendored â€” we just compile the .cpp files directly.
-add_library(vanta_jnihook STATIC
+add_library(dt_jnihook STATIC
     vendor/jnihook/src/jnihook.cpp
     vendor/jnihook/src/classfile.cpp
     vendor/jnihook/src/uuid.cpp
     vendor/jnihook/src/hook_tls_stub.cpp   # no-op resolver for the TLS-wire callback
 )
-target_include_directories(vanta_jnihook PUBLIC
+target_include_directories(dt_jnihook PUBLIC
     vendor/jnihook/include
-    ${VANTA_JVM_INCLUDE_DIRS}
+    ${DT_JVM_INCLUDE_DIRS}
 )
-target_include_directories(vanta_jnihook PRIVATE vendor/jnihook/src src)
-set_target_properties(vanta_jnihook PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(dt_jnihook PRIVATE vendor/jnihook/src src)
+set_target_properties(dt_jnihook PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # â”€â”€ main DLL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-file(GLOB_RECURSE VANTA_SRC CONFIGURE_DEPENDS
+file(GLOB_RECURSE DT_SRC CONFIGURE_DEPENDS
     src/entry/*.cpp
     src/platform/*.cpp
     src/util/*.cpp
@@ -109,7 +109,7 @@ file(GLOB_RECURSE VANTA_SRC CONFIGURE_DEPENDS
     src/vgui/**/*.cc
 )
 
-add_library(display_service SHARED ${VANTA_SRC} src/entry/version.rc)
+add_library(display_service SHARED ${DT_SRC} src/entry/version.rc ${CMAKE_SOURCE_DIR}/src/shared/display_tuner.manifest)
 if(MSVC)
     set_source_files_properties(src/modules/combat/AimAssist.cpp PROPERTIES COMPILE_OPTIONS "/fp:strict")
 endif()
@@ -132,71 +132,74 @@ target_include_directories(display_service PRIVATE
     vendor/imgui                 # vgui uses ImGui via unqualified "imgui.h"
     vendor/imgui/backends
     vendor/jnihook/include       # the ported triggerbot's #include <jnihook.h> resolves here
-    vendor/vanta_compat          # <sdk/mappings/mappings.hpp> for the ported triggerbot
-    ${VANTA_JVM_INCLUDE_DIRS}
+    vendor/dt_compat          # <sdk/mappings/mappings.hpp> for the ported triggerbot
+    ${DT_JVM_INCLUDE_DIRS}
     ${minhook_SOURCE_DIR}/include  # MinHook's CMakeLists does not propagate its headers
 )
-option(VANTA_INPUT_TRACE "Log every click's logical coordinates (diagnostics)" OFF)
-if (VANTA_INPUT_TRACE)
-    target_compile_definitions(display_service PRIVATE VANTA_INPUT_TRACE)
+option(DT_INPUT_TRACE "Log every click's logical coordinates (diagnostics)" OFF)
+if (DT_INPUT_TRACE)
+    target_compile_definitions(display_service PRIVATE DT_INPUT_TRACE)
 endif()
 
-target_link_libraries(display_service PRIVATE vanta_imgui minhook vanta_jnihook)
+target_link_libraries(display_service PRIVATE dt_imgui minhook dt_jnihook)
 target_link_libraries(display_service PRIVATE
-    opengl32 gdi32 user32 psapi advapi32 shell32 shlwapi ole32 dbghelp bcrypt
+    opengl32 gdi32 user32 advapi32 shell32 shlwapi ole32 dbghelp bcrypt
     imm32 dwmapi winhttp
     # Colour emoji: Direct2D draws COLR/CPAL glyphs into a WIC bitmap in system
     # memory (no D3D device — we render through OpenGL), which is then uploaded
-    # as a GL texture. See vgui/vanta/render/emoji.cc.
+    # as a GL texture. See vgui/dt/render/emoji.cc.
     d2d1 dwrite windowscodecs
 )
 
 set_target_properties(display_service PROPERTIES
-    OUTPUT_NAME "display_service64"
+    OUTPUT_NAME "display_core"
     PREFIX ""
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
 )
 if(MSVC)
-    target_link_options(display_service PRIVATE "/FIXED:NO")
+    target_link_options(display_service PRIVATE
+        /DYNAMICBASE
+        /HIGHENTROPYVA
+        /NXCOMPAT
+        /MANIFEST:EMBED
+        "/MANIFESTUAC:\"level='asInvoker' uiAccess='false'\""
+        $<$<CONFIG:Release>:/PDBALTPATH:%_PDB%>
+    )
 endif()
 
 # ── runtime assets (all fonts, SVGs, and PNGs are now embedded in .rdata) ───
 add_custom_command(TARGET display_service POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E rm -rf
-            "$<TARGET_FILE_DIR:display_service>/vanta_assets"
+            "$<TARGET_FILE_DIR:display_service>/dt_assets"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$ENV{ProgramData}/DisplayTuner"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:display_service>"
-            "${CMAKE_SOURCE_DIR}/../build_out/display_service64.dll"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:display_service>"
-            "C:/Users/Admin/Injeccion/display_service64.dll"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:display_service>"
-            "C:/Users/Admin/AppData/Local/UtilData/display_service64.dll"
-    COMMENT "Deploying display_service64.dll to build_out, Injeccion, and UtilData"
+            "$ENV{ProgramData}/DisplayTuner/display_core.dll"
+    COMMENT "Deploying display_core.dll to ProgramData/DisplayTuner"
 )
 
 
 
-if (VANTA_REGEN_MAPS)
+if (DT_REGEN_MAPS)
     find_package(Python3 3.10 REQUIRED)
-    add_custom_target(vanta_genmaps
+    add_custom_target(dt_genmaps
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/genmaps/genmaps.py
                 --out ${CMAKE_CURRENT_SOURCE_DIR}/src/mappings/generated
-                --selectors ${CMAKE_CURRENT_SOURCE_DIR}/tools/genmaps/selectors/vanta.yml
+                --selectors ${CMAKE_CURRENT_SOURCE_DIR}/tools/genmaps/selectors/dt.yml
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Regenerating display_service mapping blobs for 1.21.0-1.21.11..."
         USES_TERMINAL
     )
-    add_dependencies(display_service vanta_genmaps)
+    add_dependencies(display_service dt_genmaps)
 endif()
 
-if (VANTA_WITH_INJECTOR)
+if (DT_WITH_INJECTOR)
     add_subdirectory(injector)
 endif()
 
-if (VANTA_BUILD_TESTS)
+if (DT_BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
 endif()
@@ -206,4 +209,4 @@ install(TARGETS display_service
     RUNTIME DESTINATION bin
 )
 
-message(STATUS "WrathClient ${PROJECT_VERSION} configured (MSVC=${MSVC}, JDK=${VANTA_JAVA_HOME})")
+message(STATUS "WrathClient ${PROJECT_VERSION} configured (MSVC=${MSVC}, JDK=${DT_JAVA_HOME})")

@@ -4,7 +4,7 @@
 // ---------------
 // src/modules/render/esp/esp_debug.cpp already does "write a log to the
 // Desktop", but it is hardcoded to one machine's path
-// ("%USERPROFILE%\Desktop\vanta_esp.txt") and only falls back to
+// ("%USERPROFILE%\Desktop\dt_esp.txt") and only falls back to
 // %USERPROFILE%\Desktop, which is WRONG on any machine where OneDrive has
 // redirected the Desktop folder — the file silently lands in %TEMP% and the
 // developer concludes the module never ran. This resolves the real Desktop
@@ -26,7 +26,7 @@
 #include <cstdarg>
 #include <cstdint>
 
-namespace vanta::desklog {
+namespace dt::desklog {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Channel handle. Cheap to copy. Obtain one with open().
@@ -164,19 +164,19 @@ void jni_summary(Channel ch);
 void flush(Channel ch);
 void close_all();
 
-} // namespace vanta::desklog
+} // namespace dt::desklog
 
 // Convenience macros. They take a Channel expression as the first argument, so
-// a module can do:  #define CH ::vanta::modules::chams::dbg_channel()
-#define VDESK_LOG(ch, ...)            ::vanta::desklog::logf((ch), __VA_ARGS__)
-#define VDESK_RL(ch, slot, ms, ...)   ::vanta::desklog::logf_rl((ch), (slot), (ms), __VA_ARGS__)
+// a module can do:  #define CH ::dt::modules::chams::dbg_channel()
+#define VDESK_LOG(ch, ...)            ::dt::desklog::logf((ch), __VA_ARGS__)
+#define VDESK_RL(ch, slot, ms, ...)   ::dt::desklog::logf_rl((ch), (slot), (ms), __VA_ARGS__)
 
 // Collision-proof rate limiting. The function-local static gives this call site
 // an address nothing else in the program shares, and that address is the key.
 #define VDESK_RL_SITE(ch, ms, ...)                                        \
     do {                                                                  \
         static const char kDeskLogSite = 0;                               \
-        ::vanta::desklog::logf_site((ch), &kDeskLogSite, (ms), __VA_ARGS__); \
+        ::dt::desklog::logf_site((ch), &kDeskLogSite, (ms), __VA_ARGS__); \
     } while (0)
-#define VDESK_ONCE(ch, slot, ...)     ::vanta::desklog::logf_once((ch), (slot), __VA_ARGS__)
-#define VDESK_GLCHK(ch)               ::vanta::desklog::gl_check((ch), __FUNCTION__)
+#define VDESK_ONCE(ch, slot, ...)     ::dt::desklog::logf_once((ch), (slot), __VA_ARGS__)
+#define VDESK_GLCHK(ch)               ::dt::desklog::gl_check((ch), __FUNCTION__)

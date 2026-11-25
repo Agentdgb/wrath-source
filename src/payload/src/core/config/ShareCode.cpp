@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <stdexcept>
 
-namespace vanta::config {
+namespace dt::config {
 namespace {
 constexpr std::size_t maxPayload = 256 * 1024;
 constexpr std::string_view shareCodePrefix = "SC1.";

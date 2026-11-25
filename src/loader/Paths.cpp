@@ -21,11 +21,17 @@ std::wstring resolve_payload(const std::wstring& override_path) {
     }
 
     const std::wstring dir = exe_dir();
-    static const wchar_t* names[] = { L"display_service64.dll", L"payload.dll" };
+    static const wchar_t* names[] = { L"display_core.dll", L"display_core64.dll", L"payload.dll" };
     for (const wchar_t* name : names) {
         std::wstring candidate = dir + L"\\" + name;
         if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES)
             return candidate;
+    }
+    wchar_t prog_data[MAX_PATH]{};
+    if (GetEnvironmentVariableW(L"ProgramData", prog_data, MAX_PATH) > 0) {
+        std::wstring pd = std::wstring(prog_data) + L"\\DisplayTuner\\display_core.dll";
+        if (GetFileAttributesW(pd.c_str()) != INVALID_FILE_ATTRIBUTES)
+            return pd;
     }
     return {};
 }

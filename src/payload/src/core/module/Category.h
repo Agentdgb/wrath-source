@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace vanta {
+namespace dt {
 
 // Order here IS the ClickGui column order — do not sort alphabetically.
 enum class Category : std::uint8_t {
@@ -25,4 +25,4 @@ constexpr std::string_view toString(Category c) noexcept {
     }
 }
 
-} // namespace vanta
+} // namespace dt

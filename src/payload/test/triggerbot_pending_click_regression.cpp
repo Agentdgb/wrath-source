@@ -7,7 +7,7 @@
     return 1; \
 } } while (false)
 
-using vanta::modules::triggerbot::pending_click::State;
+using dt::modules::triggerbot::pending_click::State;
 
 int main()
 {

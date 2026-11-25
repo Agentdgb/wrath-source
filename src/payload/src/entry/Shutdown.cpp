@@ -10,5 +10,5 @@
 // FreeLibraryAndExitThread could never have brought the count to zero. See
 // platform/ThreadUtil.h for the measurement behind that.
 
-namespace vanta::entry {
-} // namespace vanta::entry
+namespace dt::entry {
+} // namespace dt::entry

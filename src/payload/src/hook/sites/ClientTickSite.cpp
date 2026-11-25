@@ -1,7 +1,7 @@
 #include "asm/Opcodes.h"
 #include "hook/HookRow.h"
 
-namespace vanta::hook {
+namespace dt::hook {
 
 static HookRow buildClientTickSite() {
     return HookRow{
@@ -15,12 +15,12 @@ static HookRow buildClientTickSite() {
         },
         Recipe::A_PreCancel,
         HookLoad::Installed,
-        vanta::asm_::OP_RETURN,
+        dt::asm_::OP_RETURN,
         "onClientTick",
         "()I",
     };
 }
 
-VANTA_REGISTER_HOOK_SITE(buildClientTickSite);
+DT_REGISTER_HOOK_SITE(buildClientTickSite);
 
-} // namespace vanta::hook
+} // namespace dt::hook

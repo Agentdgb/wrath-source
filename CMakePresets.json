@@ -25,12 +25,24 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "x64-screenshare",
+      "displayName": "x64 Screenshare",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "WRATH_SCREENSHARE_PRESET": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "debug", "configurePreset": "x64-debug", "configuration": "Debug" },
     { "name": "release", "configurePreset": "x64-release", "configuration": "Release" },
-    { "name": "relwithdebinfo", "configurePreset": "x64-relwithdebinfo", "configuration": "RelWithDebInfo" }
+    { "name": "relwithdebinfo", "configurePreset": "x64-relwithdebinfo", "configuration": "RelWithDebInfo" },
+    { "name": "screenshare", "configurePreset": "x64-screenshare", "configuration": "Release" }
   ]
 }
 

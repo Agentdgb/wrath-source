@@ -1,7 +1,7 @@
 #include "VisualPorts.h"
 #include <algorithm>
 #include <cmath>
-namespace vanta::modules::visualports::math {
+namespace dt::modules::visualports::math {
 float crest(float t, float peak) {
     if (t <= 0 || t >= 1)
         return 0;
@@ -71,4 +71,4 @@ std::vector<Op> swingPose(int style, float t, int side, float k) {
     }
     return o;
 }
-} // namespace vanta::modules::visualports::math
+} // namespace dt::modules::visualports::math

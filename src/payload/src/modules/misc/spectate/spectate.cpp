@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace vanta::modules::spectate {
+namespace dt::modules::spectate {
 
 namespace {
 
@@ -224,7 +224,7 @@ bool is_flip(jfloat yaw, jfloat pitch, jfloat cy, jfloat cp)
 
 void JNICALL hkSetRotation(JNIEnv* env, jobject thiz, jfloat yaw, jfloat pitch)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     /* Spectate's own substitution wins; the external override (Freecam) only
        runs when spectate is not overriding, and the two are mutually
        exclusive at the module level anyway. */
@@ -360,7 +360,7 @@ bool detach_hook(const char* why)
    still right when the caller is a copy of sendMovementPackets. */
 bool caller_builds_movement_packet()
 {
-    jvmtiEnv* jt = ::vanta::jvm::ctx().jvmti.load();
+    jvmtiEnv* jt = ::dt::jvm::ctx().jvmti.load();
     if (!jt) return true;   /* cannot tell callers apart; the flag matters more */
 
     jmethodID caller = nullptr;
@@ -388,7 +388,7 @@ bool caller_builds_movement_packet()
 
 jboolean JNICALL hkIsCamera(JNIEnv* env, jobject thiz)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     if ((g_lie_camera.load(std::memory_order_relaxed) || g_ext_hold.load(std::memory_order_relaxed))
         && caller_builds_movement_packet())
         return JNI_TRUE;
@@ -430,7 +430,7 @@ bool ensure_hook(JNIEnv* env)
     if (g_hook_tried) return false;   // one attempt per process; a fault is not retried
     g_hook_tried = true;
 
-    JavaVM* vm = ::vanta::jvm::ctx().vm.load();
+    JavaVM* vm = ::dt::jvm::ctx().vm.load();
     if (!vm && env->GetJavaVM(&vm) != JNI_OK) vm = nullptr;
     if (!vm) return false;
 
@@ -492,12 +492,12 @@ bool ensure(JNIEnv* env)
     if (C.ok) return true;
     if (!env) return false;
 
-    jclass mc     = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_310");
-    jclass world  = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_638");
-    jclass entity = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1297");
-    jclass player = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1657");
-    jclass camera = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4184");
-    jclass cplay  = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_746");
+    jclass mc     = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_310");
+    jclass world  = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_638");
+    jclass entity = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1297");
+    jclass player = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1657");
+    jclass camera = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4184");
+    jclass cplay  = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_746");
     if (env->ExceptionCheck()) env->ExceptionClear();
 
     struct scoped { JNIEnv* e; jobject o; ~scoped() { if (o) e->DeleteLocalRef(o); } };
@@ -524,7 +524,7 @@ bool ensure(JNIEnv* env)
 
     C.player_profile = env->GetMethodID(player, "method_7334",
                                         "()Lcom/mojang/authlib/GameProfile;");
-    if (jclass gp = ::vanta::jvm::findClassAnyLoader(env, "com/mojang/authlib/GameProfile")) {
+    if (jclass gp = ::dt::jvm::findClassAnyLoader(env, "com/mojang/authlib/GameProfile")) {
         for (const char* accessor : {"getName", "name"}) {
             C.profile_name = env->GetMethodID(gp, accessor, "()Ljava/lang/String;");
             if (env->ExceptionCheck()) env->ExceptionClear();
@@ -541,7 +541,7 @@ bool ensure(JNIEnv* env)
     if(env->ExceptionCheck())env->ExceptionClear();
     C.mc_network=env->GetMethodID(mc,"method_1562","()Lnet/minecraft/class_634;");
     if(env->ExceptionCheck())env->ExceptionClear();
-    if(auto net=::vanta::jvm::findClassAnyLoader(env,"net/minecraft/class_634")) {
+    if(auto net=::dt::jvm::findClassAnyLoader(env,"net/minecraft/class_634")) {
         C.net_command=env->GetMethodID(net,"method_45730","(Ljava/lang/String;)V");
         if(env->ExceptionCheck())env->ExceptionClear();
         env->DeleteLocalRef(net);
@@ -555,7 +555,7 @@ bool ensure(JNIEnv* env)
 
     /* Optional: the auto-stop on taking damage. A miss costs the safety net,
        not the feature, so it is not in `essential` below. */
-    if (jclass living = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1309")) {
+    if (jclass living = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1309")) {
         C.liv_hurtTime = env->GetFieldID(living, "field_6235", "I");
         env->DeleteLocalRef(living);
         if (env->ExceptionCheck()) env->ExceptionClear();
@@ -1114,4 +1114,4 @@ void shutdown(JNIEnv* env)
     C.ok = false;
 }
 
-} // namespace vanta::modules::spectate
+} // namespace dt::modules::spectate

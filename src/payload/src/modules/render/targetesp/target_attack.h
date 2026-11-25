@@ -1,6 +1,6 @@
 #pragma once
 #include <jni.h>
-namespace vanta::modules::targetesp::attack {
+namespace dt::modules::targetesp::attack {
 // Independent of the visual module's enabled flag and consuming target queue.
 using Observer = void (*)(JNIEnv*, jobject);
 void set_observer(Observer observer);

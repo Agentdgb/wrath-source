@@ -1,10 +1,10 @@
-// EspModule.cpp — Vanta module wrapper for the Player ESP engine.
+// EspModule.cpp — Dt module wrapper for the Player ESP engine.
 
 #include "esp.h"
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Esp : public Module {
 public:
@@ -74,6 +74,6 @@ private:
     void drawImGui() override { Module::drawImGui(); push(); }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::Esp)
+DT_REGISTER_MODULE(dt::modules::Esp)

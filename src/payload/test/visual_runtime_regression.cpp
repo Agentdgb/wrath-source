@@ -10,7 +10,7 @@
 #include <jnihook.h>
 #include <thread>
 #include <windows.h>
-namespace vanta::jvm {
+namespace dt::jvm {
 JvmContext state;
 JvmContext &ctx() noexcept { return state; }
 JNIEnv *thisThreadEnv() {
@@ -23,22 +23,22 @@ JNIEnv *thisThreadEnv() {
 JniScope::JniScope() { env_ = thisThreadEnv(); }
 JniScope::~JniScope() = default;
 jclass findClassAnyLoader(JNIEnv *e, const char *n) { return e->FindClass(n); }
-} // namespace vanta::jvm
-namespace vanta::hook::packets {
+} // namespace dt::jvm
+namespace dt::hook::packets {
 void install() {}
-} // namespace vanta::hook::packets
-namespace vanta::modules::bloom {
+} // namespace dt::hook::packets
+namespace dt::modules::bloom {
 bool interested = false;
 bool needsWorld() { return interested; }
 void shutdown() {}
-} // namespace vanta::modules::bloom
-namespace vanta::modules::itemshader {
+} // namespace dt::modules::bloom
+namespace dt::modules::itemshader {
 bool wanted() { return false; }
 void note_firstperson_render_call() {}
 void set_wanted(bool) {}
 void set_effect(bool) {}
-} // namespace vanta::modules::itemshader
-namespace vanta::modules::visualports {
+} // namespace dt::modules::itemshader
+namespace dt::modules::visualports {
 SwingConfig swing;
 int statuses = 0, lastCode = 0, worldFrames = 0;
 void queueStatus(JNIEnv *, jobject, jbyte b) {
@@ -46,8 +46,8 @@ void queueStatus(JNIEnv *, jobject, jbyte b) {
     lastCode = b;
 }
 void afterWorld(JNIEnv *) { ++worldFrames; }
-} // namespace vanta::modules::visualports
-using namespace vanta::modules::visualports;
+} // namespace dt::modules::visualports
+using namespace dt::modules::visualports;
 void require(bool okay, const char *text) {
     if (!okay)
         throw std::runtime_error(text);
@@ -70,12 +70,12 @@ int main() {
         JavaVMOption options[] = {{cp.data(), nullptr}, {const_cast<char *>("-Xverify:all"), nullptr}};
         JavaVMInitArgs args{JNI_VERSION_1_8, 2, options, JNI_FALSE};
         require(create && create(&vm, reinterpret_cast<void **>(&e), &args) == JNI_OK, "Create test JVM");
-        vanta::jvm::ctx().vm.store(vm);
-        auto mirror = vanta::EventBus::get().subscribe<vanta::events::GameLoopEvent>([](auto &) {
+        dt::jvm::ctx().vm.store(vm);
+        auto mirror = dt::EventBus::get().subscribe<dt::events::GameLoopEvent>([](auto &) {
             swing.enabled = true;
-            vanta::modules::bloom::interested = true;
+            dt::modules::bloom::interested = true;
         });
-        vanta::core::pumpGameFrame();
+        dt::core::pumpGameFrame();
         require(std::string(swingStatus()) == "Custom first-person swing animations",
                 "Frame pump did not install swing independently");
         auto mcClass = e->FindClass("net/minecraft/class_310");
@@ -137,8 +137,8 @@ int main() {
         require(workerOkay && statuses == 0, "Worker status read touched game state");
         e->CallByteMethod(packet, getter);
         require(statuses == 0, "Totem effect was not removed");
-        vanta::modules::bloom::interested = true;
-        vanta::core::pumpGameFrame();
+        dt::modules::bloom::interested = true;
+        dt::core::pumpGameFrame();
         auto statusField = e->GetFieldID(packetClass, "field_12174", "B");
         e->SetByteField(packet, statusField, 3);
         require(e->CallByteMethod(packet, getter) == 3 && statuses == 0,
@@ -159,7 +159,7 @@ int main() {
         }
         result = 1;
     }
-    vanta::modules::itemshader::shutdown_hook();
+    dt::modules::itemshader::shutdown_hook();
     JNIHook_Shutdown();
     shutdownCache();
     if (vm) {

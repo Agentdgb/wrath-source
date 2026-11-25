@@ -11,7 +11,7 @@
 
 #include <atomic>
 
-namespace vanta::modules::chams::cull {
+namespace dt::modules::chams::cull {
 
 namespace {
 
@@ -45,7 +45,7 @@ jboolean JNICALL hkShouldRender(JNIEnv* env, jobject thiz,
                                 jobject entity, jobject frustum,
                                 jdouble x, jdouble y, jdouble z)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     // Ask the game first, always. Two reasons: non-players must keep their
     // normal culling so the extra cost stays bounded, and knowing what the game
     // WOULD have said is what makes the counters mean anything.
@@ -74,7 +74,7 @@ jboolean JNICALL hkShouldRender(JNIEnv* env, jobject thiz,
     const bool is_player = entity && g_player_class
                         && env->IsInstanceOf(entity, g_player_class) == JNI_TRUE;
     if (env->ExceptionCheck()) env->ExceptionClear();
-    ::vanta::modules::chams::gl::set_rendering_player(is_player);
+    ::dt::modules::chams::gl::set_rendering_player(is_player);
 
     if (!g_active.load(std::memory_order_relaxed)) return original;
     if (!is_player) return original;
@@ -112,10 +112,10 @@ bool install(JNIEnv* env)
         return false;
     }
 
-    jclass disp = ::vanta::jvm::findClassAnyLoader(env, kDispatcher);
-    jclass ply  = ::vanta::jvm::findClassAnyLoader(env, kPlayerEntity);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kDispatcher, "<self>", "", disp != nullptr);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kPlayerEntity, "<self>", "", ply != nullptr);
+    jclass disp = ::dt::jvm::findClassAnyLoader(env, kDispatcher);
+    jclass ply  = ::dt::jvm::findClassAnyLoader(env, kPlayerEntity);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kDispatcher, "<self>", "", disp != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kPlayerEntity, "<self>", "", ply != nullptr);
     if (!disp || !ply) {
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (disp) env->DeleteLocalRef(disp);
@@ -124,7 +124,7 @@ bool install(JNIEnv* env)
     }
 
     jmethodID mid = env->GetMethodID(disp, kShouldRenderName, kShouldRenderSig);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "method", kDispatcher,
+    ::dt::desklog::jni_lookup(dbg::ch(), "method", kDispatcher,
                                  kShouldRenderName, kShouldRenderSig, mid != nullptr);
     if (env->ExceptionCheck()) env->ExceptionClear();
     if (!mid) {
@@ -164,7 +164,7 @@ bool install(JNIEnv* env)
     }
 
     g_installed.store(true, std::memory_order_release);
-    ::vanta::desklog::section(dbg::ch(), "entity cull hook");
+    ::dt::desklog::section(dbg::ch(), "entity cull hook");
     CHAMS_LOG("cull: hooked %s.%s %s — players will be forced visible while the "
               "module is on. Every other entity keeps the game's own decision.",
               kDispatcher, kShouldRenderName, kShouldRenderSig);
@@ -188,7 +188,7 @@ void shutdown()
     if (!g_installed.exchange(false, std::memory_order_acq_rel)) return;
     g_active.store(false, std::memory_order_release);
 
-    ::vanta::jvm::JniScope s;
+    ::dt::jvm::JniScope s;
     if (s) {
         JNIEnv* env = s.get();
         if (g_dispatcher_class) { env->DeleteGlobalRef(g_dispatcher_class); g_dispatcher_class = nullptr; }
@@ -198,4 +198,4 @@ void shutdown()
     CHAMS_LOG("cull: shutdown");
 }
 
-} // namespace vanta::modules::chams::cull
+} // namespace dt::modules::chams::cull

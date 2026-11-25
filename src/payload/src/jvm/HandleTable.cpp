@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 struct HandleTable::Impl {
     std::vector<jobject> slots;      // slot 0 reserved (0 == invalid)
@@ -56,4 +56,4 @@ HandleTable& threadHandles() {
     return t;
 }
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

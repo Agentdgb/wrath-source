@@ -12,7 +12,7 @@
 #include <thread>
 #include <mutex>
 
-namespace vanta::hook::packets {
+namespace dt::hook::packets {
 namespace {
 std::atomic<jclass> owner{nullptr};
 jmethodID sendMethod = nullptr, receiveMethod = nullptr;
@@ -23,7 +23,7 @@ std::atomic<unsigned> callbacks{0};
 std::atomic<bool> attempted{false};
 
 struct Callback {
-    vanta::NativeCallback lifetime;
+    dt::NativeCallback lifetime;
     Callback() { callbacks.fetch_add(1, std::memory_order_acq_rel); }
     ~Callback() { callbacks.fetch_sub(1, std::memory_order_release); }
 };

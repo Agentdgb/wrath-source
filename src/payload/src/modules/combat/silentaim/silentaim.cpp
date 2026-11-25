@@ -25,7 +25,7 @@
 
 #include "modules/misc/spectate/spectate.h"   // the camera loan, see below
 
-namespace vanta::modules::silentaim {
+namespace dt::modules::silentaim {
 
 static jni_cache  g_cache;
 static std::mutex s_cache_mx;
@@ -38,7 +38,7 @@ jni_cache&       mutable_cache() { return g_cache; }
 static bool cache_class(JNIEnv* env, const char* sig, jclass& out)
 {
     if (!sig) return false;
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return false; }
     out = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -825,7 +825,7 @@ static WireSnap read_wire(JNIEnv* env, jobject player)
 
 static void JNICALL hkSendMovementPackets(JNIEnv* env, jobject thiz)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     if (!ORIG_sendMovementPackets || !g_cache.client_player_class) return;
 
     g_hook_calls.fetch_add(1, std::memory_order_release);
@@ -946,13 +946,13 @@ static void JNICALL hkSendMovementPackets(JNIEnv* env, jobject thiz)
     // Preserve vanilla movement cadence. Interactions do not imply a change
     // in position; forcing the position counter emits duplicate coordinates.
 
-    ::vanta::modules::spectate::borrow_camera(env);
+    ::dt::modules::spectate::borrow_camera(env);
 
     env->CallNonvirtualVoidMethod(thiz, g_cache.client_player_class,
                                   ORIG_sendMovementPackets);
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    ::vanta::modules::spectate::return_camera(env);
+    ::dt::modules::spectate::return_camera(env);
 
     // What went out. lastYaw/lastPitch are copied from the fields exactly
     // when a look was sent (so any change IS a look; the fields still hold
@@ -1549,7 +1549,7 @@ void on_pre_player_tick(JNIEnv* env, jobject minecraft)
 #if 0
 static void JNICALL hkHandleInputEvents(JNIEnv* env, jobject thiz)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     if (!ORIG_handleInputEvents || !g_cache.minecraft_class) return;
 
     // Verify by WATCHING a real call. Unlike sendMovementPackets there is
@@ -1816,7 +1816,7 @@ static void install_rotation_hook(JNIEnv* env, jobject local_player)
         VLOG_WARN("silentaim", "install: class_746 not resolved -- no rotation hook");
         return;
     }
-    if (!vanta::jvm::ctx().vm.load()) return;
+    if (!dt::jvm::ctx().vm.load()) return;
 
     // Candidate list rather than a single name. The intermediary for
     // sendMovementPackets has moved across 1.21.x drops, and the one in
@@ -1852,7 +1852,7 @@ static void install_rotation_hook(JNIEnv* env, jobject local_player)
     }
     VLOG_INFO("silentaim", "install: sendMovementPackets resolved as '{}'", smp_name);
 
-    jnihook_result_t init = JNIHook_Init(vanta::jvm::ctx().vm.load());
+    jnihook_result_t init = JNIHook_Init(dt::jvm::ctx().vm.load());
     if (init != JNIHOOK_OK && init != JNIHOOK_ERR_ADD_JVMTI_CAPS) {
         VLOG_WARN("silentaim", "install: JNIHook_Init failed ({}) -- no rotation hook",
                   static_cast<int>(init));
@@ -2077,7 +2077,7 @@ void init_cache(JNIEnv* env)
     // ()Lclass_7172; getMouseSensitivity, class_7172.method_41753
     // ()Ljava/lang/Object; getValue, class_315.field_1914 Z smoothCameraEnabled.
     {
-        jclass options_cls = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_315");
+        jclass options_cls = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_315");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (options_cls) {
             g_cache.options_get_sensitivity_mid = cache_method_either(env, options_cls,
@@ -2088,7 +2088,7 @@ void init_cache(JNIEnv* env)
                 "field_1914", "smoothCamera", "Z");
             env->DeleteLocalRef(options_cls);
         }
-        jclass option_cls = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_7172");
+        jclass option_cls = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_7172");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (option_cls) {
             g_cache.option_get_value_mid = cache_method_either(env, option_cls,
@@ -2122,7 +2122,7 @@ void init_cache(JNIEnv* env)
             "field_7514", "inventory", "Lnet/minecraft/class_1661;");
     }
     {
-        jclass inv = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1661");
+        jclass inv = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1661");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (inv) {
             g_cache.inventory_selected_slot_fid =
@@ -2132,7 +2132,7 @@ void init_cache(JNIEnv* env)
                                     "(I)Lnet/minecraft/class_1799;");
             env->DeleteLocalRef(inv);
         }
-        jclass stack = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1799");
+        jclass stack = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1799");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (stack) {
             g_cache.itemstack_is_empty_mid =
@@ -2142,7 +2142,7 @@ void init_cache(JNIEnv* env)
                                     "()Lnet/minecraft/class_1792;");
             env->DeleteLocalRef(stack);
         }
-        jclass item = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1792");
+        jclass item = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1792");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (item) {
             g_cache.item_get_translation_key_mid =
@@ -2205,7 +2205,7 @@ void shutdown_cache()
     clear_action_registrations();
     g_shutting_down.store(true, std::memory_order_release);
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) return;
 
     if (g_hie_attached && g_hie_method_id) {
@@ -2240,7 +2240,7 @@ void ensure_installed()
 {
     if (g_shutting_down.load(std::memory_order_acquire)) return;
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) return;
 
     if (!g_cache.initialized) { init_cache(env); return; }
@@ -2304,4 +2304,4 @@ void ensure_installed()
     env->DeleteLocalRef(mc);
 }
 
-} // namespace vanta::modules::silentaim
+} // namespace dt::modules::silentaim

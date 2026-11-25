@@ -3,7 +3,7 @@
 #include <jvmti.h>
 #include <atomic>
 
-namespace vanta::entry {
+namespace dt::entry {
 
 extern std::atomic<bool> g_agentPresent;
 
@@ -37,4 +37,4 @@ void requestFullUnload();
 // Legacy argument is ignored; it cannot request profile deletion.
 void requestFullUnload(bool purgeConfig);
 
-} // namespace vanta::entry
+} // namespace dt::entry

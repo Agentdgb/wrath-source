@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class FullBright : public Module {
 public:
@@ -44,15 +44,15 @@ private:
     void applyGamma(float target) {
         if (std::fabs(lastApplied_ - target) < 0.01f) return;
 
-        vanta::jvm::JniScope s;
+        dt::jvm::JniScope s;
         if (!s) return;
         JNIEnv* env = s.get();
 
-        auto mc = vanta::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
+        auto mc = dt::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
         if (!mc) return;
 
-        auto options = vanta::jvm::LocalRef<jobject>{
-            env, vanta::jvm::getObjectFieldCanon(env, mc.get(), "MinecraftClient", "options")};
+        auto options = dt::jvm::LocalRef<jobject>{
+            env, dt::jvm::getObjectFieldCanon(env, mc.get(), "MinecraftClient", "options")};
         if (!options) return;
 
         jclass goClass = env->GetObjectClass(options.get());
@@ -140,15 +140,15 @@ private:
     }
 
     void restoreGamma() {
-        vanta::jvm::JniScope s;
+        dt::jvm::JniScope s;
         if (!s) return;
         JNIEnv* env = s.get();
 
-        auto mc = vanta::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
+        auto mc = dt::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
         if (!mc) return;
 
-        auto options = vanta::jvm::LocalRef<jobject>{
-            env, vanta::jvm::getObjectFieldCanon(env, mc.get(), "MinecraftClient", "options")};
+        auto options = dt::jvm::LocalRef<jobject>{
+            env, dt::jvm::getObjectFieldCanon(env, mc.get(), "MinecraftClient", "options")};
         if (!options) return;
 
         jclass goClass = env->GetObjectClass(options.get());
@@ -210,6 +210,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::FullBright)
+DT_REGISTER_MODULE(dt::modules::FullBright)

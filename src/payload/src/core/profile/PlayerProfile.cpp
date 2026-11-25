@@ -21,7 +21,7 @@
 
 #pragma comment(lib, "winhttp.lib")
 
-namespace vanta::profile {
+namespace dt::profile {
 
 namespace {
 
@@ -41,19 +41,19 @@ std::atomic<bool>        g_running{false};
 // once a world is loaded, so keying off it would leave the card blank in the
 // main menu — which is exactly where someone is most likely to open the gui.
 std::string readNameFromJvm() {
-    if (!vanta::jvm::ctx().vm.load()) return {};
+    if (!dt::jvm::ctx().vm.load()) return {};
 
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     JNIEnv* env = scope.get();
     if (!env) return {};
 
-    vanta::jvm::LocalObject mc = vanta::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
+    dt::jvm::LocalObject mc = dt::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
     if (!mc) return {};
 
-    vanta::jvm::LocalObject session = vanta::jvm::callObjectCanon(env, mc.get(), "MinecraftClient", "getSession");
+    dt::jvm::LocalObject session = dt::jvm::callObjectCanon(env, mc.get(), "MinecraftClient", "getSession");
     if (!session) return {};
 
-    vanta::jvm::LocalObject name = vanta::jvm::callObjectCanon(env, session.get(), "Session", "getUsername");
+    dt::jvm::LocalObject name = dt::jvm::callObjectCanon(env, session.get(), "Session", "getUsername");
     if (!name) return {};
 
     auto str = static_cast<jstring>(name.get());
@@ -200,7 +200,7 @@ bool fetchHead(const std::string& username) {
 void start() {
     if (g_running.exchange(true)) return;
 
-    vanta::platform::spawnNamed("HTTP Worker", []{
+    dt::platform::spawnNamed("HTTP Worker", []{
         /* The JVM may not be up yet — bootstrap arms the overlay before it
            touches Java on purpose — and in a launcher the session is populated
            after auth. So poll rather than read once and give up.
@@ -292,4 +292,4 @@ bool takeHead(std::vector<std::uint8_t>& rgba, int& width, int& height) {
     return true;
 }
 
-} // namespace vanta::profile
+} // namespace dt::profile

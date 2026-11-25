@@ -10,7 +10,7 @@
 #define GL_DYNAMIC_DRAW 0x88E8
 #endif
 
-namespace vanta::modules::outline::gl {
+namespace dt::modules::outline::gl {
 
 namespace {
 
@@ -226,7 +226,7 @@ void pipeline::ensure_shaders()
     if (shaders_tried_) return;
     shaders_tried_ = true;
 
-    if (!::vanta::al::gl::api().ok) return;
+    if (!::dt::al::gl::api().ok) return;
 
     shaders_ok_ =
         fill_  .load(k_fill_vsh,   k_fill_fsh,   "outline.fill")   &&
@@ -239,7 +239,7 @@ bool pipeline::ensure_mesh()
 {
     if (vao_) return true;
 
-    const auto& g = ::vanta::al::gl::api();
+    const auto& g = ::dt::al::gl::api();
     if (!g.ok) return false;
 
     g.GenVertexArrays(1, &vao_);
@@ -262,7 +262,7 @@ bool pipeline::ensure_mesh()
 
 void pipeline::upload(const float* xy, int vertex_count)
 {
-    const auto& g = ::vanta::al::gl::api();
+    const auto& g = ::dt::al::gl::api();
 
     /* One glBufferData a frame, data and all. Re-specifying the whole store is
        what tells the driver the old contents are dead, so it hands back a fresh
@@ -325,7 +325,7 @@ void pipeline::render(const float* xy, int vertex_count,
     const float u0 = rx0 / fw, v0 = ry0 / fh;
     const float u1 = rx1 / fw, v1 = ry1 / fh;
 
-    const auto& g = ::vanta::al::gl::api();
+    const auto& g = ::dt::al::gl::api();
 
     // Snapshot the state these passes perturb.
     GLint bound_fb = 0;
@@ -457,7 +457,7 @@ void pipeline::render(const float* xy, int vertex_count,
 
 void pipeline::destroy()
 {
-    const auto& g = ::vanta::al::gl::api();
+    const auto& g = ::dt::al::gl::api();
     if (g.ok) {
         if (vbo_) { g.DeleteBuffers(1, &vbo_); vbo_ = 0; }
         if (vao_) { g.DeleteVertexArrays(1, &vao_); vao_ = 0; }
@@ -475,4 +475,4 @@ void pipeline::destroy()
     shaders_ok_    = false;
 }
 
-} // namespace vanta::modules::outline::gl
+} // namespace dt::modules::outline::gl

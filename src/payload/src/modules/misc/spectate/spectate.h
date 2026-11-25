@@ -67,7 +67,7 @@ typedef JNIEnv_ JNIEnv;
 class _jobject;
 typedef _jobject* jobject;   // same shape jni.h gives it under C++
 
-namespace vanta::modules::spectate {
+namespace dt::modules::spectate {
 
 // Ask to watch `name`. Takes effect on the next tick, once the name resolves to
 // a loaded entity. Safe to call from the render thread with no JNI in hand.
@@ -169,4 +169,4 @@ bool holds_camera();
 // into freed memory on the next camera update.
 void shutdown(JNIEnv* env);
 
-} // namespace vanta::modules::spectate
+} // namespace dt::modules::spectate

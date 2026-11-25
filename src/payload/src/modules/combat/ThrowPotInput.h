@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <jni.h>
 
-namespace vanta::modules::throwpot {
+namespace dt::modules::throwpot {
 
 // Reserve one ordinary use-key press. Minecraft consumes it in
 // handleInputEvents and owns slot sync, item use, rotation, swing and packet
@@ -42,4 +42,4 @@ inline constexpr UseProgress useProgress(int before, int remaining, bool sameSlo
     return UseProgress::Waiting;
 }
 
-} // namespace vanta::modules::throwpot
+} // namespace dt::modules::throwpot

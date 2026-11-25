@@ -1,16 +1,16 @@
 #include "modules/visuals/bloom/BloomCompat.h"
 #include "modules/visuals/bloom/WorldParticleBudget.h"
 #include <iostream>
-using namespace vanta::modules::bloom;
+using namespace dt::modules::bloom;
 int terrainQueries = 0;
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 MinecraftClient client;
 MinecraftClient *MinecraftClient::getInstance() { return &client; }
 int RegionPassCache::col(int) { return 0xC080FF; }
 namespace world {
 void seedForTest(std::uint64_t);
 }
-} // namespace vanta::modules::bloom
+} // namespace dt::modules::bloom
 void require(bool condition, const char *message) {
     if (!condition)
         throw std::runtime_error(message);

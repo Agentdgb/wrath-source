@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <mutex>
 
-namespace vanta::modules::shieldbreaker {
+namespace dt::modules::shieldbreaker {
 namespace {
 std::atomic<bool> enabled{false};
 std::atomic<std::uint32_t> option_bits{(150u << 4) | 15u};
@@ -26,8 +26,8 @@ Options options() {
     const auto bits = option_bits.load(std::memory_order_acquire);
     return {bool(bits & 1), bool(bits & 2), bool(bits & 4), bool(bits & 8), int(bits >> 4)};
 }
-using vanta::jvm::LocalObject;
-using vanta::jvm::LocalString;
+using dt::jvm::LocalObject;
+using dt::jvm::LocalString;
 
 bool failed(JNIEnv* env) {
     if (!env->ExceptionCheck()) return false;

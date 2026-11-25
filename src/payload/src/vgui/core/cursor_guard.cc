@@ -304,7 +304,7 @@ namespace core::cursor_guard
 			if (!g_hooked[i] || !g_target[i]) continue;
 			const auto result = MH_DisableHook(g_target[i]);
 			if (result != MH_OK && result != MH_ERROR_DISABLED) {
-				vanta::blockUnload();
+				dt::blockUnload();
 				return;
 			}
 		}
@@ -312,7 +312,7 @@ namespace core::cursor_guard
 		for (int spins = 0; g_in_detour.load(std::memory_order_acquire) > 0 && spins < 2000; ++spins)
 			Sleep(1);
 		if (g_in_detour.load(std::memory_order_acquire) > 0) {
-			vanta::blockUnload();
+			dt::blockUnload();
 			return;
 		}
 
@@ -321,7 +321,7 @@ namespace core::cursor_guard
 			if (g_hooked[i] && g_target[i]) {
 				const auto result = MH_RemoveHook(g_target[i]);
 				if (result != MH_OK && result != MH_ERROR_NOT_CREATED) {
-					vanta::blockUnload();
+					dt::blockUnload();
 					return;
 				}
 			}

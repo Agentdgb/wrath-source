@@ -1,5 +1,5 @@
 #pragma once
-namespace vanta::modules::keybindhud {
+namespace dt::modules::keybindhud {
 inline bool enabled = false;
 void render_background(int width, int height, unsigned int framebuffer);
 void render_text(int width, int height);

@@ -1,6 +1,6 @@
 #include "jvm/JniRef.h"
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 std::string toStdString(JNIEnv* env, jstring js) {
     if (!env || !js) return {};
@@ -11,4 +11,4 @@ std::string toStdString(JNIEnv* env, jstring js) {
     return out;
 }
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

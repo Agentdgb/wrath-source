@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 // A base address from manual mapping is not automatically a loader handle.
 // This is a necessary precondition for FreeLibrary, not proof of unloading.
@@ -26,4 +26,4 @@ inline bool isRegisteredDll(HMODULE module, DWORD& error) noexcept {
     return true;
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

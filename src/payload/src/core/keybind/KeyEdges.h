@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include <array>
-namespace vanta {
+namespace dt {
 // Tracks physical state even while input is captured, so closing a menu with a
 // key held cannot manufacture a new press. A suppressed active hold releases once.
 class KeyEdges {

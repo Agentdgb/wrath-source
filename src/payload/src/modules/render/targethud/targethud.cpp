@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::targethud {
+namespace dt::modules::targethud {
 
 bool g_enabled = false;
 settings g_settings{};
@@ -32,10 +32,10 @@ std::function<void(settings&)> g_settings_provider{};
 
 namespace {
 
-namespace hf = vanta::modules::hitfx;
-namespace cap = vanta::modules::hitfx::capture;
+namespace hf = dt::modules::hitfx;
+namespace cap = dt::modules::hitfx::capture;
 
-vanta::al::al_glass g_glass{};
+dt::al::al_glass g_glass{};
 
 struct layout_t
 {
@@ -437,7 +437,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
 
            Taken here rather than borrowed, so the mode does not depend on an
            unrelated module being on. */
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
 
         if (scope)
             cap::capture_now(scope.get());
@@ -459,11 +459,11 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
        Your own head and name, not a fake one: the local account's head is
        already fetched and cached, so the preview is a real panel at its real
        size rather than a rectangle standing in for one. */
-    const bool editing = vanta::vgui::bridge::isHudEditorActive();
+    const bool editing = dt::vgui::bridge::isHudEditorActive();
 
     if (editing)
     {
-        std::string self = ::vanta::profile::name();
+        std::string self = ::dt::profile::name();
 
         g_drawn.valid = true;
         g_drawn.name = self.empty() ? std::string{ "Target" } : std::move(self);
@@ -823,7 +823,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     /* Only when the panel itself is frosted. With Glass off the client is a set
        of flat cards, and one acrylic surface floating among them does not read
        as the same product. */
-    if (!vanta::vgui::bridge::isGlassEnabled() || !g_glass.available())
+    if (!dt::vgui::bridge::isGlassEnabled() || !g_glass.available())
         return;
 
     /* The composite discards at zero coverage, but only after the framebuffer has
@@ -918,7 +918,7 @@ void render_text(int display_w, int display_h)
     /* With Glass on the pane was already composited by the shader pass, and
        painting the flat card over it would bury the blur under the very colour
        it was meant to replace. */
-    if (!vanta::vgui::bridge::isGlassEnabled() || !g_glass.available())
+    if (!dt::vgui::bridge::isGlassEnabled() || !g_glass.available())
     {
         /* Fully opaque, not 94%. #0e0e0e is a colour, and letting six percent of
            the world through it makes it a slightly different colour depending on
@@ -992,7 +992,7 @@ void render_text(int display_w, int display_h)
     /* ── health bar ──────────────────────────────────────────────────────── */
 
     float accent_r = 0.61f, accent_g = 0.29f, accent_b = 0.86f, accent_a = 1.f;
-    vanta::vgui::bridge::clientAccent(accent_r, accent_g, accent_b, accent_a);
+    dt::vgui::bridge::clientAccent(accent_r, accent_g, accent_b, accent_a);
 
     const float ratio = target.max_health > 0.f
         ? std::clamp(g_shown_health / target.max_health, 0.f, 1.f)
@@ -1160,4 +1160,4 @@ void set_top_left(float x, float y)
     g_anchor_y = y;
 }
 
-} // namespace vanta::modules::targethud
+} // namespace dt::modules::targethud

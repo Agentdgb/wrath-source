@@ -3,7 +3,7 @@
 #include <string>
 #include <windows.h>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 // Spawn a detached daemon thread with a debugger-visible name.
 //
@@ -31,4 +31,4 @@ bool spawnReaper(void (*fn)(), ReaperThreadCreator create = &CreateThread);
 // Set current thread name (safe no-op if unsupported).
 void setCurrentThreadName(const char* name);
 
-} // namespace vanta::platform
+} // namespace dt::platform

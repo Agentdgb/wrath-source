@@ -1,11 +1,11 @@
 #include "core/profile/AppearanceData.h"
-#include "vgui/vanta/render/player_preview.hh"
+#include "vgui/dt/render/player_preview.hh"
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
 #include <fstream>
-#include "vgui/vanta/views/player_list_layout.hh"
-using namespace vanta;
+#include "vgui/dt/views/player_list_layout.hh"
+using namespace dt;
 float alpha_text = 1.f;
 void require(bool test,const char* message){if(!test)throw std::runtime_error(message);}
 std::string encode(const std::string& value) {

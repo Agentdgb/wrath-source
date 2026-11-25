@@ -31,10 +31,10 @@
 #include <string>
 #include <vector>
 
-namespace hf  = vanta::modules::hitfx;
-namespace cap = vanta::modules::hitfx::capture;
+namespace hf  = dt::modules::hitfx;
+namespace cap = dt::modules::hitfx::capture;
 
-namespace vanta::modules::esp {
+namespace dt::modules::esp {
 
 bool     g_enabled = false;
 settings g_settings{};
@@ -167,13 +167,13 @@ bool init_core(JNIEnv* env)
     if (C.tried) return C.ok;
     C.tried = true;
 
-    jclass mc     = vanta::jvm::findClassAnyLoader(env, kMc);
-    jclass world  = vanta::jvm::findClassAnyLoader(env, kWorld);
-    jclass player = vanta::jvm::findClassAnyLoader(env, kPlayer);
-    jclass living = vanta::jvm::findClassAnyLoader(env, kLiving);
-    jclass entity = vanta::jvm::findClassAnyLoader(env, kEntity);
-    jclass box    = vanta::jvm::findClassAnyLoader(env, kBox);
-    jclass rtc    = vanta::jvm::findClassAnyLoader(env, kRtc);
+    jclass mc     = dt::jvm::findClassAnyLoader(env, kMc);
+    jclass world  = dt::jvm::findClassAnyLoader(env, kWorld);
+    jclass player = dt::jvm::findClassAnyLoader(env, kPlayer);
+    jclass living = dt::jvm::findClassAnyLoader(env, kLiving);
+    jclass entity = dt::jvm::findClassAnyLoader(env, kEntity);
+    jclass box    = dt::jvm::findClassAnyLoader(env, kBox);
+    jclass rtc    = dt::jvm::findClassAnyLoader(env, kRtc);
     if (!mc || !world || !player || !living || !entity || !box || !rtc) {
         VLOG_WARN("esp", "init_core: a core class did not resolve");
         return false;
@@ -205,11 +205,11 @@ bool init_core(JNIEnv* env)
     C.ent_hasVehicle       = env->GetMethodID(entity, "method_5765", "()Z");
     C.ent_isSwimming       = env->GetMethodID(entity, "method_5681", "()Z");
     C.liv_getLeaningPitch  = env->GetMethodID(living, "method_6024", "(F)F");
-    if (jclass grc = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_757")) {
+    if (jclass grc = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_757")) {
         C.gr_getCamera = env->GetMethodID(grc, "method_19418", "()Lnet/minecraft/class_4184;");
         env->DeleteLocalRef(grc);
     }
-    if (jclass cmc = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4184")) {
+    if (jclass cmc = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4184")) {
         C.cam_isThirdPerson = env->GetMethodID(cmc, "method_19333", "()Z");
         env->DeleteLocalRef(cmc);
     }
@@ -220,7 +220,7 @@ bool init_core(JNIEnv* env)
     C.ent_lastRZ   = env->GetFieldID(entity, "field_5989", "D");
     // MC's own interpolated render position (what the renderer places entities at).
     C.ent_getLerpedPos = env->GetMethodID(entity, "method_30950", "(F)Lnet/minecraft/class_243;");
-    if (jclass v3 = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_243")) {
+    if (jclass v3 = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_243")) {
         C.vec_x = env->GetFieldID(v3, "field_1352", "D");
         C.vec_y = env->GetFieldID(v3, "field_1351", "D");
         C.vec_z = env->GetFieldID(v3, "field_1350", "D");
@@ -240,7 +240,7 @@ bool init_core(JNIEnv* env)
     C.liv_bodyYaw      = env->GetFieldID(living, "field_6283", "F");   // bodyYaw
     C.liv_lastBodyYaw  = env->GetFieldID(living, "field_6220", "F");   // lastBodyYaw
     C.liv_limbAnimator = env->GetFieldID(living, "field_42108", "Lnet/minecraft/class_8080;");
-    if (jclass la = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_8080")) {
+    if (jclass la = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_8080")) {
         C.la_getProgress  = env->GetMethodID(la, "method_48572", "(F)F");  // getAnimationProgress
         C.la_getAmplitude = env->GetMethodID(la, "method_48570", "(F)F");  // getAmplitude
         env->DeleteLocalRef(la);
@@ -253,19 +253,19 @@ bool init_core(JNIEnv* env)
     C.ent_age          = env->GetFieldID(entity, "field_6012", "I");   // age (breathing)
     // Slim (Alex) detection: AbstractClientPlayerEntity.getPlayerListEntry()
     // -> PlayerListEntry.getSkinTextures() -> SkinTextures.model() vs SLIM.
-    if (jclass acp = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_742")) {
+    if (jclass acp = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_742")) {
         C.acp_getPLE = env->GetMethodID(acp, "method_3123", "()Lnet/minecraft/class_640;");
         env->DeleteLocalRef(acp);
     }
-    if (jclass ple = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_640")) {
+    if (jclass ple = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_640")) {
         C.ple_getSkin = env->GetMethodID(ple, "method_52810", "()Lnet/minecraft/class_8685;");
         env->DeleteLocalRef(ple);
     }
-    if (jclass sk = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_8685")) {
+    if (jclass sk = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_8685")) {
         C.skin_model = env->GetMethodID(sk, "comp_1629", "()Lnet/minecraft/class_7920;");
         env->DeleteLocalRef(sk);
     }
-    if (jclass ty = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_7920")) {
+    if (jclass ty = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_7920")) {
         jfieldID f = env->GetStaticFieldID(ty, "field_41122", "Lnet/minecraft/class_7920;");  // SLIM
         if (f) { jobject o = env->GetStaticObjectField(ty, f);
                  if (o) { C.slim_obj = env->NewGlobalRef(o); env->DeleteLocalRef(o); } }
@@ -277,15 +277,15 @@ bool init_core(JNIEnv* env)
     C.liv_prefHand     = env->GetFieldID(living, "field_6266", "Lnet/minecraft/class_1268;");   // preferredHand
     C.liv_getMainStack = env->GetMethodID(living, "method_6047", "()Lnet/minecraft/class_1799;"); // getMainHandStack
     C.liv_getOffStack  = env->GetMethodID(living, "method_6079", "()Lnet/minecraft/class_1799;"); // getOffHandStack
-    if (jclass st = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1799"))
+    if (jclass st = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1799"))
         { C.stack_empty = env->GetMethodID(st, "method_7960", "()Z"); env->DeleteLocalRef(st); }
-    if (jclass ar = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1306")) {
+    if (jclass ar = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1306")) {
         jfieldID f = env->GetStaticFieldID(ar, "field_6183", "Lnet/minecraft/class_1306;");     // Arm.RIGHT
         if (f) { jobject o = env->GetStaticObjectField(ar, f);
                  if (o) { C.arm_right = env->NewGlobalRef(o); env->DeleteLocalRef(o); } }
         env->DeleteLocalRef(ar);
     }
-    if (jclass hd = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1268")) {
+    if (jclass hd = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1268")) {
         jfieldID f = env->GetStaticFieldID(hd, "field_5808", "Lnet/minecraft/class_1268;");     // Hand.MAIN_HAND
         if (f) { jobject o = env->GetStaticObjectField(hd, f);
                  if (o) { C.hand_main = env->NewGlobalRef(o); env->DeleteLocalRef(o); } }
@@ -303,19 +303,19 @@ bool init_core(JNIEnv* env)
     // Render-state path (authoritative): MinecraftClient.getEntityRenderDispatcher
     // -> EntityRenderManager.getAndUpdateRenderState(entity, tickProgress).
     C.mc_getEntityRenderDispatcher = env->GetMethodID(mc, "method_1561", "()Lnet/minecraft/class_898;");
-    if (jclass erm = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_898")) {
+    if (jclass erm = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_898")) {
         C.erm_getAndUpdateRenderState = env->GetMethodID(
             erm, "method_72977", "(Lnet/minecraft/class_1297;F)Lnet/minecraft/class_10017;");
         env->DeleteLocalRef(erm);
     }
-    if (jclass rs = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_10017")) {
+    if (jclass rs = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_10017")) {
         C.rs_x = env->GetFieldID(rs, "field_53325", "D");
         C.rs_y = env->GetFieldID(rs, "field_53326", "D");
         C.rs_z = env->GetFieldID(rs, "field_53327", "D");
         C.rs_posOffset = env->GetFieldID(rs, "field_53336", "Lnet/minecraft/class_243;");
         env->DeleteLocalRef(rs);
     }
-    if (jclass ls = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_10042")) {
+    if (jclass ls = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_10042")) {
         C.rs_bodyYaw     = env->GetFieldID(ls, "field_53446", "F");
         C.rs_relHeadYaw  = env->GetFieldID(ls, "field_53447", "F");
         C.rs_pitch       = env->GetFieldID(ls, "field_53448", "F");
@@ -326,7 +326,7 @@ bool init_core(JNIEnv* env)
         C.living_state_class = static_cast<jclass>(env->NewGlobalRef(ls));
         env->DeleteLocalRef(ls);
     }
-    if (jclass bs = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_10034")) {
+    if (jclass bs = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_10034")) {
         C.rs_sneaking = env->GetFieldID(bs, "field_53410", "Z");   // isInSneakingPose
         C.biped_state_class = static_cast<jclass>(env->NewGlobalRef(bs));
         env->DeleteLocalRef(bs);
@@ -385,16 +385,16 @@ bool init_equip(JNIEnv* env)
     if (E.tried) return E.ok;
     E.tried = true;
 
-    jclass slot   = vanta::jvm::findClassAnyLoader(env, kSlot);
-    jclass stack  = vanta::jvm::findClassAnyLoader(env, kStack);
-    jclass regs   = vanta::jvm::findClassAnyLoader(env, kRegs);
-    jclass reg    = vanta::jvm::findClassAnyLoader(env, kRegistry);
-    jclass ident  = vanta::jvm::findClassAnyLoader(env, kIdent);
-    jclass amgr   = vanta::jvm::findClassAnyLoader(env, kAtlasMgr);
-    jclass texmgr = vanta::jvm::findClassAnyLoader(env, kTexMgr);
-    jclass atlas  = vanta::jvm::findClassAnyLoader(env, kAtlas);
-    jclass sprite = vanta::jvm::findClassAnyLoader(env, kSprite);
-    jclass gltex  = vanta::jvm::findClassAnyLoader(env, kGlTex);
+    jclass slot   = dt::jvm::findClassAnyLoader(env, kSlot);
+    jclass stack  = dt::jvm::findClassAnyLoader(env, kStack);
+    jclass regs   = dt::jvm::findClassAnyLoader(env, kRegs);
+    jclass reg    = dt::jvm::findClassAnyLoader(env, kRegistry);
+    jclass ident  = dt::jvm::findClassAnyLoader(env, kIdent);
+    jclass amgr   = dt::jvm::findClassAnyLoader(env, kAtlasMgr);
+    jclass texmgr = dt::jvm::findClassAnyLoader(env, kTexMgr);
+    jclass atlas  = dt::jvm::findClassAnyLoader(env, kAtlas);
+    jclass sprite = dt::jvm::findClassAnyLoader(env, kSprite);
+    jclass gltex  = dt::jvm::findClassAnyLoader(env, kGlTex);
     if (!slot || !stack || !regs || !reg || !ident || !amgr || !texmgr || !atlas || !sprite || !gltex) {
         VLOG_WARN("esp", "init_equip: a class did not resolve — equipment off");
         return false;
@@ -516,9 +516,9 @@ bool init_bob(JNIEnv* env)
 
     Bc.mc_gameRenderer = env->GetFieldID(C.mc_class, "field_1773", "Lnet/minecraft/class_757;");
 
-    jclass gr    = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_757");
-    jclass ms    = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4587");
-    jclass entry = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4587$class_4665");
+    jclass gr    = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_757");
+    jclass ms    = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4587");
+    jclass entry = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4587$class_4665");
     jclass m4    = env->FindClass("org/joml/Matrix4f");
     if (env->ExceptionCheck()) env->ExceptionClear();
     if (!gr || !ms || !entry || !m4) {
@@ -537,9 +537,9 @@ bool init_bob(JNIEnv* env)
     Bc.m4_get             = env->GetMethodID(m4, "get", "([F)[F");
     // View-bobbing option (auto-detect).
     Bc.mc_options = env->GetFieldID(C.mc_class, "field_1690", "Lnet/minecraft/class_315;");
-    if (jclass go = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_315"))
+    if (jclass go = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_315"))
         { Bc.go_getBobView = env->GetMethodID(go, "method_42448", "()Lnet/minecraft/class_7172;"); env->DeleteLocalRef(go); }
-    if (jclass so = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_7172"))
+    if (jclass so = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_7172"))
         { Bc.so_getValue = env->GetMethodID(so, "method_41753", "()Ljava/lang/Object;"); env->DeleteLocalRef(so); }
     if (jclass bcl = env->FindClass("java/lang/Boolean"))
         { Bc.bool_value = env->GetMethodID(bcl, "booleanValue", "()Z"); env->DeleteLocalRef(bcl); }
@@ -586,7 +586,7 @@ bool compute_bob(JNIEnv* env, jobject mc, float tp, float out[16])
     jobject stack = env->NewObject(Bc.ms_class, Bc.ms_ctor);
     if (!stack) { if (env->ExceptionCheck()) env->ExceptionClear(); return false; }
 // Match renderWorld: camera interpolation, then hurt tilt followed by walking bob.
-    tp = ::vanta::modules::outline::view::camera_effect_time(env, grr, tp);
+    tp = ::dt::modules::outline::view::camera_effect_time(env, grr, tp);
     if (Bc.gr_tiltHurt) env->CallVoidMethod(grr, Bc.gr_tiltHurt, stack, tp);
     if (bob_enabled)    env->CallVoidMethod(grr, Bc.gr_bobView,  stack, tp);
     if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
@@ -1022,7 +1022,7 @@ void poll(JNIEnv* env, const hf::render_frame& cam)
             if (env->IsInstanceOf(ent, C.player_class) != JNI_TRUE) break;
             // A friend is not drawn on. Dropped here rather than recoloured
             // downstream so none of the projection work is paid for them.
-            if (::vanta::social::isFriend(env, ent)) break;
+            if (::dt::social::isFriend(env, ent)) break;
             if (env->IsSameObject(ent, self) && (!g_settings.showself || !thirdPerson)) break;
             if (camEnt && !thirdPerson && env->IsSameObject(ent, camEnt)) break;
             if (env->CallBooleanMethod(ent, C.ent_isAlive) != JNI_TRUE) break;
@@ -1763,7 +1763,7 @@ void render_text(int display_w, int display_h)
     }
 
     // Don't draw the ESP over the ClickGui panel while it's open.
-    if (::vanta::vgui::bridge::isOverlayVisible()) {
+    if (::dt::vgui::bridge::isOverlayVisible()) {
         std::lock_guard<std::mutex> lk(g_mx); g_targets.clear();
         return;
     }
@@ -1777,7 +1777,7 @@ void render_text(int display_w, int display_h)
     cap::set_capture_enabled(true);
 
     {
-        vanta::jvm::JniScope s;
+        dt::jvm::JniScope s;
         if (s) {
             cap::capture_now(s.get());
             if (init_core(s.get())) {
@@ -1790,5 +1790,5 @@ void render_text(int display_w, int display_h)
     draw(display_w, display_h);
 }
 
-} // namespace vanta::modules::esp
+} // namespace dt::modules::esp
 

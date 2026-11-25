@@ -1,7 +1,7 @@
 #pragma once
 #include "imgui.h"
 
-namespace vanta::modules::targetesp {
+namespace dt::modules::targetesp {
 // gl_hook transforms and fades every list except ##Foreground with the menu.
 // World overlays use framebuffer coordinates, while ImGui's default clip is
 // the 1120x700 menu canvas. Override that clip without intersecting it.

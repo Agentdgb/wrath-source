@@ -2,7 +2,7 @@
 
 #include <imgui.h>
 
-namespace vanta {
+namespace dt {
 
 StringSetting::StringSetting(Module* o, std::string n, std::string d, std::size_t maxLen)
     : Setting(o, std::move(n), SettingType::String), v_(std::move(d)), maxLen_(maxLen) {
@@ -21,4 +21,4 @@ void StringSetting::load(const nlohmann::json& j) {
     if (j.is_string()) set(j.get<std::string>());
 }
 
-} // namespace vanta
+} // namespace dt

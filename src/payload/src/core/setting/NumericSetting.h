@@ -1,7 +1,7 @@
 #pragma once
 #include "core/setting/Setting.h"
 
-namespace vanta {
+namespace dt {
 
 class IntSetting : public Setting {
 public:
@@ -38,4 +38,4 @@ private:
     float value_, min_, max_, step_;
 };
 
-} // namespace vanta
+} // namespace dt

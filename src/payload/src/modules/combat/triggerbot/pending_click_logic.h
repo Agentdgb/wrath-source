@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace vanta::modules::triggerbot::pending_click {
+namespace dt::modules::triggerbot::pending_click {
 
 // The caller serializes access. A generation lets a failed SendInput cancel
 // only its own reservation, even if the game has already consumed it.

@@ -10,7 +10,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace vanta::modules::chams::jni {
+namespace dt::modules::chams::jni {
 
 namespace {
 
@@ -138,7 +138,7 @@ bool   g_self_ok = false;
 template <class T>
 T report(T id, const char* kind, const char* owner, const char* name, const char* desc)
 {
-    ::vanta::desklog::jni_lookup(dbg::ch(), kind, owner, name, desc, id != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), kind, owner, name, desc, id != nullptr);
     return id;
 }
 
@@ -402,7 +402,7 @@ int equipment_textures(JNIEnv* env, unsigned int* out, int cap)
     env->DeleteLocalRef(mc);
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    ::vanta::desklog::logf_once(dbg::ch(), 41,
+    ::dt::desklog::logf_once(dbg::ch(), 41,
         "armour textures resolved: %d (missing-placeholder id = %u, excluded)",
         n, missing);
     return n;
@@ -437,19 +437,19 @@ bool ensure_cache(JNIEnv* env)
     if (C.ok) return true;
     if (!env) return false;
 
-    ::vanta::desklog::section(dbg::ch(), "JNI cache resolution");
+    ::dt::desklog::section(dbg::ch(), "JNI cache resolution");
 
-    jclass mc     = ::vanta::jvm::findClassAnyLoader(env, kMc);
-    jclass world  = ::vanta::jvm::findClassAnyLoader(env, kWorld);
-    jclass living = ::vanta::jvm::findClassAnyLoader(env, kLiving);
-    jclass entity = ::vanta::jvm::findClassAnyLoader(env, kEntity);
-    jclass rtc    = ::vanta::jvm::findClassAnyLoader(env, kRtc);
+    jclass mc     = ::dt::jvm::findClassAnyLoader(env, kMc);
+    jclass world  = ::dt::jvm::findClassAnyLoader(env, kWorld);
+    jclass living = ::dt::jvm::findClassAnyLoader(env, kLiving);
+    jclass entity = ::dt::jvm::findClassAnyLoader(env, kEntity);
+    jclass rtc    = ::dt::jvm::findClassAnyLoader(env, kRtc);
 
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kMc,     "<self>", "", mc     != nullptr);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kWorld,  "<self>", "", world  != nullptr);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kLiving, "<self>", "", living != nullptr);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kEntity, "<self>", "", entity != nullptr);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", kRtc,    "<self>", "", rtc    != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kMc,     "<self>", "", mc     != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kWorld,  "<self>", "", world  != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kLiving, "<self>", "", living != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kEntity, "<self>", "", entity != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", kRtc,    "<self>", "", rtc    != nullptr);
 
     if (!mc || !world || !living || !entity || !rtc) {
         // Normal before a world exists; the caller retries.
@@ -496,7 +496,7 @@ bool ensure_cache(JNIEnv* env)
     // back to the behaviour it had before this existed.
     C.ent_getId   = env->GetMethodID(entity, "method_5628", "()I");
     if (env->ExceptionCheck()) env->ExceptionClear();
-    ::vanta::desklog::jni_lookup(dbg::ch(), "method", kEntity, "method_5628",
+    ::dt::desklog::jni_lookup(dbg::ch(), "method", kEntity, "method_5628",
                                  "()I  Entity.getId", C.ent_getId != nullptr);
     C.ent_isInSneakingPose = report(env->GetMethodID(entity, "method_18276", "()Z"), "method", kEntity, "method_18276", "()Z");
 
@@ -529,47 +529,47 @@ bool ensure_cache(JNIEnv* env)
     C.ent_swimmingPose = env->GetMethodID(entity, "method_20232", "()Z");
     C.ent_inWater      = env->GetMethodID(entity, "method_5799", "()Z");
     if (env->ExceptionCheck()) env->ExceptionClear();
-    ::vanta::desklog::jni_lookup(dbg::ch(), "method", kLiving, "method_6024",
+    ::dt::desklog::jni_lookup(dbg::ch(), "method", kLiving, "method_6024",
                                  "(F)F (leaningPitch)", C.liv_leaningPitch != nullptr);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "method", kLiving, "method_6128",
+    ::dt::desklog::jni_lookup(dbg::ch(), "method", kLiving, "method_6128",
                                  "()Z (isGliding)", C.liv_isGliding != nullptr);
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    if (jclass la = ::vanta::jvm::findClassAnyLoader(env, kLimbAnim)) {
+    if (jclass la = ::dt::jvm::findClassAnyLoader(env, kLimbAnim)) {
         C.la_getProgress  = report(env->GetMethodID(la, "method_48572", "(F)F"), "method", kLimbAnim, "method_48572", "(F)F");
         C.la_getAmplitude = report(env->GetMethodID(la, "method_48570", "(F)F"), "method", kLimbAnim, "method_48570", "(F)F");
         env->DeleteLocalRef(la);
     }
-    if (jclass st = ::vanta::jvm::findClassAnyLoader(env, kStack)) {
+    if (jclass st = ::dt::jvm::findClassAnyLoader(env, kStack)) {
         C.stack_isEmpty = report(env->GetMethodID(st, "method_7960", "()Z"), "method", kStack, "method_7960", "()Z");
         env->DeleteLocalRef(st);
     }
     C.liv_prefHand = env->GetFieldID(living, "field_6266", "Lnet/minecraft/class_1268;");
     if (env->ExceptionCheck()) env->ExceptionClear();
-    ::vanta::desklog::jni_lookup(dbg::ch(), "field", kLiving, "field_6266",
+    ::dt::desklog::jni_lookup(dbg::ch(), "field", kLiving, "field_6266",
                                  "LHand; (preferredHand)", C.liv_prefHand != nullptr);
 
-    if (jclass hand = ::vanta::jvm::findClassAnyLoader(env, kHand)) {
+    if (jclass hand = ::dt::jvm::findClassAnyLoader(env, kHand)) {
         if (jfieldID f = env->GetStaticFieldID(hand, "field_5808", "Lnet/minecraft/class_1268;")) {
             if (jobject o = env->GetStaticObjectField(hand, f)) {
                 C.hand_main = env->NewGlobalRef(o);
                 env->DeleteLocalRef(o);
             }
         }
-        ::vanta::desklog::jni_lookup(dbg::ch(), "sfield", kHand, "field_5808",
+        ::dt::desklog::jni_lookup(dbg::ch(), "sfield", kHand, "field_5808",
                                      "LHand; (MAIN_HAND)", C.hand_main != nullptr);
         env->DeleteLocalRef(hand);
     }
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    if (jclass arm = ::vanta::jvm::findClassAnyLoader(env, kArm)) {
+    if (jclass arm = ::dt::jvm::findClassAnyLoader(env, kArm)) {
         if (jfieldID f = env->GetStaticFieldID(arm, "field_6183", "Lnet/minecraft/class_1306;")) {
             if (jobject o = env->GetStaticObjectField(arm, f)) {
                 C.arm_right = env->NewGlobalRef(o);
                 env->DeleteLocalRef(o);
             }
         }
-        ::vanta::desklog::jni_lookup(dbg::ch(), "sfield", kArm, "field_6183", "LArm; (RIGHT)", C.arm_right != nullptr);
+        ::dt::desklog::jni_lookup(dbg::ch(), "sfield", kArm, "field_6183", "LArm; (RIGHT)", C.arm_right != nullptr);
         env->DeleteLocalRef(arm);
     }
     if (env->ExceptionCheck()) env->ExceptionClear();
@@ -587,12 +587,12 @@ bool ensure_cache(JNIEnv* env)
     // actually exists. (The first cut of this file asked only for the nested
     // form, with the wrong member names on top; the desktop log caught it as
     // the single FAIL in an otherwise clean 36/37.)
-    if (jclass acp = ::vanta::jvm::findClassAnyLoader(env, kAcp)) {
+    if (jclass acp = ::dt::jvm::findClassAnyLoader(env, kAcp)) {
         C.acp_getPLE = env->GetMethodID(acp, "method_3123", "()Lnet/minecraft/class_640;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(acp);
     }
-    if (jclass ple = ::vanta::jvm::findClassAnyLoader(env, kPle)) {
+    if (jclass ple = ::dt::jvm::findClassAnyLoader(env, kPle)) {
         C.ple_getSkin = env->GetMethodID(ple, "method_52810", "()Lnet/minecraft/class_8685;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(ple);
@@ -603,7 +603,7 @@ bool ensure_cache(JNIEnv* env)
             "net/minecraft/class_8685$class_7920", // 1.21..1.21.8 SkinTextures$Model
         };
         for (const char* tn : kSkinTypeNames) {
-            jclass ty = ::vanta::jvm::findClassAnyLoader(env, tn);
+            jclass ty = ::dt::jvm::findClassAnyLoader(env, tn);
             if (env->ExceptionCheck()) env->ExceptionClear();
             if (!ty) continue;
 
@@ -612,7 +612,7 @@ bool ensure_cache(JNIEnv* env)
             std::snprintf(msig, sizeof msig, "()L%s;", tn);
 
             jmethodID getter = nullptr;
-            if (jclass sk = ::vanta::jvm::findClassAnyLoader(env, kSkinTex)) {
+            if (jclass sk = ::dt::jvm::findClassAnyLoader(env, kSkinTex)) {
                 getter = env->GetMethodID(sk, "comp_1629", msig);
                 if (env->ExceptionCheck()) env->ExceptionClear();
                 env->DeleteLocalRef(sk);
@@ -632,7 +632,7 @@ bool ensure_cache(JNIEnv* env)
             if (C.skin_slim) { CHAMS_LOG("skin type resolved via %s", tn); break; }
         }
     }
-    ::vanta::desklog::jni_lookup(dbg::ch(), "opt", "slim-arms", "chain",
+    ::dt::desklog::jni_lookup(dbg::ch(), "opt", "slim-arms", "chain",
                                  "acp.getPlayerListEntry -> getSkinTextures -> model == SLIM",
                                  C.acp_getPLE && C.ple_getSkin && C.skin_model && C.skin_slim);
     if (env->ExceptionCheck()) env->ExceptionClear();
@@ -642,7 +642,7 @@ bool ensure_cache(JNIEnv* env)
     // This is what lets the native GL path tell a PLAYER draw from a mob, an
     // item frame or the first-person hand. Without it every entity draw is
     // replayed, which is what the log has been reporting as entity == player.
-    if (jclass sk = ::vanta::jvm::findClassAnyLoader(env, kSkinTex)) {
+    if (jclass sk = ::dt::jvm::findClassAnyLoader(env, kSkinTex)) {
         // Pre-1.21.9: the record component is the Identifier itself.
         C.skin_texture_direct = env->GetMethodID(sk, "comp_1626", "()Lnet/minecraft/class_2960;");
         if (env->ExceptionCheck()) env->ExceptionClear();
@@ -655,7 +655,7 @@ bool ensure_cache(JNIEnv* env)
         env->DeleteLocalRef(sk);
     }
     if (C.skin_body_asset) {
-        if (jclass ta = ::vanta::jvm::findClassAnyLoader(
+        if (jclass ta = ::dt::jvm::findClassAnyLoader(
                 env, "net/minecraft/class_12079$class_12081")) {
             C.asset_texturePath = env->GetMethodID(ta, "comp_3627",
                                                    "()Lnet/minecraft/class_2960;");
@@ -664,30 +664,30 @@ bool ensure_cache(JNIEnv* env)
         }
     }
 
-    if (jclass mcc = ::vanta::jvm::findClassAnyLoader(env, kMc)) {
+    if (jclass mcc = ::dt::jvm::findClassAnyLoader(env, kMc)) {
         C.mc_getTextureManager = env->GetMethodID(mcc, "method_1531",
                                                   "()Lnet/minecraft/class_1060;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(mcc);
     }
-    if (jclass idc = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2960")) {
+    if (jclass idc = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2960")) {
         C.ident_of2 = env->GetStaticMethodID(
             idc, "method_60655",
             "(Ljava/lang/String;Ljava/lang/String;)Lnet/minecraft/class_2960;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (C.ident_of2) C.ident_class = static_cast<jclass>(env->NewGlobalRef(idc));
-        ::vanta::desklog::jni_lookup(dbg::ch(), "method", "net/minecraft/class_2960",
+        ::dt::desklog::jni_lookup(dbg::ch(), "method", "net/minecraft/class_2960",
                                      "method_60655", "(String,String)Identifier",
                                      C.ident_of2 != nullptr);
         env->DeleteLocalRef(idc);
     }
-    if (jclass tm = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1060")) {
+    if (jclass tm = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1060")) {
         C.tm_getTexture = env->GetMethodID(tm, "method_4619",
                               "(Lnet/minecraft/class_2960;)Lnet/minecraft/class_1044;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(tm);
     }
-    if (jclass abstex = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1044")) {
+    if (jclass abstex = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1044")) {
         C.abstex_getGlTexture = env->GetMethodID(abstex, "method_68004",
                                     "()Lcom/mojang/blaze3d/textures/GpuTexture;");   // 1.21.5+
         if (env->ExceptionCheck()) env->ExceptionClear();
@@ -695,7 +695,7 @@ bool ensure_cache(JNIEnv* env)
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(abstex);
     }
-    if (jclass gltex = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_10868")) {
+    if (jclass gltex = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_10868")) {
         C.gltex_getGlId = env->GetMethodID(gltex, "method_68427", "()I");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(gltex);
@@ -708,27 +708,27 @@ bool ensure_cache(JNIEnv* env)
     // The mixin adds the method straight onto Entity, so ask Entity first; the
     // interface is the fallback in case a future build only implements it
     // there. Absent mod => both miss => the call site simply never fires.
-    if (jclass ent2 = ::vanta::jvm::findClassAnyLoader(env, kEntity)) {
+    if (jclass ent2 = ::dt::jvm::findClassAnyLoader(env, kEntity)) {
         C.ec_setCulled = env->GetMethodID(ent2, "setCulled", "(Z)V");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(ent2);
     }
     if (!C.ec_setCulled) {
-        if (jclass cull = ::vanta::jvm::findClassAnyLoader(
+        if (jclass cull = ::dt::jvm::findClassAnyLoader(
                 env, "dev/tr7zw/entityculling/versionless/access/Cullable")) {
             C.ec_setCulled = env->GetMethodID(cull, "setCulled", "(Z)V");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(cull);
         }
     }
-    ::vanta::desklog::jni_lookup(dbg::ch(), "opt", "EntityCulling",
+    ::dt::desklog::jni_lookup(dbg::ch(), "opt", "EntityCulling",
                                  "Cullable.setCulled", "(Z)V", C.ec_setCulled != nullptr);
     CHAMS_LOG("EntityCulling defeat: %s",
               C.ec_setCulled
                   ? "AVAILABLE — players will be marked not-culled and force-visible each frame"
                   : "mod not present (or method moved); nothing to defeat");
 
-    ::vanta::desklog::jni_lookup(dbg::ch(), "opt", "player-skin", "chain",
+    ::dt::desklog::jni_lookup(dbg::ch(), "opt", "player-skin", "chain",
         C.skin_texture_direct ? "SkinTextures.texture() [pre-1.21.9]"
                               : "SkinTextures.body().texturePath() [1.21.9+]",
         (C.skin_texture_direct || (C.skin_body_asset && C.asset_texturePath))
@@ -756,7 +756,7 @@ bool ensure_cache(JNIEnv* env)
         && C.liv_bodyYaw && C.liv_lastBodyYaw;
 
     C.tried = true;
-    ::vanta::desklog::jni_summary(dbg::ch());
+    ::dt::desklog::jni_summary(dbg::ch());
     CHAMS_LOG("cache_ready = %d", (int)C.ok);
     return C.ok;
 }
@@ -1086,7 +1086,7 @@ int poll_players(JNIEnv* env,
     std::sort(out.begin(), out.end(),
               [](const player_sample& a, const player_sample& b) { return a.dist < b.dist; });
     if (max_targets > 0 && static_cast<int>(out.size()) > max_targets) {
-        ::vanta::desklog::bump(dbg::ch(), "skip_over_cap",
+        ::dt::desklog::bump(dbg::ch(), "skip_over_cap",
                                static_cast<long long>(out.size()) - max_targets);
         out.resize(static_cast<size_t>(max_targets));
     }
@@ -1129,8 +1129,8 @@ void dump_texture_registry(JNIEnv* env, const unsigned int* interesting, int n_i
     jclass cls_Object = env->FindClass("java/lang/Object");
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    jclass tm     = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1060");
-    jclass cls_Tex = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1044");
+    jclass tm     = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1060");
+    jclass cls_Tex = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1044");
     if (env->ExceptionCheck()) env->ExceptionClear();
     if (!cls_Class || !cls_Field || !cls_Map || !cls_Set || !cls_Iter || !cls_Entry
         || !cls_Object || !tm || !cls_Tex) {
@@ -1276,5 +1276,5 @@ void dump_texture_registry(JNIEnv* env, const unsigned int* interesting, int n_i
     env->DeleteLocalRef(mc);
 }
 
-} // namespace vanta::modules::chams::jni
+} // namespace dt::modules::chams::jni
 

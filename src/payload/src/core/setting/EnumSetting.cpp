@@ -4,7 +4,7 @@
 
 #include "util/Log.h"
 
-namespace vanta {
+namespace dt {
 
 EnumSetting::EnumSetting(Module* o, std::string n, std::initializer_list<const char*> opts, int def)
     : Setting(o, std::move(n), SettingType::Enum), index_(def) {
@@ -55,4 +55,4 @@ void EnumSetting::load(const nlohmann::json& j) {
               name_, s, options_.empty() ? std::string{} : options_[index_]);
 }
 
-} // namespace vanta
+} // namespace dt

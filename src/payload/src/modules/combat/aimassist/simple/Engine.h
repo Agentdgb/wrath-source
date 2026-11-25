@@ -6,7 +6,7 @@
 #include "jvm/JvmContext.h"
 #include <string>
 
-namespace vanta::modules::aimassist::simple {
+namespace dt::modules::aimassist::simple {
 using readableaim::Settings;
 class Engine {
     static constexpr const char *Client = "net/minecraft/class_310";
@@ -547,4 +547,4 @@ class Engine {
         }
     }
 };
-} // namespace vanta::modules::aimassist::simple::simple
+} // namespace dt::modules::aimassist::simple::simple

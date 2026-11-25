@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 // Fast-path stack-map rebuilder for Recipe A. All Recipe A splices place their
 // join at the very first original instruction (offset +7 after the injected
@@ -16,4 +16,4 @@ namespace vanta::asm_ {
 std::vector<std::uint8_t> emitRecipeAStackMap(
     const std::uint8_t* originalStackMap, std::size_t originalLen);
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

@@ -1,4 +1,4 @@
-// ChamsModule.cpp — Vanta module wrapper for the Chams engine.
+// ChamsModule.cpp — Dt module wrapper for the Chams engine.
 //
 // NO SETTINGS. The module is a toggle and nothing else.
 //
@@ -25,7 +25,7 @@
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Chams : public Module {
 public:
@@ -56,6 +56,6 @@ private:
     void onDisable() override { chams::g_enabled = false; }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::Chams)
+DT_REGISTER_MODULE(dt::modules::Chams)

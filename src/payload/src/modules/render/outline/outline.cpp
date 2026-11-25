@@ -19,13 +19,13 @@
 #include <cstring>
 #include <vector>
 
-namespace hf   = vanta::modules::hitfx;
-namespace cap  = vanta::modules::hitfx::capture;
-namespace pose = vanta::modules::chams::pose;
-namespace geom = vanta::modules::chams::geom;
-namespace cjni = vanta::modules::chams::jni;
+namespace hf   = dt::modules::hitfx;
+namespace cap  = dt::modules::hitfx::capture;
+namespace pose = dt::modules::chams::pose;
+namespace geom = dt::modules::chams::geom;
+namespace cjni = dt::modules::chams::jni;
 
-namespace vanta::modules::outline {
+namespace dt::modules::outline {
 
 bool     g_enabled = false;
 settings g_settings{};
@@ -302,7 +302,7 @@ void shutdown()
     g_players.clear();
     g_verts.clear();
 
-    ::vanta::jvm::JniScope s;
+    ::dt::jvm::JniScope s;
     if (s) view::release_cache(s.get());
 }
 
@@ -331,7 +331,7 @@ void render_background(int display_w, int display_h, unsigned int composite_fbo)
     const long long now = now_ns();
 
     {
-        ::vanta::jvm::JniScope s;
+        ::dt::jvm::JniScope s;
         if (!s) return;
         JNIEnv* env = s.get();
 
@@ -402,4 +402,4 @@ void render_background(int display_w, int display_h, unsigned int composite_fbo)
                       box, display_w, display_h, composite_fbo, p);
 }
 
-} // namespace vanta::modules::outline
+} // namespace dt::modules::outline

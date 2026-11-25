@@ -32,7 +32,7 @@
 #include <cstring>
 #include <jni.h>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -92,7 +92,7 @@ void build_cache(JNIEnv* env)
     if (g_c.tried) return;
     g_c.tried = true;
 
-    jclass local = vanta::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return; }
     g_c.mc_class = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -112,14 +112,14 @@ void build_cache(JNIEnv* env)
     }
 
     // Held-item chain.
-    if (jclass pe = vanta::jvm::findClassAnyLoader(env, sdk::mappings::player_entity_class_sig)) {
+    if (jclass pe = dt::jvm::findClassAnyLoader(env, sdk::mappings::player_entity_class_sig)) {
         g_c.player_inv = field_either(env, pe, "field_7514", "inventory",
                                       "Lnet/minecraft/class_1661;");
         env->DeleteLocalRef(pe);
     }
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    if (jclass inv = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1661")) {
+    if (jclass inv = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1661")) {
         g_c.inv_selected  = field_either(env, inv, "field_7545", "selected", "I");
         g_c.inv_get_stack = method_either(env, inv, "method_5438", "getItem",
                                           "(I)Lnet/minecraft/class_1799;");
@@ -127,7 +127,7 @@ void build_cache(JNIEnv* env)
     }
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    if (jclass st = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1799")) {
+    if (jclass st = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1799")) {
         g_c.stack_is_empty = method_either(env, st, "method_7960", "isEmpty", "()Z");
         g_c.stack_get_item = method_either(env, st, "method_7909", "getItem",
                                            "()Lnet/minecraft/class_1792;");
@@ -135,7 +135,7 @@ void build_cache(JNIEnv* env)
     }
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    if (jclass it = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1792")) {
+    if (jclass it = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1792")) {
         g_c.item_translation = method_either(env, it, "method_7876", "getDescriptionId",
                                              "()Ljava/lang/String;");
         env->DeleteLocalRef(it);
@@ -242,7 +242,7 @@ private:
         // when handleInputEvents looked, and that throw was simply lost. Running
         // every frame guarantees the field is clear whenever the tick reads it,
         // which is most of the speed-up on its own.
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
@@ -288,6 +288,6 @@ private:
     }
 };
 
-VANTA_REGISTER_MODULE(FastPot);
+DT_REGISTER_MODULE(FastPot);
 
-} // namespace vanta::modules
+} // namespace dt::modules

@@ -9,7 +9,7 @@
 #include <initializer_list>
 #include <vector>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -87,6 +87,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::TargetHud)
+DT_REGISTER_MODULE(dt::modules::TargetHud)

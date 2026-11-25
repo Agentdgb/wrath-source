@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace vanta::modules::chams::geom {
+namespace dt::modules::chams::geom {
 
 namespace {
 
@@ -172,4 +172,4 @@ float signed_area(const float* xs, const float* ys, int n)
     return a * 0.5f;
 }
 
-} // namespace vanta::modules::chams::geom
+} // namespace dt::modules::chams::geom

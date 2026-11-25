@@ -10,7 +10,7 @@
 
 #include "modules/visuals/worldtweaks/worldtweaks.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class WorldTweaks : public Module {
 public:
@@ -34,7 +34,7 @@ public:
         listen<events::GameLoopEvent>([this](events::GameLoopEvent& e){
             if (!isEnabled()) return;
             mirror();
-            ::vanta::jvm::JniScope s;
+            ::dt::jvm::JniScope s;
             if (s) worldtweaks::tick(s.get(), e.deltaMs);
         });
         // Drop the server's WorldTimeUpdate while the time override is on, so it
@@ -88,9 +88,9 @@ private:
     IntSetting   ambientRadius_ {this, "Radius", 12, 3, 32};
     // No Debug switch in the panel, by request; worldtweaks::settings::debug
     // stays at its default (off). Hook and resolution status still go to
-    // vanta.log under [worldtweaks].
+    // dt.log under [worldtweaks].
 };
 
-VANTA_REGISTER_MODULE(WorldTweaks);
+DT_REGISTER_MODULE(WorldTweaks);
 
-} // namespace vanta::modules
+} // namespace dt::modules

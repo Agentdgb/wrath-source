@@ -21,7 +21,7 @@
 #include <string>
 #include <unordered_set>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -63,7 +63,7 @@ void clear_exception(JNIEnv* env)
 
 jclass find_class(JNIEnv* env, const char* name)
 {
-    jclass local = vanta::jvm::findClassAnyLoader(env, name);
+    jclass local = dt::jvm::findClassAnyLoader(env, name);
     if (!local) {
         clear_exception(env);
         return nullptr;
@@ -274,13 +274,13 @@ private:
 
     void pump(float delta_ms)
     {
-        if (!isEnabled() || ::vanta::vgui::bridge::isOverlayVisible()
+        if (!isEnabled() || ::dt::vgui::bridge::isOverlayVisible()
             || !game_is_foreground() || !gesture_keys_down()) {
             reset_gesture();
             return;
         }
 
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
@@ -409,6 +409,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::ItemScroller)
+DT_REGISTER_MODULE(dt::modules::ItemScroller)

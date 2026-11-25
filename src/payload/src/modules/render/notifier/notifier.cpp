@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace vanta::modules::notifier {
+namespace dt::modules::notifier {
 
 bool g_enabled = false;
 settings g_settings{};
@@ -22,7 +22,7 @@ std::function<void(settings&)> g_settings_provider{};
 
 namespace {
 
-vanta::al::al_glass g_glass{};
+dt::al::al_glass g_glass{};
 
 /* #100e0c, and only ever seen with Glass off — with Glass on the frosted pane
    is the background. */
@@ -163,7 +163,7 @@ ImU32 rgba(float r, float g, float b, float a)
 
 ImFont* font_at(float size)
 {
-    auto& pool = vanta::modules::arraylist::shared_pool();
+    auto& pool = dt::modules::arraylist::shared_pool();
 
     if (!pool.ensure())
         return nullptr;
@@ -299,7 +299,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
        a card in the editor, still took a drag handle, still punched a hole in
        the grid — and, being registered last, still stole the cursor from the
        Radar underneath it. A module that is off is not on screen. */
-    const bool editing = g_enabled && vanta::vgui::bridge::isHudEditorActive();
+    const bool editing = g_enabled && dt::vgui::bridge::isHudEditorActive();
 
     if (g_live.empty() && !editing)
         return;
@@ -490,7 +490,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     /* Only when the client itself is frosted. With Glass off it is a set of flat
        cards, and one acrylic surface floating among them does not read as the
        same product. */
-    if (!vanta::vgui::bridge::isGlassEnabled() || !g_glass.available())
+    if (!dt::vgui::bridge::isGlassEnabled() || !g_glass.available())
         return;
 
     /* @grouped by opacity, because one composite carries one.
@@ -619,13 +619,13 @@ void render_text(int display_w, int display_h)
         ImVec2(static_cast<float>(display_w), static_cast<float>(display_h)), false);
 
     float ar = 0.61f, ag = 0.29f, ab = 0.86f, aa = 1.f;
-    vanta::vgui::bridge::clientAccent(ar, ag, ab, aa);
+    dt::vgui::bridge::clientAccent(ar, ag, ab, aa);
 
-    const bool glass = vanta::vgui::bridge::isGlassEnabled() && g_glass.available();
+    const bool glass = dt::vgui::bridge::isGlassEnabled() && g_glass.available();
     const float dot_r = g_layout.dot_r;
     const float text_size = g_layout.text_size;
 
-    ImTextureID atlas = vanta::modules::arraylist::shared_pool().texture_id();
+    ImTextureID atlas = dt::modules::arraylist::shared_pool().texture_id();
 
     /* @newest LAST, which is why this counts down.
 
@@ -734,4 +734,4 @@ void reset()
     g_clear_requested = true;
 }
 
-} // namespace vanta::modules::notifier
+} // namespace dt::modules::notifier

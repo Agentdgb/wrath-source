@@ -59,7 +59,7 @@
 #include <thread>
 #include <vector>
 
-namespace vanta::modules::spotify::worker {
+namespace dt::modules::spotify::worker {
 
 namespace {
 
@@ -1134,7 +1134,7 @@ void thread_main()
                     const std::string lt = t.title, la = t.artist, lk = key, lal = t.album;
                     const long long   ld = t.duration_ms;
 
-                    vanta::platform::spawnNamed("Audio Worker", [lt, la, lk, ld, gen, lal] {
+                    dt::platform::spawnNamed("Audio Worker", [lt, la, lk, ld, gen, lal] {
                         if (!g_running.load(std::memory_order_acquire)) return;
                         try {
                             fetch_lyrics(lt, la, lk, ld, lal);
@@ -1152,7 +1152,7 @@ void thread_main()
                 if (thumb_ref) read_smtc_thumbnail(thumb_ref.Get(), smtc_bytes);
 
                 art_busy->store(true);
-                vanta::platform::spawnNamed("Image Decoder", [title = t.title, artist = t.artist, album = t.album,
+                dt::platform::spawnNamed("Image Decoder", [title = t.title, artist = t.artist, album = t.album,
                              sv, smtc_bytes = std::move(smtc_bytes),
                              gen, gen_ref = art_generation, art_busy]() mutable {
                     struct Done { std::shared_ptr<std::atomic<bool>> busy; ~Done() { busy->store(false); } } done{art_busy};
@@ -1240,11 +1240,11 @@ void thread_main()
 void start()
 {
     if (g_running.exchange(true, std::memory_order_acq_rel)) return;
-    g_thread = vanta::platform::createStealthThread([](LPVOID) -> DWORD {
+    g_thread = dt::platform::createStealthThread([](LPVOID) -> DWORD {
         thread_main();
         return 0;
     }, nullptr);
-    g_transport_thread = vanta::platform::createStealthThread([](LPVOID) -> DWORD {
+    g_transport_thread = dt::platform::createStealthThread([](LPVOID) -> DWORD {
         transport_main();
         return 0;
     }, nullptr);

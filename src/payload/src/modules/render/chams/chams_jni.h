@@ -12,7 +12,7 @@
 // All intermediary names below are the ones the shipping PlayerESP resolves at
 // runtime today (verified by reading src/modules/render/esp/esp.cpp, which
 // documents them as verified against Yarn 1.21.11). They are NOT in the
-// generated mapping tables — tools/genmaps/selectors/vanta.yml carries no
+// generated mapping tables — tools/genmaps/selectors/dt.yml carries no
 // renderer or model selectors — so this module resolves them by raw
 // intermediary name exactly as the ESP does.
 
@@ -23,7 +23,7 @@
 #include <jni.h>
 #include <vector>
 
-namespace vanta::modules::chams::jni {
+namespace dt::modules::chams::jni {
 
 // One player, sampled once per frame, in the form the pose and geometry code
 // wants. Nothing JNI-shaped survives past poll_players().
@@ -149,4 +149,4 @@ int poll_players(JNIEnv* env,
                  bool want_visibility, bool want_skin,
                  std::vector<player_sample>& out);
 
-} // namespace vanta::modules::chams::jni
+} // namespace dt::modules::chams::jni

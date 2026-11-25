@@ -63,7 +63,7 @@
 //     suspends every thread in the process, so toggling the module must never
 //     install or remove a hook.
 //   * A re-entrancy guard suppresses BOTH the draw path and the state trackers
-//     while Vanta's own context is current. gl_hook.cc switches the same thread
+//     while Dt's own context is current. gl_hook.cc switches the same thread
 //     between the game's context and ours, and ImGui's loader resolves to the
 //     identical nvoglv64 stubs — without this, the client's own UI corrupts the
 //     classifier state.
@@ -80,7 +80,7 @@
 
 #include <cstdint>
 
-namespace vanta::modules::chams::gl {
+namespace dt::modules::chams::gl {
 
 // Arms the hooks. Must be called from the render thread with the GAME's context
 // current — wglGetProcAddress needs a current context, which is why this cannot
@@ -99,7 +99,7 @@ bool installed();
 void set_active(bool on);
 bool active();
 
-// Raised by gl_hook.cc around the block where VANTA's overlay context is
+// Raised by gl_hook.cc around the block where DT's overlay context is
 // current. While raised, every detour passes straight through to the original
 // without classifying, tracking or replaying anything.
 //
@@ -379,4 +379,4 @@ bool rendering_player();
 // drives itemshader::on_frame_boundary. Nothing item-shader-specific is declared
 // here any more — see item_shader_gl.h.
 
-} // namespace vanta::modules::chams::gl
+} // namespace dt::modules::chams::gl

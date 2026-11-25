@@ -80,7 +80,7 @@ def convert(text):
     text=re.sub(r'catch \(Throwable \w+\)', 'catch (...)',text)
     return text
 
-header='#pragma once\n#include "../BloomCompat.h"\nnamespace vanta::modules::bloom {\n'
+header='#pragma once\n#include "../BloomCompat.h"\nnamespace dt::modules::bloom {\n'
 for name,namespace in NAMES.items():
     path=SAVED/(name+'.java')
     if not path.exists():shutil.copyfile(ORIGINAL/(name+'.java'),path)
@@ -106,7 +106,7 @@ for name,namespace in NAMES.items():
             if not raw:continue
             raw=raw.split('=',1)[0].strip()+';';fielddecl.append('extern '+raw)
     header+='namespace '+namespace+' {\n'+'\n'.join(fielddecl)+'\n'+declarations+'\n}\n'
-    text='// Ported from Bloom 2.2; numerical source preserved. Native C++ only.\n#include "NativeImages.h"\nnamespace vanta::modules::bloom::'+namespace+' {\n'+convert(s)
+    text='// Ported from Bloom 2.2; numerical source preserved. Native C++ only.\n#include "NativeImages.h"\nnamespace dt::modules::bloom::'+namespace+' {\n'+convert(s)
     if initial:text+='\nconst bool initialized=[](){'+convert(initial)+'return true;}();\n'
     replacements={'(var64 - var60) % var78':'std::fmod(var64-var60,var78)', 'var1 % 6283.185307179586':'std::fmod(var1,6283.185307179586)', '((double)var12[var14 + 2] * var2 + (double)var12[var14 + 3]) % (Math::PI * 2)':'std::fmod((double)var12[var14+2]*var2+(double)var12[var14+3],Math::PI*2)', 'var1 * 1.8E-4 % 1.0':'std::fmod(var1*1.8E-4,1.0)', 'var1[var2 + 19] % 2.0':'std::fmod(var1[var2+19],2.0)'}
     for a,b in replacements.items():text=text.replace(a,b)

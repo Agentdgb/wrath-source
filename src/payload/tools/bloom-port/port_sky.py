@@ -43,7 +43,7 @@ main=main.replace('var1.', 'var1->')
 out='''// Ported from ShellArrayCache: native vertex streams replace Java rendering objects.
 #include "SkyModel.h"
 #include "NativeImages.h"
-namespace vanta::modules::bloom::sky {
+namespace dt::modules::bloom::sky {
 Array<float> FR(24);Rotation rotation;
 bool cr=true,cs=true,ct=true,bc=true,av=true,ar=true,bk=true,am=false,ay=false,an=false;float ao=0,ca=1,cb=1,ax=1,aw=1;
 constexpr int cl=0,cm=1,cn=2,co=3,aq=4,ba=5,bb=6,bj=7;
@@ -78,7 +78,7 @@ start=profiles.index('private static final float[][] cm');end=profiles.index('pr
 data=profiles[start:end]
 # Stop before instance state; only the preset constants belong in this unit.
 data=data[:data.index('private final') ]if 'private final'in data else data
-out='#include "SkyModel.h"\nnamespace vanta::modules::bloom::sky {\n'+convert(data)
+out='#include "SkyModel.h"\nnamespace dt::modules::bloom::sky {\n'+convert(data)
 out+='''
 const bool normalized=[](){for(auto row:cm)for(int k=0;k<16;++k)if(k!=9)row[k]/=255.f;return true;}();
 void profile(Array<float>&out,int index,float density){index=std::clamp(index,0,12);for(int k=0;k<31;++k)out[k]=cm[index][k];float t=std::pow(std::clamp(density,0.f,1.f),.85f);out[17]=cn[index]+(co[index]-cn[index])*t;out[18]=cp[index]+(cq[index]-cp[index])*t;}

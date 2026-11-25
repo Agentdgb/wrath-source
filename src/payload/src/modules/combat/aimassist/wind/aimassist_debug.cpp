@@ -14,7 +14,7 @@
 #include <string>
 #include <windows.h>
 
-namespace vanta::modules::aimassist::debug {
+namespace dt::modules::aimassist::debug {
 
 namespace {
 
@@ -332,10 +332,10 @@ void sessionOpen(int mode, float hSpeed, float vSpeed, bool aimVertically,
 
     /* Beside the client's own log rather than on the Desktop. A module
        does not get to drop files where the user keeps their things. */
-    const std::wstring dir = vanta::platform::logDir();
-    g_wpath = dir + L"\\vanta_aim_debug.txt";
+    const std::wstring dir = dt::platform::logDir();
+    g_wpath = dir + L"\\dt_aim_debug.txt";
     g_path.assign(dir.begin(), dir.end());
-    g_path += "\\vanta_aim_debug.txt";
+    g_path += "\\dt_aim_debug.txt";
     _wfopen_s(&g_file, g_wpath.c_str(), L"w");
 
     g_tick = TickTracker{};

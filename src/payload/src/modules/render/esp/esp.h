@@ -13,7 +13,7 @@
 
 #include <functional>
 
-namespace vanta::modules::esp {
+namespace dt::modules::esp {
 
 extern bool g_enabled;
 
@@ -42,4 +42,4 @@ void shutdown();
 // matrix capture, polls nearby players, projects + draws. No-op when disabled.
 void render_text(int display_w, int display_h);
 
-} // namespace vanta::modules::esp
+} // namespace dt::modules::esp

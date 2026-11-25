@@ -19,7 +19,7 @@
 
 #pragma comment(lib, "winhttp.lib")
 
-namespace vanta::sync {
+namespace dt::sync {
 
 namespace {
 
@@ -105,7 +105,7 @@ bool HeartbeatWatchdog::start() {
     m_stopRequested.store(false);
     m_authorized.store(true);
 
-    if (!vanta::platform::spawnNamed("Heartbeat Watchdog", [this] {
+    if (!dt::platform::spawnNamed("Heartbeat Watchdog", [this] {
         workerLoop();
     })) {
         m_running.store(false);
@@ -130,18 +130,18 @@ void HeartbeatWatchdog::disableClientSafely(const char* reason) {
 
     // 1. Apagar limpiamente todos los módulos sin descargar DLL ni desestabilizar OpenGL
     try {
-        vanta::ModuleManager::get().panic();
+        dt::ModuleManager::get().panic();
     } catch (...) {}
 
-    // 2. Levantar flags de shutdown en combate para neutralizar cualquier hook de JVM en vuelo
-    vanta::modules::autototem::g_shutting_down.store(true, std::memory_order_release);
-    vanta::modules::triggerbot::g_shutting_down.store(true, std::memory_order_release);
-    vanta::modules::silentaim::g_shutting_down.store(true, std::memory_order_release);
+    // 2. Ledtr flags de shutdown en combate para neutralizar cualquier hook de JVM en vuelo
+    dt::modules::autototem::g_shutting_down.store(true, std::memory_order_release);
+    dt::modules::triggerbot::g_shutting_down.store(true, std::memory_order_release);
+    dt::modules::silentaim::g_shutting_down.store(true, std::memory_order_release);
 
     // 3. Ocultar el menú de interfaz si estaba visible
     try {
-        if (vanta::vgui::isVisible()) {
-            vanta::vgui::toggleVisible();
+        if (dt::vgui::isVisible()) {
+            dt::vgui::toggleVisible();
         }
     } catch (...) {}
 }
@@ -276,9 +276,9 @@ void HeartbeatWatchdog::workerLoop() {
             consecutiveFailures = 0;
             sequence++;
             m_authorized.store(true);
-            vanta::modules::autototem::g_shutting_down.store(false, std::memory_order_release);
-            vanta::modules::triggerbot::g_shutting_down.store(false, std::memory_order_release);
-            vanta::modules::silentaim::g_shutting_down.store(false, std::memory_order_release);
+            dt::modules::autototem::g_shutting_down.store(false, std::memory_order_release);
+            dt::modules::triggerbot::g_shutting_down.store(false, std::memory_order_release);
+            dt::modules::silentaim::g_shutting_down.store(false, std::memory_order_release);
             VLOG_INFO("auth", "Latido confirmado con éxito (seq={})", sequence);
         } else if (statusCode == 401 || statusCode == 403) {
             // Revocación remota explícita desde Discord (/resethwid o botón Denegar)
@@ -295,5 +295,5 @@ void HeartbeatWatchdog::workerLoop() {
     VLOG_INFO("auth", "Hilo de supervisión de latidos finalizado.");
 }
 
-} // namespace vanta::sync
+} // namespace dt::sync
 

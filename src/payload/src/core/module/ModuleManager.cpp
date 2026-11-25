@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 namespace {
 
@@ -166,4 +166,4 @@ void ModuleManager::panic() {
     VLOG_WARN("mods", "PANIC — disabled {} modules", off);
 }
 
-} // namespace vanta
+} // namespace dt

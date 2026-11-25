@@ -6,7 +6,7 @@
 
 #include "imgui.h"
 
-namespace vanta::modules::hitfx {
+namespace dt::modules::hitfx {
 
 class hit_font {
 public:
@@ -34,4 +34,4 @@ private:
 hit_font& comic_pool();   // badaboom
 hit_font& anime_pool();   // comfortaa
 
-} // namespace vanta::modules::hitfx
+} // namespace dt::modules::hitfx

@@ -18,7 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace vanta::modules::chams::gl {
+namespace dt::modules::chams::gl {
 
 namespace {
 
@@ -308,7 +308,7 @@ std::atomic<unsigned long long> c_replay_fragdepth{ 0 };
 
 // Programs that had an armour texture bound AND were NOT in the entity set.
 // Each one gets ONE dump of its full vertex + fragment source, so the log
-// carries the actual GLSL responsible for the armour path Vanta cannot see.
+// carries the actual GLSL responsible for the armour path Dt cannot see.
 std::atomic<unsigned char> g_prog_source_dumped[kMaxProgId] = {};
 std::atomic<int> g_source_dumps_left{ 16 };
 
@@ -646,7 +646,7 @@ void observe_and_maybe_replay(const char* entry, int entry_idx, GLsizei count,
     // (is_entity / has_normal from our per-program tables). The item shader decides
     // whether the draw is the held item — and, via its HUD latch, keeps the hotbar
     // and inventory item models (3D and in the same window) from being captured.
-    if (::vanta::modules::itemshader::rendering_firstperson()
+    if (::dt::modules::itemshader::rendering_firstperson()
         && count > 0
         && entry_idx != kEMultiDrawElementsBaseVertex) {
         const GLuint fp_prog = g_current_program.load(std::memory_order_relaxed);
@@ -655,7 +655,7 @@ void observe_and_maybe_replay(const char* entry, int entry_idx, GLsizei count,
         const bool has_normal = fp_prog && fp_prog < kMaxProgId
             && g_prog_has_normal[fp_prog].load(std::memory_order_relaxed);
         const GLuint fp_tex0 = g_bound_tex[0].load(std::memory_order_relaxed);
-        if (::vanta::modules::itemshader::consider_fp_draw(
+        if (::dt::modules::itemshader::consider_fp_draw(
                 fp_prog, (int)count, is_entity, has_normal, fp_tex0))
             t_item_outline = true;
     }
@@ -1251,7 +1251,7 @@ void observe_and_maybe_replay(const char* entry, int entry_idx, GLsizei count,
         c_suppressed.fetch_add(1, std::memory_order_relaxed);        \
     }                                                                \
     if (t_item_outline) { t_item_outline = false;                     \
-        ::vanta::modules::itemshader::run_capture([&]{ call; }); }    \
+        ::dt::modules::itemshader::run_capture([&]{ call; }); }    \
     call;
 
 void APIENTRY hk_DrawElements(GLenum mode, GLsizei count, GLenum type, const void* idx)
@@ -1630,7 +1630,7 @@ bool hook_one(const hook_spec& s)
 {
     void* target = s.gl11 ? resolve_gl11(s.name) : resolve_gl(s.name);
     if (!target) {
-        ::vanta::desklog::jni_lookup(dbg::ch(), "glproc", s.gl11 ? "opengl32" : "icd",
+        ::dt::desklog::jni_lookup(dbg::ch(), "glproc", s.gl11 ? "opengl32" : "icd",
                                      s.name, "<unresolved>", false);
         return !s.required;
     }
@@ -1648,7 +1648,7 @@ bool hook_one(const hook_spec& s)
 
     CHAMS_LOG("gl: %-36s target=%p owner=%s  %s",
               s.name, target, ownerName, ok ? "HOOKED" : "FAILED");
-    ::vanta::desklog::jni_lookup(dbg::ch(), "glproc", s.gl11 ? "opengl32" : "icd",
+    ::dt::desklog::jni_lookup(dbg::ch(), "glproc", s.gl11 ? "opengl32" : "icd",
                                  s.name, ownerName, ok);
     return ok || !s.required;
 }
@@ -1674,7 +1674,7 @@ bool install()
         return false;
     }
 
-    ::vanta::desklog::section(dbg::ch(), "GL hook installation");
+    ::dt::desklog::section(dbg::ch(), "GL hook installation");
     CHAMS_LOG("resolution order: wglGetProcAddress first (the ICD address LWJGL "
               "caches), GetProcAddress(opengl32) only as a fallback.");
 
@@ -2135,7 +2135,7 @@ void frame_boundary()
     // The first-person item shader owns its per-frame work (heartbeat, window
     // reset, program build, blur + composite). Runs on the game context here,
     // which is where GL is safe to issue and errors are drained.
-    ::vanta::modules::itemshader::on_frame_boundary();
+    ::dt::modules::itemshader::on_frame_boundary();
 
     // ONLY when the flat-colour path is actually selected.
     //
@@ -2330,4 +2330,4 @@ void log_frame_summary()
              c_armour_any_draw.load(), c_armour_other_prog.load(), arm_progs);
 }
 
-} // namespace vanta::modules::chams::gl
+} // namespace dt::modules::chams::gl

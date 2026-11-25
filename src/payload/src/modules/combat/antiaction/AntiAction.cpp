@@ -66,7 +66,7 @@
 #include <string>
 #include <string_view>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -283,7 +283,7 @@ void format_pos(JNIEnv* env, jobject pos, char* out, size_t n)
 
 jclass global_class(JNIEnv* env, const char* name, bool system = false)
 {
-    jclass local = system ? env->FindClass(name) : vanta::jvm::findClassAnyLoader(env, name);
+    jclass local = system ? env->FindClass(name) : dt::jvm::findClassAnyLoader(env, name);
     if (clear_exc(env) || !local) return nullptr;
     jclass g = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -513,7 +513,7 @@ void call_original_seh(JNIEnv* env, jobject thiz)
 
 void JNICALL hkDoItemUse(JNIEnv* env, jobject thiz)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     if (!ORIG_doItemUse || !g_c.mc_class) return;
 
     const bool pass_through = g_shutting_down.load(std::memory_order_acquire)
@@ -593,7 +593,7 @@ void install_hook(JNIEnv* env)
         return;
     }
 
-    const jnihook_result_t init = JNIHook_Init(vanta::jvm::ctx().vm.load());
+    const jnihook_result_t init = JNIHook_Init(dt::jvm::ctx().vm.load());
     if (init != JNIHOOK_OK && init != JNIHOOK_ERR_ADD_JVMTI_CAPS) {
         g_hook_state.store(static_cast<int>(HookState::Failed), std::memory_order_release);
         VLOG_WARN("antiaction", "install: JNIHook_Init failed ({}) -- window fallback only",
@@ -729,8 +729,8 @@ public:
         // where the detour leaves the class -- it must not outlive the DLL.
         g_shutting_down.store(true, std::memory_order_release);
         g_enabled.store(false, std::memory_order_release);
-        ::vanta::vgui::bridge::setInputFilterFor(::vanta::vgui::bridge::FILTER_OWNER_ANTIACTION, 0);
-        if (vanta::jvm::thisThreadEnv()) detach_hook();
+        ::dt::vgui::bridge::setInputFilterFor(::dt::vgui::bridge::FILTER_OWNER_ANTIACTION, 0);
+        if (dt::jvm::thisThreadEnv()) detach_hook();
     }
 
     void onInit() override
@@ -759,7 +759,7 @@ protected:
     {
         g_enabled.store(false, std::memory_order_release);
         filter_raised_ = false;
-        ::vanta::vgui::bridge::setInputFilterFor(::vanta::vgui::bridge::FILTER_OWNER_ANTIACTION, 0);
+        ::dt::vgui::bridge::setInputFilterFor(::dt::vgui::bridge::FILTER_OWNER_ANTIACTION, 0);
         // The detour stays attached and passes through while disabled; a
         // re-enable must not redefine class_310 again.
     }
@@ -781,7 +781,7 @@ private:
             g_rule_sword_shield.store(swordShield_.value(), std::memory_order_relaxed);
         }
 
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
@@ -807,7 +807,7 @@ private:
         if (hook_live()) {
             if (filter_raised_) {
                 filter_raised_ = false;
-                ::vanta::vgui::bridge::setInputFilterFor(::vanta::vgui::bridge::FILTER_OWNER_ANTIACTION, 0);
+                ::dt::vgui::bridge::setInputFilterFor(::dt::vgui::bridge::FILTER_OWNER_ANTIACTION, 0);
             }
             return;
         }
@@ -826,7 +826,7 @@ private:
         }
         if (want != filter_raised_) {
             filter_raised_ = want;
-            ::vanta::vgui::bridge::setInputFilterFor(::vanta::vgui::bridge::FILTER_OWNER_ANTIACTION,
+            ::dt::vgui::bridge::setInputFilterFor(::dt::vgui::bridge::FILTER_OWNER_ANTIACTION,
                                                      want ? 1 : 0);
         }
     }
@@ -838,6 +838,6 @@ private:
     bool filter_raised_ = false;
 };
 
-VANTA_REGISTER_MODULE(AntiAction);
+DT_REGISTER_MODULE(AntiAction);
 
-} // namespace vanta::modules
+} // namespace dt::modules

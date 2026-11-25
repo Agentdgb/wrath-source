@@ -10,7 +10,7 @@
 
 #include "modules/render/arraylist/al_gl.h"
 
-namespace vanta::modules::outline::gl {
+namespace dt::modules::outline::gl {
 
 struct params {
     float thickness_px = 2.f;    // width of the solid line, framebuffer pixels
@@ -54,21 +54,21 @@ private:
     bool ensure_mesh();
     void upload(const float* xy, int vertex_count);
 
-    ::vanta::al::al_shader fill_{};      // pass 1: flat white triangles
-    ::vanta::al::al_shader dist_h_{};    // pass 2a: nearest lit texel on the row
-    ::vanta::al::al_shader dist_v_{};    // pass 2b: combine rows -> true distance
-    ::vanta::al::al_shader draw_{};      // pass 3: threshold into line + halo
+    ::dt::al::al_shader fill_{};      // pass 1: flat white triangles
+    ::dt::al::al_shader dist_h_{};    // pass 2a: nearest lit texel on the row
+    ::dt::al::al_shader dist_v_{};    // pass 2b: combine rows -> true distance
+    ::dt::al::al_shader draw_{};      // pass 3: threshold into line + halo
 
     bool shaders_tried_ = false;
     bool shaders_ok_    = false;
 
-    ::vanta::al::al_quad quad_{};        // the region quad the last three passes use
-    ::vanta::al::al_fbo  mask_{};
-    ::vanta::al::al_fbo  tmp_{};         // ping for the distance transform
-    ::vanta::al::al_fbo  dist_{};        // pong, and what pass 3 reads
+    ::dt::al::al_quad quad_{};        // the region quad the last three passes use
+    ::dt::al::al_fbo  mask_{};
+    ::dt::al::al_fbo  tmp_{};         // ping for the distance transform
+    ::dt::al::al_fbo  dist_{};        // pong, and what pass 3 reads
 
     unsigned int vao_ = 0;               // the triangle soup for pass 1
     unsigned int vbo_ = 0;
 };
 
-} // namespace vanta::modules::outline::gl
+} // namespace dt::modules::outline::gl

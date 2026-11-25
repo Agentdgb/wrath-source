@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <memory>
 
-namespace vanta {
+namespace dt {
 
 // Intrusive multi-producer / single-consumer stack. Producers push; the single
 // consumer drains all at once (LIFO order — safe when the queue holds unordered
@@ -21,4 +21,4 @@ public:
     bool  empty() const noexcept { return top_.load(std::memory_order_relaxed) == nullptr; }
 };
 
-} // namespace vanta
+} // namespace dt

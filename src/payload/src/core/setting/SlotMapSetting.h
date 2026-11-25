@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 // One assignment per hotbar slot — the storage behind the nine-square strip the
 // vgui draws at the bottom of a drawer.
@@ -62,4 +62,4 @@ private:
     std::function<std::uint32_t()>  allowed_{};
 };
 
-} // namespace vanta
+} // namespace dt

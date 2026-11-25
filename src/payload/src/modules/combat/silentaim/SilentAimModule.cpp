@@ -14,7 +14,7 @@
 #include "silentaim.h"
 #include "silentaim_tick.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class SilentAim : public Module {
 public:
@@ -31,19 +31,19 @@ public:
     void onInit() override {
         listen<events::GameLoopEvent>([this](events::GameLoopEvent& e){
             mirror();
-            ::vanta::modules::silentaim::ensure_installed();
-            ::vanta::modules::silentaim_tick::pump(e.deltaMs);
+            ::dt::modules::silentaim::ensure_installed();
+            ::dt::modules::silentaim_tick::pump(e.deltaMs);
         });
     }
 
     void onEnable() override {
-        ::vanta::modules::silentaim::settings::enabled.store(true, std::memory_order_relaxed);
+        ::dt::modules::silentaim::settings::enabled.store(true, std::memory_order_relaxed);
         mirror();
 
         // The camera is never touched, so a missing hook cannot be felt — it
         // just means the rotation stops reaching the server. Say so, or the
         // module would look like it works while landing nothing.
-        if (!::vanta::modules::silentaim::silent_rotation_available()) {
+        if (!::dt::modules::silentaim::silent_rotation_available()) {
             VLOG_WARN("silentaim",
                       "the sendMovementPackets hook is not verified on this host — the "
                       "rotation will NOT reach the server. Hit redirection and the F5 "
@@ -52,7 +52,7 @@ public:
     }
 
     void onDisable() override {
-        ::vanta::modules::silentaim::settings::enabled.store(false, std::memory_order_relaxed);
+        ::dt::modules::silentaim::settings::enabled.store(false, std::memory_order_relaxed);
         // Do NOT reset() here: this runs on the render thread, and the reset
         // path touches JNI plus the triggerbot's target ref. The pump sees
         // enabled=false on its next step and tears down on the game thread.
@@ -61,7 +61,7 @@ public:
 private:
     // Render thread writes, game thread reads — hence the atomic mirror.
     void mirror() {
-        using S = ::vanta::modules::silentaim::settings;
+        using S = ::dt::modules::silentaim::settings;
 
         S::targets.store(targets_.index(),                std::memory_order_relaxed);
         S::max_angle.store(fov_.value(),                  std::memory_order_relaxed);
@@ -70,7 +70,7 @@ private:
         S::extra_reach_x10.store(static_cast<int>(extraReach_.value() * 10.f),
                                  std::memory_order_relaxed);
 
-        S::overlay_open.store(::vanta::vgui::bridge::isOverlayVisible(),
+        S::overlay_open.store(::dt::vgui::bridge::isOverlayVisible(),
                               std::memory_order_relaxed);
     }
 
@@ -98,6 +98,6 @@ private:
     FloatSetting extraReach_{this, XOR_STR("Extra Reach"), 0.0f, 0.0f, 3.0f};
 };
 
-VANTA_REGISTER_MODULE(SilentAim);
+DT_REGISTER_MODULE(SilentAim);
 
-} // namespace vanta::modules
+} // namespace dt::modules

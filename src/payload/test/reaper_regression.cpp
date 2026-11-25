@@ -2,7 +2,7 @@
 #include "platform/ModuleRelease.h"
 #include <iostream>
 
-namespace vanta::jvm { void detachThisThreadIfAttached() {} }
+namespace dt::jvm { void detachThisThreadIfAttached() {} }
 
 namespace {
 HANDLE completed = nullptr;
@@ -28,16 +28,16 @@ HANDLE WINAPI customCreation(LPSECURITY_ATTRIBUTES attributes, SIZE_T stack,
 }
 
 int main() {
-    using vanta::platform::spawnReaper;
+    using dt::platform::spawnReaper;
     DWORD releaseError = ERROR_SUCCESS;
-    if (vanta::platform::isRegisteredDll(nullptr, releaseError)
+    if (dt::platform::isRegisteredDll(nullptr, releaseError)
         || releaseError != ERROR_INVALID_HANDLE) return 9;
-    if (vanta::platform::isRegisteredDll(GetModuleHandleW(nullptr), releaseError)) return 10;
-    if (!vanta::platform::isRegisteredDll(GetModuleHandleW(L"kernel32.dll"), releaseError)
+    if (dt::platform::isRegisteredDll(GetModuleHandleW(nullptr), releaseError)) return 10;
+    if (!dt::platform::isRegisteredDll(GetModuleHandleW(L"kernel32.dll"), releaseError)
         || releaseError != ERROR_SUCCESS) return 11;
     void* allocation = VirtualAlloc(nullptr, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!allocation) return 12;
-    const bool acceptedPrivateMemory = vanta::platform::isRegisteredDll(
+    const bool acceptedPrivateMemory = dt::platform::isRegisteredDll(
         reinterpret_cast<HMODULE>(allocation), releaseError);
     VirtualFree(allocation, 0, MEM_RELEASE);
     if (acceptedPrivateMemory || releaseError == ERROR_SUCCESS) return 13;

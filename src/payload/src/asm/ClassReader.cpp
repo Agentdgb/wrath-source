@@ -5,7 +5,7 @@
 
 #include <cstring>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 namespace {
 
@@ -158,4 +158,4 @@ bool ClassReader::parse(const std::uint8_t* bytes, std::size_t len, ClassView& o
     return c.ok;
 }
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

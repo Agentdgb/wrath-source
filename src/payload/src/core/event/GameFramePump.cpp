@@ -9,7 +9,7 @@
 
 #include <windows.h>
 
-namespace vanta::core {
+namespace dt::core {
 
 namespace {
 
@@ -46,9 +46,9 @@ DWORD publishSEH(float deltaMs) {
 
 void pumpGameFrame() {
     // No VM, nothing for a module to talk to.
-    if (!vanta::jvm::ctx().vm.load())
+    if (!dt::jvm::ctx().vm.load())
         return;
-    vanta::hook::packets::install();
+    dt::hook::packets::install();
 
     if (g_qpc_freq.QuadPart == 0)
         QueryPerformanceFrequency(&g_qpc_freq);
@@ -91,4 +91,4 @@ void pumpGameFrame() {
     }
 }
 
-} // namespace vanta::core
+} // namespace dt::core

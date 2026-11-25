@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::sector {
+namespace dt::modules::bloom::sector {
 
 int W = 512;
 int H = 256;
@@ -177,4 +177,4 @@ Array<int> a() {
 
     return var0;
 }
-} // namespace vanta::modules::bloom::sector
+} // namespace dt::modules::bloom::sector

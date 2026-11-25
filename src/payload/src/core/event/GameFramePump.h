@@ -1,6 +1,6 @@
 #pragma once
 
-namespace vanta::core {
+namespace dt::core {
 
 // Publishes GameLoopEvent once per presented frame.
 //
@@ -16,4 +16,4 @@ namespace vanta::core {
 // game down.
 void pumpGameFrame();
 
-} // namespace vanta::core
+} // namespace dt::core

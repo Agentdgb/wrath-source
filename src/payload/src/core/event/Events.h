@@ -5,10 +5,10 @@
 #include <jni.h>
 #include <string>
 
-namespace vanta::events {
+namespace dt::events {
 
-using vanta::Cancellable;
-using vanta::Event;
+using dt::Cancellable;
+using dt::Event;
 
 // ── Tick ──────────────────────────────────────────────────────────────────────
 struct PreTickEvent   : Event {};
@@ -72,4 +72,4 @@ struct ChatReceiveEvent : Event, Cancellable { JNIEnv* env; jobject component; s
 // Fired when a module is enabled/disabled — arraylist + notifications rely on it.
 struct ModuleToggleEvent : Event { const char* moduleName; bool nowEnabled; };
 
-} // namespace vanta::events
+} // namespace dt::events

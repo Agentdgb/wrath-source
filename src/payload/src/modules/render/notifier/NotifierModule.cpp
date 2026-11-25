@@ -7,7 +7,7 @@
 
 #include <string>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Notifier : public Module {
 public:
@@ -87,6 +87,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::Notifier)
+DT_REGISTER_MODULE(dt::modules::Notifier)

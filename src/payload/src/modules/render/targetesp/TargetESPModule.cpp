@@ -4,7 +4,7 @@
 #include "modules/visuals/ports/VisualPorts.h"
 #include "target_attack.h"
 #include "targetesp.h"
-namespace vanta::modules::targetesp {
+namespace dt::modules::targetesp {
 class TargetESP final : public Module {
     EnumSetting mode_{this, "Mode", {"Orbits", "Star", "Wings", "Sparkles", "Ring", "Sweep", "Bolts"}, 4};
     EnumSetting on_{this, "On", {"Target", "Self", "Both"}, 0};
@@ -36,5 +36,5 @@ class TargetESP final : public Module {
     }
 };
 void render(int, int) {} // Submitted by the native world pass before the HUD.
-} // namespace vanta::modules::targetesp
-VANTA_REGISTER_MODULE(vanta::modules::targetesp::TargetESP)
+} // namespace dt::modules::targetesp
+DT_REGISTER_MODULE(dt::modules::targetesp::TargetESP)

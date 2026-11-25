@@ -6,8 +6,8 @@
 #include <stdexcept>
 #include <winioctl.h>
 
-namespace vanta::jvm { void detachThisThreadIfAttached() {} }
-namespace vanta::platform { HMODULE currentModule() { return GetModuleHandleW(nullptr); } }
+namespace dt::jvm { void detachThisThreadIfAttached() {} }
+namespace dt::platform { HMODULE currentModule() { return GetModuleHandleW(nullptr); } }
 
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
@@ -66,14 +66,14 @@ int main() {
             {"#client", {{"scale", 1.2}}}, {"payload", "original"}};
         write(legacy / "previous.json", previous.dump());
         write(legacy.parent_path() / "last_profile.txt", "previous");
-        const auto root = vanta::storage::prepareProfileRoot(appData);
-        require(root == vanta::storage::profileRoot(appData), "storage is not a dedicated directory");
+        const auto root = dt::storage::prepareProfileRoot(appData);
+        require(root == dt::storage::profileRoot(appData), "storage is not a dedicated directory");
         require(std::filesystem::exists(root / "profiles/previous.json"), "legacy profile was not copied");
         require(std::filesystem::exists(legacy / "previous.json"), "migration deleted original profile");
-        write(root / "profiles/previous.json", vanta::storage::encodeProfileData(nlohmann::json{{"#owner", vanta::storage::profileOwnerToken()},
+        write(root / "profiles/previous.json", dt::storage::encodeProfileData(nlohmann::json{{"#owner", dt::storage::profileOwnerToken()},
             {"payload", "newer"}}.dump()));
-        vanta::storage::prepareProfileRoot(appData);
-        const auto updated = vanta::storage::readProfile(root / "profiles/previous.json");
+        dt::storage::prepareProfileRoot(appData);
+        const auto updated = dt::storage::readProfile(root / "profiles/previous.json");
         require(updated["payload"] == "newer", "migration overwrote a newer profile");
         write(root / "notes.txt", "unrelated root file");
         write(root / "profiles/unrelated.json", "{\"personal\": true}");
@@ -85,20 +85,20 @@ int main() {
         write(foreign / "keep.txt", "foreign data");
         for (const auto& unsafe : {std::filesystem::path{}, std::filesystem::path{"."},
                 fixture.root_path(), foreign, appData, root / ".."}) {
-            const auto result = vanta::storage::purgeProfiles(unsafe, appData);
+            const auto result = dt::storage::purgeProfiles(unsafe, appData);
             require(!result.valid && result.removed == 0, "unsafe path accepted");
         }
-        require(vanta::storage::profileRoot({}).empty()
-            && vanta::storage::profileRoot(".").empty(), "failed AppData resolution got a relative fallback");
+        require(dt::storage::profileRoot({}).empty()
+            && dt::storage::profileRoot(".").empty(), "failed AppData resolution got a relative fallback");
         require(std::filesystem::exists(foreign / "keep.txt"), "foreign data removed");
         HANDLE held = CreateFileW((root / "profiles/previous.json").c_str(), GENERIC_READ,
             FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
         require(held != INVALID_HANDLE_VALUE, "could not lock fixture profile");
-        const auto blocked = vanta::storage::purgeProfiles(root, appData);
+        const auto blocked = dt::storage::purgeProfiles(root, appData);
         CloseHandle(held);
         require(blocked.error && std::filesystem::exists(root / "profiles/previous.json"),
             "locked profile deletion failure not reported");
-        const auto purged = vanta::storage::purgeProfiles(root, appData);
+        const auto purged = dt::storage::purgeProfiles(root, appData);
         require(purged.valid && !purged.error && purged.removed == 1, "owned profile purge failed");
         require(!std::filesystem::exists(root / "profiles/previous.json"), "owned profile remains");
         require(std::filesystem::exists(root / "notes.txt")
@@ -107,7 +107,7 @@ int main() {
             && std::filesystem::exists(root / "profiles/subdirectory/keep.txt"), "unrelated data removed");
         require(!std::filesystem::exists(root / "last_profile.txt"), "active marker not retired with its profile");
         require(std::filesystem::exists(legacy / "previous.json"), "purge touched legacy data");
-        vanta::storage::prepareProfileRoot(appData);
+        dt::storage::prepareProfileRoot(appData);
         require(!std::filesystem::exists(root / "profiles/previous.json"), "migration resurrected a purged profile");
         const auto link = root / "profiles-link";
         if (CreateSymbolicLinkW(link.c_str(), foreign.c_str(),
@@ -116,8 +116,8 @@ int main() {
             const auto saved = root / "saved-profiles";
             std::filesystem::rename(root / "profiles", saved);
             std::filesystem::rename(link, root / "profiles");
-            write(foreign / "owned.json", vanta::storage::encodeProfileData(nlohmann::json{{"#owner", vanta::storage::profileOwnerToken()}}.dump()));
-            const auto redirected = vanta::storage::purgeProfiles(root, appData);
+            write(foreign / "owned.json", dt::storage::encodeProfileData(nlohmann::json{{"#owner", dt::storage::profileOwnerToken()}}.dump()));
+            const auto redirected = dt::storage::purgeProfiles(root, appData);
             require(!redirected.valid && std::filesystem::exists(foreign / "owned.json"),
                 "purge followed a directory symlink");
             std::filesystem::remove(root / "profiles");
@@ -133,13 +133,13 @@ int main() {
             require(attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT),
                 "existing Windows junction unavailable");
             // No file enumeration/deletion: rejection must happen at validation.
-            const auto redirected = vanta::storage::purgeProfiles(alias / vanta::storage::profileRoot(appData).filename(), alias);
+            const auto redirected = dt::storage::purgeProfiles(alias / dt::storage::profileRoot(appData).filename(), alias);
             require(!redirected.valid && redirected.removed == 0, "existing junction ancestor accepted");
             std::cout << "Existing Windows junction rejected without touching its target\n";
         }
-        require(!vanta::platform::spawnReaper(&noOperation, &failThread), "failed thread reported as created");
+        require(!dt::platform::spawnReaper(&noOperation, &failThread), "failed thread reported as created");
         require(GetLastError() == ERROR_NOT_ENOUGH_MEMORY, "thread creation error lost");
-        require(!vanta::platform::spawnReaper(nullptr), "null reaper accepted");
+        require(!dt::platform::spawnReaper(nullptr), "null reaper accepted");
         std::cout << "Storage safety: unsafe paths rejected, legacy originals retained, unrelated files preserved, errors reported\n";
         return 0;
     } catch (const std::exception& error) {

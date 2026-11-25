@@ -28,7 +28,7 @@
 #include "modules/render/hitfx/hitfx_render_context.h"
 #include "modules/render/outline/outline_view.h"
 
-namespace vanta::modules::overlay_view {
+namespace dt::modules::overlay_view {
 
 // C = A * B, both column-major, index [col*4 + row].
 inline void mat_mul(const float* A, const float* B, float* C)
@@ -69,4 +69,4 @@ inline bool apply_view_bob(JNIEnv* env, hitfx::render_frame& f)
     return true;
 }
 
-} // namespace vanta::modules::overlay_view
+} // namespace dt::modules::overlay_view
