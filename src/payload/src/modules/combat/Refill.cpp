@@ -46,7 +46,7 @@
 #include <set>
 #include <string>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -128,7 +128,7 @@ int rand_int(int lo, int hi) { return std::uniform_int_distribution<int>(lo, hi)
 
 jclass find_class(JNIEnv* env, const char* sig)
 {
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return nullptr; }
     jclass g = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -472,14 +472,14 @@ private:
     void hold_filter()
     {
         if (filter_held_) return;
-        ::vanta::vgui::bridge::setInputFilterFor(::vanta::vgui::bridge::FILTER_OWNER_REFILL, 2);
+        ::dt::vgui::bridge::setInputFilterFor(::dt::vgui::bridge::FILTER_OWNER_REFILL, 2);
         filter_held_ = true;
     }
 
     void release_filter()
     {
         if (!filter_held_) return;
-        ::vanta::vgui::bridge::setInputFilterFor(::vanta::vgui::bridge::FILTER_OWNER_REFILL, 0);
+        ::dt::vgui::bridge::setInputFilterFor(::dt::vgui::bridge::FILTER_OWNER_REFILL, 0);
         filter_held_ = false;
     }
 
@@ -547,14 +547,14 @@ private:
         accum -= TICK_MS;
         if (accum > TICK_MS) accum = TICK_MS;
 
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
         build_cache(env);
         if (!g_c.ready) return;
 
-        if (!isEnabled() || ::vanta::vgui::bridge::isOverlayVisible()) {
+        if (!isEnabled() || ::dt::vgui::bridge::isOverlayVisible()) {
             reset_session();
             return;
         }
@@ -671,9 +671,9 @@ private:
     void step_priming(JNIEnv* env, jobject mc, jobject player)
     {
         hold_filter();
-        ::vanta::shared::suppress_movement(env, mc);
+        ::dt::shared::suppress_movement(env, mc);
 
-        if (::vanta::shared::movement_is_idle(env, mc)) ++idle_ticks_;
+        if (::dt::shared::movement_is_idle(env, mc)) ++idle_ticks_;
         else                                            idle_ticks_ = 0;
 
         if (idle_ticks_ < REQUIRED_IDLE_TICKS) {
@@ -723,9 +723,9 @@ private:
         // Screen is up. Keep the keys pinned for as long as it is ours, so the
         // player cannot walk out from under the container action we are about
         // to take.
-        if (we_opened_) { hold_filter(); ::vanta::shared::suppress_movement(env, mc); }
+        if (we_opened_) { hold_filter(); ::dt::shared::suppress_movement(env, mc); }
 
-        if (::vanta::shared::movement_is_idle(env, mc)) ++idle_ticks_;
+        if (::dt::shared::movement_is_idle(env, mc)) ++idle_ticks_;
         else                                            idle_ticks_ = 0;
 
         if (!work) {
@@ -776,7 +776,7 @@ private:
         // inventory while moving", same three booleans, same knownInput. Grim
         // deliberately does NOT cancel that packet, so an ungated close is a
         // pure flag with nothing to show for it.
-        if (!::vanta::shared::movement_is_idle(env, mc) && ++hold_ticks_ < MAX_HOLD_TICKS) {
+        if (!::dt::shared::movement_is_idle(env, mc) && ++hold_ticks_ < MAX_HOLD_TICKS) {
             clock_ = 1;
             return;
         }
@@ -823,6 +823,6 @@ private:
     }
 };
 
-VANTA_REGISTER_MODULE(Refill);
+DT_REGISTER_MODULE(Refill);
 
-} // namespace vanta::modules
+} // namespace dt::modules

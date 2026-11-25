@@ -5,7 +5,7 @@
 
 #include <string>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -13,14 +13,14 @@ bool isStackEligible(JNIEnv* env, jobject stack, bool blocksOnly) {
     if (!stack) return false;
 
     // Check isEmpty
-    if (vanta::jvm::callBoolCanon(env, stack, "ItemStack", "isEmpty")) {
+    if (dt::jvm::callBoolCanon(env, stack, "ItemStack", "isEmpty")) {
         return false;
     }
 
-    auto item = vanta::jvm::callObjectCanon(env, stack, "ItemStack", "getItem");
+    auto item = dt::jvm::callObjectCanon(env, stack, "ItemStack", "getItem");
     if (!item) return false;
 
-    jmethodID getKeyMid = vanta::jvm::methodCanon(env, "Item", "getTranslationKey");
+    jmethodID getKeyMid = dt::jvm::methodCanon(env, "Item", "getTranslationKey");
     if (!getKeyMid) return false;
 
     jstring jKey = static_cast<jstring>(env->CallObjectMethod(item.get(), getKeyMid));
@@ -56,12 +56,12 @@ bool canFastPlace(JNIEnv* env, jobject player, bool blocksOnly) {
     if (!player) return false;
 
     // Never reset cooldown when actively consuming/using an item (eating, drinking, drawing bow, shielding)
-    if (vanta::jvm::callBoolCanon(env, player, "LivingEntity", "isUsingItem")) {
+    if (dt::jvm::callBoolCanon(env, player, "LivingEntity", "isUsingItem")) {
         return false;
     }
 
     // Check main hand
-    auto mainStack = vanta::jvm::callObjectCanon(env, player, "LivingEntity", "getMainHandStack");
+    auto mainStack = dt::jvm::callObjectCanon(env, player, "LivingEntity", "getMainHandStack");
     if (isStackEligible(env, mainStack.get(), blocksOnly)) {
         return true;
     }
@@ -102,19 +102,19 @@ public:
     void onInit() override {
         listen<events::GameLoopEvent>([this](events::GameLoopEvent&){
             if (!isEnabled()) return;
-            vanta::jvm::JniScope s;
+            dt::jvm::JniScope s;
             if (!s) return;
             JNIEnv* env = s.get();
 
-            auto mc = vanta::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
+            auto mc = dt::jvm::staticCallObjectCanon(env, "MinecraftClient", "getInstance");
             if (!mc) return;
 
-            auto player = vanta::jvm::LocalRef<jobject>{
-                env, vanta::jvm::getObjectFieldCanon(env, mc.get(), "MinecraftClient", "player")};
+            auto player = dt::jvm::LocalRef<jobject>{
+                env, dt::jvm::getObjectFieldCanon(env, mc.get(), "MinecraftClient", "player")};
             if (!player) return;
 
             if (canFastPlace(env, player.get(), blocksOnly_.value())) {
-                vanta::jvm::setIntFieldCanon(env, mc.get(), "MinecraftClient", "itemUseCooldown",
+                dt::jvm::setIntFieldCanon(env, mc.get(), "MinecraftClient", "itemUseCooldown",
                                              delay_.value());
             }
         });
@@ -125,6 +125,6 @@ private:
     BoolSetting blocksOnly_{this, "Blocks Only", false};
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::FastPlace)
+DT_REGISTER_MODULE(dt::modules::FastPlace)

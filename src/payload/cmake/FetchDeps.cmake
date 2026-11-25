@@ -2,8 +2,8 @@
 # library. Upstream MinHook has no root CMakeLists, so FetchContent_MakeAvailable
 # by itself does nothing useful — we glob its sources and define the target
 # ourselves.
-get_filename_component(_VANTA_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-set(_VENDORED_MINHOOK "${_VANTA_ROOT}/vendor/minhook")
+get_filename_component(_DT_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(_VENDORED_MINHOOK "${_DT_ROOT}/vendor/minhook")
 
 if (EXISTS "${_VENDORED_MINHOOK}/src/hook.c")
     set(minhook_SOURCE_DIR "${_VENDORED_MINHOOK}")

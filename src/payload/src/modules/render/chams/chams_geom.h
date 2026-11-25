@@ -25,7 +25,7 @@
 
 #pragma once
 
-namespace vanta::modules::chams::geom {
+namespace dt::modules::chams::geom {
 
 // The captured camera for one frame. mvp is column-major (projection *
 // modelview, org.joml / GL layout), matching hitfx's render_frame.
@@ -99,4 +99,4 @@ bool offscreen(const float* xs, const float* ys, int n, float vw, float vh);
 // degenerate-polygon guard and for diagnostics — NOT for culling any more.
 float signed_area(const float* xs, const float* ys, int n);
 
-} // namespace vanta::modules::chams::geom
+} // namespace dt::modules::chams::geom

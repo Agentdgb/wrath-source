@@ -3,7 +3,7 @@
 #include "mappings/generated/VersionIndex.h"
 #include <span>
 
-namespace vanta::mappings::gen {
+namespace dt::mappings::gen {
 extern const VersionTable v_1_21;
 extern const VersionTable v_1_21_1;
 extern const VersionTable v_1_21_2;
@@ -40,4 +40,4 @@ const VersionTable* findVersionTable(std::string_view v) noexcept {
 }
 const VersionTable* defaultVersionTable() noexcept { return kDefaultTable; }
 std::span<const IndexRow> allVersionTables() noexcept { return kIndex; }
-} // namespace vanta::mappings::gen
+} // namespace dt::mappings::gen

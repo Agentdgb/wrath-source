@@ -1,4 +1,4 @@
-// Auto-generated embedded assets for Vanta VGUI (zero disk dependency)
+// Auto-generated embedded assets for Dt VGUI (zero disk dependency)
 #pragma once
 #include <cstddef>
 #include <cstdint>

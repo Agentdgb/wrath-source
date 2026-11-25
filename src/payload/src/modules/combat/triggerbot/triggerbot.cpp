@@ -1,4 +1,4 @@
-// triggerbot.cpp — Native (C++ / JNIHook) triggerbot for Vanta.
+// triggerbot.cpp — Native (C++ / JNIHook) triggerbot for Dt.
 //
 // Ported from the enhance-client native triggerbot. Drives itself from a
 // JNIHook installed in triggerbot_hook (MinecraftClient.doAttack) plus a
@@ -27,7 +27,7 @@
 #include <sdk/mappings/mappings.hpp>
 #include <windows.h>
 
-namespace vanta {
+namespace dt {
 namespace modules {
 namespace triggerbot {
 
@@ -39,7 +39,7 @@ const jni_cache& get_cache() { return g_cache; }
 static bool cache_class(JNIEnv* env, const char* sig, jclass& out_class)
 {
     if (!sig) return false;
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
     if (!local)
     {
         if (env->ExceptionCheck()) env->ExceptionClear();
@@ -354,9 +354,9 @@ void shutdown_cache()
     triggerbot_hook::shutdown();
 
     if (!g_cache.initialized) return;
-    if (!vanta::jvm::ctx().vm) { g_cache = jni_cache{}; return; }
+    if (!dt::jvm::ctx().vm) { g_cache = jni_cache{}; return; }
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) { g_cache = jni_cache{}; return; }
 
     auto drop = [&](jclass& c) {
@@ -390,31 +390,31 @@ void shutdown_cache()
 
 // Forward decl of the desktop-.txt logger defined in triggerbot_hook.cpp.
 // Every gate / dispatch site writes into the same file so a single grep-able
-// stream ends up in %USERPROFILE%\Desktop\vanta_trigger.txt.
-extern "C" void vanta_trigger_desktop_log(const char* fmt, ...);
+// stream ends up in %USERPROFILE%\Desktop\dt_trigger.txt.
+extern "C" void dt_trigger_desktop_log(const char* fmt, ...);
 
 void run()
 {
     // Heartbeat every ~1 s so the user can see run() is even being reached.
-    // Writes to %USERPROFILE%\Desktop\vanta_trigger.txt via the same file
+    // Writes to %USERPROFILE%\Desktop\dt_trigger.txt via the same file
     // handle triggerbot_hook uses.
     {
         static unsigned long long s_next = 0;
         unsigned long long now = GetTickCount64();
         if (now >= s_next) {
             s_next = now + 1000;
-            vanta_trigger_desktop_log(
+            dt_trigger_desktop_log(
                 "TB[run]: heartbeat vm=%p env_ok=%d cache_init=%d enabled=%d hook_active=%d",
-                (void*)vanta::jvm::ctx().vm,
-                (int)(vanta::jvm::thisThreadEnv() != nullptr),
+                (void*)dt::jvm::ctx().vm,
+                (int)(dt::jvm::thisThreadEnv() != nullptr),
                 (int)g_cache.initialized,
                 (int)settings::enabled,
                 (int)triggerbot_hook::is_active());
         }
     }
 
-    if (!vanta::jvm::ctx().vm) return;
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    if (!dt::jvm::ctx().vm) return;
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) return;
 
     if (!g_cache.initialized) init_cache(env);
@@ -433,7 +433,7 @@ void run()
         return;
     }
 
-    // The core "why nothing hit" fix. Vanta bombs GameLoopEvent from the
+    // The core "why nothing hit" fix. Dt bombs GameLoopEvent from the
     // wglSwapBuffers detour — the same call-site enhance used to drive
     // tick_from_render every frame. Without this line, hkDoAttack still
     // attaches but nothing ever calls try_trigger_attack, so SendInput
@@ -447,7 +447,7 @@ void render_focus_visual(int display_w, int display_h)
 {
     if (!settings::enabled || !settings::focus_mode || !settings::show_focus_visuals ||
         display_w <= 0 || display_h <= 0) return;
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     if (!scope) return;
     JNIEnv* env = scope.get();
     jobject target = triggerbot_hook::visual_focus_target(env);
@@ -461,8 +461,8 @@ void render_focus_visual(int display_w, int display_h)
     if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); return; }
     const double z = env->CallDoubleMethod(target, c.entity_get_z_mid);
     if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); return; }
-    namespace cap = vanta::modules::hitfx::capture;
-    namespace hf = vanta::modules::hitfx;
+    namespace cap = dt::modules::hitfx::capture;
+    namespace hf = dt::modules::hitfx;
     if (!cap::is_installed() && !cap::install()) { env->DeleteLocalRef(target); return; }
     cap::capture_now(env, true);
     hf::render_frame frame{};
@@ -529,7 +529,7 @@ void render_focus_visual(int display_w, int display_h)
     const float bottom = std::clamp(raw_bottom, 4.f, h - 4.f);
     if (right <= left || bottom <= top) return;
     // Use the framebuffer clip, not the smaller menu canvas.
-    vanta::modules::targetesp::RingCanvas canvas(display_w, display_h);
+    dt::modules::targetesp::RingCanvas canvas(display_w, display_h);
     dl = canvas.draw;
     focus_visual::draw(dl, left, top, right, bottom, static_cast<float>(distance),
                        settings::focus_frame_style, settings::focus_arrow_style,

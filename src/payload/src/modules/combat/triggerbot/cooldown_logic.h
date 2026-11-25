@@ -1,7 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
-namespace vanta::modules::triggerbot::cooldown {
+namespace dt::modules::triggerbot::cooldown {
 inline float threshold(float percent, bool randomized, double offset) noexcept {
     if (!std::isfinite(percent)) return 1.0f;
     const double base = std::clamp(static_cast<double>(percent), 1.0, 100.0);

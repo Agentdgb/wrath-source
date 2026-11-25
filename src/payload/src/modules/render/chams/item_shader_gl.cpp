@@ -3,7 +3,7 @@
 // Owns the whole first-person held-item glow: detection gate, capture of MC's own
 // item draw into a half-float FBO, a separable Gaussian blur, and the additive
 // composite of a soft colour-matched halo (plus a gentle inner bloom). It reaches
-// GL only through the shared vanta::al::gl loader + raw GL 1.1, and brackets all of
+// GL only through the shared dt::al::gl loader + raw GL 1.1, and brackets all of
 // that in chams' suppression so the Chams state shadow is never polluted. It reads
 // no Chams internals — chams passes in the per-draw classification it already has.
 
@@ -69,10 +69,10 @@
 #define GL_LINK_STATUS 0x8B82
 #endif
 
-namespace vanta::modules::itemshader {
+namespace dt::modules::itemshader {
 namespace {
 
-namespace algl = ::vanta::al::gl;
+namespace algl = ::dt::al::gl;
 
 // ── Suppression bracket ───────────────────────────────────────────────────────
 // While raised, chams' hooked state setters skip their shadow update (but still
@@ -81,8 +81,8 @@ namespace algl = ::vanta::al::gl;
 // as it left it.
 struct suppress_scope {
     bool prev;
-    suppress_scope()  : prev(::vanta::modules::chams::gl::exchange_suppressed(true)) {}
-    ~suppress_scope() { ::vanta::modules::chams::gl::set_suppressed(prev); }
+    suppress_scope()  : prev(::dt::modules::chams::gl::exchange_suppressed(true)) {}
+    ~suppress_scope() { ::dt::modules::chams::gl::set_suppressed(prev); }
 };
 
 // ── Own GL function pointers (resolved once, on a live context) ────────────────
@@ -210,9 +210,9 @@ std::atomic<float> g_tap_intensity{ 0.045f }, g_tap_thickness{ 0.020f };
 glow_fbo*             g_glow_src  = nullptr;   // sharp coloured capture (the mask)
 glow_fbo*             g_glow_a    = nullptr;   // ping
 glow_fbo*             g_glow_b    = nullptr;   // pong (final blurred)
-::vanta::al::al_quad*   g_quad    = nullptr;
-::vanta::al::al_shader* g_blur    = nullptr;
-::vanta::al::al_shader* g_comp    = nullptr;
+::dt::al::al_quad*   g_quad    = nullptr;
+::dt::al::al_shader* g_blur    = nullptr;
+::dt::al::al_shader* g_comp    = nullptr;
 std::atomic<bool> g_bloom_ready{ false };
 std::atomic<bool> g_bloom_failed{ false };
 bool g_captured = false;   // a fresh capture happened this frame
@@ -368,7 +368,7 @@ void build_capture_program()
     g_u_offset = f_GetUniformLocation(prog, "u_offset");
     match_block(mc_prog, "DynamicTransforms");
     match_block(mc_prog, "Projection");
-    ::vanta::desklog::gl_check(::vanta::modules::itemshader::log_ch(), "build_capture_program");
+    ::dt::desklog::gl_check(::dt::modules::itemshader::log_ch(), "build_capture_program");
     g_prog_ready.store(true, std::memory_order_relaxed);
     ITEMSHADER_LOG("=== CAPTURE PROGRAM READY === prog=%u u_alpha=%d u_offset=%d (from MC prog %u)",
                    prog, g_u_alpha, g_u_offset, mc_prog);
@@ -387,9 +387,9 @@ void build_bloom()
     if (!g_glow_src) g_glow_src = new glow_fbo();
     if (!g_glow_a)   g_glow_a   = new glow_fbo();
     if (!g_glow_b)   g_glow_b   = new glow_fbo();
-    if (!g_quad)     g_quad     = new ::vanta::al::al_quad();
-    if (!g_blur)     g_blur     = new ::vanta::al::al_shader();
-    if (!g_comp)     g_comp     = new ::vanta::al::al_shader();
+    if (!g_quad)     g_quad     = new ::dt::al::al_quad();
+    if (!g_blur)     g_blur     = new ::dt::al::al_shader();
+    if (!g_comp)     g_comp     = new ::dt::al::al_shader();
 
     bool ok = g_quad->ensure();
     ok = ok && g_blur->load(kQuadVSH, kBlurFSH, "itemglow-blur");
@@ -552,7 +552,7 @@ void blur_and_composite()
     g.UseProgram((GLuint)prevProg);
     g.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)prevFbo);
     glViewport(vp[0], vp[1], vp[2], vp[3]);
-    const int errs = ::vanta::desklog::gl_check(::vanta::modules::itemshader::log_ch(), "blur_and_composite");
+    const int errs = ::dt::desklog::gl_check(::dt::modules::itemshader::log_ch(), "blur_and_composite");
     if (g_debug.load(std::memory_order_relaxed))
         ITEMSHADER_RL(1000, "composite: DONE (gl errors drained=%d)", errs);
 }
@@ -750,4 +750,4 @@ void shutdown_gl() {
     g_prog_ready.store(false);
 }
 
-} // namespace vanta::modules::itemshader
+} // namespace dt::modules::itemshader

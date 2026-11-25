@@ -5,7 +5,7 @@
 // Byte array of the compiled HookBridge.class. When the shim/ build step is
 // wired the CMake pipeline emits this file; until then these fallback symbols
 // link a zero-length blob and defineHookBridgeClass() logs and returns nullptr.
-namespace vanta::generated {
+namespace dt::generated {
 #if defined(_MSC_VER)
 __declspec(selectany) extern const unsigned char hook_bridge_class[1]   = {0};
 __declspec(selectany) extern const unsigned      hook_bridge_class_size = 0;
@@ -13,15 +13,15 @@ __declspec(selectany) extern const unsigned      hook_bridge_class_size = 0;
 extern const unsigned char hook_bridge_class[]      __attribute__((weak));
 extern const unsigned      hook_bridge_class_size   __attribute__((weak));
 #endif
-} // namespace vanta::generated
+} // namespace dt::generated
 
-namespace vanta::hook::bridge {
+namespace dt::hook::bridge {
 
 jclass defineHookBridgeClass(JNIEnv* env) {
     if (!env) return nullptr;
 
-    const unsigned char* bytes = vanta::generated::hook_bridge_class;
-    const unsigned       n     = vanta::generated::hook_bridge_class_size;
+    const unsigned char* bytes = dt::generated::hook_bridge_class;
+    const unsigned       n     = dt::generated::hook_bridge_class_size;
     if (!bytes || n == 0) {
         // Not an error: the Java-shim hook path is OPTIONAL and simply not
         // built in this tree (there is no shim/ step yet, so the embedded
@@ -57,4 +57,4 @@ jclass defineHookBridgeClass(JNIEnv* env) {
     return global;
 }
 
-} // namespace vanta::hook::bridge
+} // namespace dt::hook::bridge

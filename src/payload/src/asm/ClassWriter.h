@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 // Rewrites a class file, replacing one method's Code attribute with a new
 // bytecode+stackmap sequence and appending new constant pool entries.
@@ -29,4 +29,4 @@ public:
     static std::vector<std::uint8_t> emit(const ClassView& v, const RewriteOneMethod& r);
 };
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

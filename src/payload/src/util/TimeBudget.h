@@ -1,7 +1,7 @@
 #pragma once
 #include <chrono>
 
-namespace vanta::util {
+namespace dt::util {
 class TimeBudget {
     std::chrono::steady_clock::time_point deadline_;
 public:

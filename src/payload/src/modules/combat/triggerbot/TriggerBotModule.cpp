@@ -1,14 +1,14 @@
-// TriggerBotModule.cpp — Vanta ClickGui glue for the ported triggerbot.
+// TriggerBotModule.cpp — Dt ClickGui glue for the ported triggerbot.
 //
 // The ported triggerbot (triggerbot.cpp / triggerbot_hook.cpp) is engine-
 // agnostic: it reads user preferences out of `settings` and expects
 // `run()` to be called on the game/render thread. This module wires those
-// two ends into Vanta:
+// two ends into Dt:
 //
-//   • Registers a real vanta::Module (Category::Combat) so it shows up in
+//   • Registers a real dt::Module (Category::Combat) so it shows up in
 //     the ClickGui with every user-facing toggle the port supports.
 //   • Every frame (GameLoopEvent) it mirrors its own Setting values into
-//     `vanta::modules::triggerbot::settings::*` and calls `run()`, which
+//     `dt::modules::triggerbot::settings::*` and calls `run()`, which
 //     installs the JNIHook on first enable and drives everything from
 //     there.
 //   • On disable it flips `settings::enabled = false` and calls `run()`
@@ -26,9 +26,9 @@
 #include "triggerbot_hook.h"
 #include "modules/render/targetesp/target_attack.h"
 
-#define vanta_trigger_desktop_log(...) ((void)0)
+#define dt_trigger_desktop_log(...) ((void)0)
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class ActionDispatch : public Module {
 public:
@@ -77,10 +77,10 @@ public:
     }
 
     void onInit() override {
-        vanta_trigger_desktop_log("MOD: TriggerBot::onInit — subscribing GameLoopEvent listener");
+        dt_trigger_desktop_log("MOD: TriggerBot::onInit — subscribing GameLoopEvent listener");
         listen<events::GameLoopEvent>([this](events::GameLoopEvent&){
             mirror();
-            ::vanta::modules::triggerbot::run();
+            ::dt::modules::triggerbot::run();
             if (isEnabled() && (focusMode_.value() || onlyOnHit_.value())) {
                 jvm::JniScope scope;
                 if (scope) targetesp::attack::install(scope.get());
@@ -92,10 +92,10 @@ public:
     }
 
     void onEnable() override {
-        vanta_trigger_desktop_log(
+        dt_trigger_desktop_log(
             "MOD: TriggerBot::onEnable CALLED — ClickGui toggle reached the module. "
             "Setting settings::enabled=true.");
-        ::vanta::modules::triggerbot::settings::enabled = true;
+        ::dt::modules::triggerbot::settings::enabled = true;
         mirror();
         if (focusMode_.value() || onlyOnHit_.value()) {
             jvm::JniScope scope;
@@ -104,25 +104,25 @@ public:
     }
 
     void onDisable() override {
-        vanta_trigger_desktop_log("MOD: TriggerBot::onDisable CALLED — settings::enabled=false");
-        ::vanta::modules::triggerbot::settings::enabled = false;
-        ::vanta::modules::triggerbot::run();
+        dt_trigger_desktop_log("MOD: TriggerBot::onDisable CALLED — settings::enabled=false");
+        ::dt::modules::triggerbot::settings::enabled = false;
+        ::dt::modules::triggerbot::run();
     }
 
 private:
     // Mirror the Setting objects into the port's settings struct. All
     // reads happen on the same thread (game/render) so no atomics needed.
     void mirror() {
-        using S = ::vanta::modules::triggerbot::settings;
+        using S = ::dt::modules::triggerbot::settings;
 
         // The port carried `show_gui` over from enhance, where the ClickGui
-        // toggle wrote it and every module checked it — but nothing in Vanta
+        // toggle wrote it and every module checked it — but nothing in Dt
         // ever assigned it, leaving the guard permanently false. The overlay
         // is an ImGui surface, not a Minecraft Screen, so the currentScreen
         // check in gate_attack_in_gui never caught it either: the bot kept
         // firing SendInput clicks straight into the open panel, toggling
         // modules and dragging sliders. Wire it to the real overlay state.
-        S::show_gui           = ::vanta::vgui::bridge::isOverlayVisible();
+        S::show_gui           = ::dt::vgui::bridge::isOverlayVisible();
 
         S::attack_range       = range_.value();
         S::cooldown_threshold = cooldownThreshold_.value();
@@ -181,6 +181,6 @@ private:
     BoolSetting  focusDistance_     {this, "Focus Distance", true};
 };
 
-VANTA_REGISTER_MODULE(ActionDispatch);
+DT_REGISTER_MODULE(ActionDispatch);
 
-} // namespace vanta::modules
+} // namespace dt::modules

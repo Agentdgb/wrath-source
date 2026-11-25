@@ -4,7 +4,7 @@
 #include <functional>
 #include <vector>
 #include <string>
-namespace vanta {
+namespace dt {
 class KeybindManager {
 public:
     static KeybindManager& get();

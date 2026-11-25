@@ -37,7 +37,7 @@
 #include <jni.h>
 #include <random>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -89,7 +89,7 @@ int rand_int(int lo, int hi)
 bool cache_class(JNIEnv* env, const char* sig, jclass& out)
 {
     if (!sig) return false;
-    jclass local = vanta::jvm::findClassAnyLoader(env, sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return false; }
     out = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -262,7 +262,7 @@ void resolve_jump_key(JNIEnv* env, jobject mc)
     if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
     if (!options) return;
 
-    jclass kb_cls = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_304");
+    jclass kb_cls = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_304");
     if (env->ExceptionCheck()) env->ExceptionClear();
     jmethodID kb_translation = kb_cls
         ? cache_method_either(env, kb_cls, "method_1431", "getName", "()Ljava/lang/String;")
@@ -376,7 +376,7 @@ private:
         accum -= TICK_MS;
         if (accum > TICK_MS) accum = TICK_MS;
 
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
@@ -429,7 +429,7 @@ private:
         // Stand down while the ClickGui is up. The panel is an ImGui surface,
         // not a Minecraft Screen, so currentScreen is null while it is open and
         // a null check does not see it.
-        if (::vanta::vgui::bridge::isOverlayVisible()) {
+        if (::dt::vgui::bridge::isOverlayVisible()) {
             armed_ticks_ = -1; release_jump(env, mc); return;
         }
 
@@ -556,6 +556,6 @@ private:
     }
 };
 
-VANTA_REGISTER_MODULE(AutoJumpReset);
+DT_REGISTER_MODULE(AutoJumpReset);
 
-} // namespace vanta::modules
+} // namespace dt::modules

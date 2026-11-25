@@ -8,7 +8,7 @@
 
 #include <mutex>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 namespace {
 
@@ -108,4 +108,4 @@ RuntimeInfo detectRuntime(JNIEnv* env) {
 
 const RuntimeInfo& currentRuntime() { return g_runtime; }
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

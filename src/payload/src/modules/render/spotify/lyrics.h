@@ -32,7 +32,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta::modules::spotify {
+namespace dt::modules::spotify {
 
 struct lyric_line
 {
@@ -84,4 +84,4 @@ struct lyrics_doc
 lyrics_doc parse_lrc(const std::string& body, const std::string& key);
 lyrics_doc parse_plain(const std::string& body, const std::string& key);
 
-} // namespace vanta::modules::spotify
+} // namespace dt::modules::spotify

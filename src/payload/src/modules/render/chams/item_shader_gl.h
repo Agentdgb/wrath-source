@@ -11,7 +11,7 @@
 //   * on_frame_boundary()— once per frame, to build programs + blur + composite.
 //
 // Everything else (state, GL function pointers, FBOs, shaders, the blur/composite
-// passes) is owned here. The layer touches GL through the shared vanta::al::gl
+// passes) is owned here. The layer touches GL through the shared dt::al::gl
 // loader + raw GL 1.1, bracketed by chams' suppression so it never pollutes the
 // Chams shadow — it does NOT reach into any Chams internals.
 
@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <functional>
 
-namespace vanta::modules::itemshader {
+namespace dt::modules::itemshader {
 
 // ── Controls (driven by the ItemShader module + the Animations detour) ────────
 
@@ -33,7 +33,7 @@ bool wanted();
 // arm the layer a frame before it starts drawing.
 void set_effect(bool on);
 
-// Verbose per-frame logging to <Desktop>\vanta_itemshader.txt. Module Debug drives it.
+// Verbose per-frame logging to <Desktop>\dt_itemshader.txt. Module Debug drives it.
 void set_debug(bool on);
 
 // Raised by the Animations first-person detour around renderFirstPersonItem — the
@@ -67,4 +67,4 @@ void run_capture(const std::function<void()>& redraw);
 // blur + composite this frame's capture, dump diagnostics, roll per-frame state.
 void on_frame_boundary();
 
-} // namespace vanta::modules::itemshader
+} // namespace dt::modules::itemshader

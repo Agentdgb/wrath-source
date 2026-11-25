@@ -1,7 +1,7 @@
 #pragma once
 #include "core/setting/Setting.h"
 
-namespace vanta {
+namespace dt {
 
 class BoolSetting : public Setting {
 public:
@@ -19,4 +19,4 @@ private:
     bool value_;
 };
 
-} // namespace vanta
+} // namespace dt

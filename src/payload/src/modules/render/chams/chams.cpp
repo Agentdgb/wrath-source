@@ -25,10 +25,10 @@
 #include <vector>
 #include <chrono>
 
-namespace hf  = vanta::modules::hitfx;
-namespace cap = vanta::modules::hitfx::capture;
+namespace hf  = dt::modules::hitfx;
+namespace cap = dt::modules::hitfx::capture;
 
-namespace vanta::modules::chams {
+namespace dt::modules::chams {
 
 bool     g_enabled = false;
 settings g_settings{};
@@ -82,9 +82,9 @@ void install()
     // is idempotent, so whichever module gets there first pays for it.
     cap::install();
 
-    ::vanta::desklog::section(dbg::ch(), "chams install");
+    ::dt::desklog::section(dbg::ch(), "chams install");
     CHAMS_LOG("install(): capture service installed = %d", (int)cap::is_installed());
-    CHAMS_LOG("log file: %s", ::vanta::desklog::path_of(dbg::ch()));
+    CHAMS_LOG("log file: %s", ::dt::desklog::path_of(dbg::ch()));
     VLOG_INFO("chams", "install() done");
 }
 
@@ -92,14 +92,14 @@ void shutdown()
 {
     gl::set_active(false);
     if (!gl::uninstall()) {
-        ::vanta::blockUnload();
+        ::dt::blockUnload();
         VLOG_ERR("chams", "Hooks did not drain; keeping callbacks and caches alive");
         return;
     }
     cull::shutdown();
     item::shutdown();
     g_players.clear();
-    ::vanta::jvm::JniScope s;
+    ::dt::jvm::JniScope s;
     if (s) jni::release_cache(s.get());
     CHAMS_LOG("shutdown()");
     crash::shutdown();
@@ -136,7 +136,7 @@ void tick_game_context()
     // The ItemShader module (first-person held-item shader) also needs the layer
     // armed, so it is ORed in — the layer runs when EITHER feature wants it, and
     // each keys off its own gate inside the detour.
-    const bool want_layer = g_enabled || ::vanta::modules::itemshader::wanted();
+    const bool want_layer = g_enabled || ::dt::modules::itemshader::wanted();
     gl::set_active(want_layer);
 
     // Classify any newly-bound program by reading its GLSL back. Runs here
@@ -177,7 +177,7 @@ void render_text(int display_w, int display_h)
     }
 
     // Do not paint the chams over the ClickGui.
-    if (::vanta::vgui::bridge::isOverlayVisible()) {
+    if (::dt::vgui::bridge::isOverlayVisible()) {
         g_players.clear();
         return;
     }
@@ -230,7 +230,7 @@ void render_text(int display_w, int display_h)
 
     geom::camera cam{};
     {
-        ::vanta::jvm::JniScope s;
+        ::dt::jvm::JniScope s;
         if (!s) { CHAMS_RL(dbg::kSlotNoWorld, 2000, "no JNIEnv on the render thread"); return; }
         JNIEnv* env = s.get();
 
@@ -238,7 +238,7 @@ void render_text(int display_w, int display_h)
             g_logged_banner = true;
             // A GL context IS current here: gl_hook made its own current before
             // calling into the foreground pass.
-            ::vanta::desklog::banner(dbg::ch(), /*have_gl_context=*/true);
+            ::dt::desklog::banner(dbg::ch(), /*have_gl_context=*/true);
         }
 
         // ARM THE CAPTURE SERVICE FIRST. capture_now() opens with
@@ -366,7 +366,7 @@ void render_text(int display_w, int display_h)
             static clock::time_point s_armour_at{};
             const auto now = clock::now();
             if (s_armour.empty() || now - s_armour_at > std::chrono::seconds(2)) {
-                ::vanta::jvm::JniScope js;
+                ::dt::jvm::JniScope js;
                 if (js) {
                     unsigned int tmp[64];
                     const int n = jni::equipment_textures(js.get(), tmp, 64);
@@ -416,7 +416,7 @@ void render_text(int display_w, int display_h)
             static clock::time_point s_def_at{};
             const auto now = clock::now();
             if (s_defskin.empty() || now - s_def_at > std::chrono::seconds(5)) {
-                ::vanta::jvm::JniScope js2;
+                ::dt::jvm::JniScope js2;
                 if (js2) {
                     unsigned int tmp[32];
                     const int n = jni::default_skin_textures(js2.get(), tmp, 32);
@@ -529,7 +529,7 @@ void render_text(int display_w, int display_h)
                     for (int i = 0; i < nt && na < 72; ++i) ask[na++] = tids[i];
                     for (int i = 0; i < ne && na < 72; ++i) ask[na++] = equip[i];
                     for (int i = 0; i < nu && na < 72; ++i) ask[na++] = unknown[i];
-                    ::vanta::jvm::JniScope ds;
+                    ::dt::jvm::JniScope ds;
                     if (ds) jni::dump_texture_registry(ds.get(), ask, na);
                 }
             }
@@ -549,8 +549,8 @@ void render_text(int display_w, int display_h)
     gl::log_frame_summary();
     cull::log_summary();
 
-    ::vanta::desklog::dump_counters_rl(dbg::ch(), 5000);
+    ::dt::desklog::dump_counters_rl(dbg::ch(), 5000);
 }
 
-} // namespace vanta::modules::chams
+} // namespace dt::modules::chams
 

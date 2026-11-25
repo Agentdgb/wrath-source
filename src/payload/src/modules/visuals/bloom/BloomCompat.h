@@ -14,7 +14,7 @@
 
 // Value-like array handles preserve Java's reference/alias semantics. Checked
 // indexing also preserves its bounds failures instead of corrupting native memory.
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 template <class T> class Array {
     std::shared_ptr<std::vector<T>> values_;
 
@@ -408,4 +408,4 @@ void a();
 void p();
 bool visible();
 } // namespace halo
-} // namespace vanta::modules::bloom
+} // namespace dt::modules::bloom

@@ -12,7 +12,7 @@
 
 #pragma once
 
-namespace vanta::modules::hitfx {
+namespace dt::modules::hitfx {
 
 // One captured world-render frame. Matrices are column-major (org.joml
 // Matrix4f.get(float[]) layout, GL-compatible).
@@ -45,4 +45,4 @@ bool world_to_screen(const render_frame& f,
                      double world_x, double world_y, double world_z,
                      float& out_sx, float& out_sy, float& out_depth, bool clip_z = true);
 
-} // namespace vanta::modules::hitfx
+} // namespace dt::modules::hitfx

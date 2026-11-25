@@ -1,7 +1,7 @@
 #pragma once
 #include <jni.h>
 
-namespace vanta::hook::bridge {
+namespace dt::hook::bridge {
 
 // Called once at Bootstrap after HookBridge is defined. Registers the entire
 // native trampoline table so subsequent INVOKESTATIC lands directly in C++
@@ -14,4 +14,4 @@ void registerNatives(JNIEnv* env, jclass bridgeClass);
 inline constexpr jint kBridgeContinue = 0;
 inline constexpr jint kBridgeCancel   = 1;
 
-} // namespace vanta::hook::bridge
+} // namespace dt::hook::bridge

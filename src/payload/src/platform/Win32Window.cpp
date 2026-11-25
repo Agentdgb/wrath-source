@@ -2,7 +2,7 @@
 
 #include <cwchar>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 HWND windowFromDC(HDC hdc) {
     return WindowFromDC(hdc);
@@ -106,4 +106,4 @@ bool isGameWindow(HWND hwnd) {
     return windowProcessId(hwnd) == GetCurrentProcessId();
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

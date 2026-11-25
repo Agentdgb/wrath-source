@@ -26,7 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace vanta::modules::hitfx {
+namespace dt::modules::hitfx {
 
 bool     g_enabled = false;
 settings g_settings{};
@@ -60,11 +60,11 @@ bool init_cache(JNIEnv* env)
     if (C.tried) return C.ok;
     C.tried = true;
 
-    jclass mc     = vanta::jvm::findClassAnyLoader(env, kMcClass);
-    jclass world  = vanta::jvm::findClassAnyLoader(env, kWorldClass);
-    jclass player = vanta::jvm::findClassAnyLoader(env, kPlayerClass);
-    jclass living = vanta::jvm::findClassAnyLoader(env, kLivingClass);
-    jclass entity = vanta::jvm::findClassAnyLoader(env, kEntityClass);
+    jclass mc     = dt::jvm::findClassAnyLoader(env, kMcClass);
+    jclass world  = dt::jvm::findClassAnyLoader(env, kWorldClass);
+    jclass player = dt::jvm::findClassAnyLoader(env, kPlayerClass);
+    jclass living = dt::jvm::findClassAnyLoader(env, kLivingClass);
+    jclass entity = dt::jvm::findClassAnyLoader(env, kEntityClass);
     if (!mc || !world || !player || !living || !entity) {
         VLOG_WARN("hitfx", "poll: core classes unresolved");
         return false;
@@ -445,7 +445,7 @@ void render_text(int display_w, int display_h)
     // While the ClickGui overlay is open it owns the screen — don't draw hit
     // effects over the panel. Clear any in-flight particles so none flash back
     // when it closes, and skip capture/polling entirely this frame.
-    if (::vanta::vgui::bridge::isOverlayVisible()) {
+    if (::dt::vgui::bridge::isOverlayVisible()) {
         std::lock_guard<std::mutex> lk(g_pool_mx);
         g_pool.clear();
         return;
@@ -467,7 +467,7 @@ void render_text(int display_w, int display_h)
 
     // Everything runs on the render (SwapBuffers) thread, which has a JNIEnv.
     {
-        vanta::jvm::JniScope s;
+        dt::jvm::JniScope s;
         if (s) {
             capture::capture_now(s.get());   // read MC's real matrices this frame
             poll_hits(s.get());
@@ -634,4 +634,4 @@ void render_text(int display_w, int display_h)
                     pool_n, (int)have_cam, drawn, offscreen);
 }
 
-} // namespace vanta::modules::hitfx
+} // namespace dt::modules::hitfx

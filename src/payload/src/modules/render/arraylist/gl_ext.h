@@ -1,11 +1,11 @@
 // gl_ext.h — hand-rolled loader for the GL 3.0+ functions the arraylist needs.
 //
-// The rest of Vanta gets by with plain <gl/GL.h> (GL 1.1) plus a couple of
+// The rest of Dt gets by with plain <gl/GL.h> (GL 1.1) plus a couple of
 // ad-hoc wglGetProcAddress lookups in gl_hook.cc. The arraylist pipeline is
 // heavier: shaders, framebuffer objects, vertex-array objects, texture units.
 // Rather than pulling in glad/glew, this loads just what we need on first use.
 //
-// Every symbol is namespaced under vanta::al::gl to avoid clashing with the
+// Every symbol is namespaced under dt::al::gl to avoid clashing with the
 // GL macros ImGui's bundled loader defines elsewhere.
 
 #pragma once
@@ -75,7 +75,7 @@ typedef ptrdiff_t GLsizeiptr;
 #define GL_RGBA8 0x8058
 #endif
 
-namespace vanta::al::gl {
+namespace dt::al::gl {
 
 // ── Shader program ────────────────────────────────────────────────────────────
 using PFN_glCreateShader        = GLuint  (APIENTRY*)(GLenum);
@@ -174,4 +174,4 @@ const funcs& load();
 // Convenience — returns the shared table without re-loading.
 inline const funcs& api() { return load(); }
 
-} // namespace vanta::al::gl
+} // namespace dt::al::gl

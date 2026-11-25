@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::branch {
+namespace dt::modules::bloom::branch {
 
 int W = 1024;
 int H = 2048;
@@ -2973,4 +2973,4 @@ const bool initialized = []() {
     eu = var4 / var6;
     return true;
 }();
-} // namespace vanta::modules::bloom::branch
+} // namespace dt::modules::bloom::branch

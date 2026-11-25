@@ -1,6 +1,6 @@
 #include "Engine.h"
 #include "jvm/JvmContext.h"
-namespace vanta::modules::aimassist::wind {
+namespace dt::modules::aimassist::wind {
 Engine::~Engine() {
     legacy.stop();
     jvm::JniScope scope;
@@ -61,4 +61,4 @@ void Engine::step(JNIEnv *env, const SettingsView &settings) {
     state_ = legacy.shared.targetRef ? "Tracking" : "Searching";
 }
 
-} // namespace vanta::modules::aimassist::wind
+} // namespace dt::modules::aimassist::wind

@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::ribbon {
+namespace dt::modules::bloom::ribbon {
 
 int W = 256;
 int H = 1024;
@@ -604,4 +604,4 @@ const bool initialized = []() {
     }
     return true;
 }();
-} // namespace vanta::modules::bloom::ribbon
+} // namespace dt::modules::bloom::ribbon

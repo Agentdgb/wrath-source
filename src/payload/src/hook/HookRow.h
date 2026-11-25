@@ -5,7 +5,7 @@
 #include <string_view>
 #include <vector>
 
-namespace vanta::hook {
+namespace dt::hook {
 
 enum class Recipe : std::uint8_t {
     A_PreCancel,
@@ -41,14 +41,14 @@ private:
     std::vector<HookRow> rows_;
 };
 
-#define VANTA_HR_CAT2_(a, b) a##b
-#define VANTA_HR_CAT_(a, b)  VANTA_HR_CAT2_(a, b)
-#define VANTA_REGISTER_HOOK_SITE(fn)                                                       \
+#define DT_HR_CAT2_(a, b) a##b
+#define DT_HR_CAT_(a, b)  DT_HR_CAT2_(a, b)
+#define DT_REGISTER_HOOK_SITE(fn)                                                       \
     namespace {                                                                            \
-        static const int VANTA_HR_CAT_(_vanta_reg_site_, __COUNTER__) = [](){              \
-            ::vanta::hook::HookRegistry::get().addRow(fn());                               \
+        static const int DT_HR_CAT_(_dt_reg_site_, __COUNTER__) = [](){              \
+            ::dt::hook::HookRegistry::get().addRow(fn());                               \
             return 0;                                                                      \
         }();                                                                               \
     }
 
-} // namespace vanta::hook
+} // namespace dt::hook

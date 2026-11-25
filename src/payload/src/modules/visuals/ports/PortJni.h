@@ -1,7 +1,7 @@
 #pragma once
 #include "jvm/JniHelper.h"
 #include <stdexcept>
-namespace vanta::modules::visualports::jni {
+namespace dt::modules::visualports::jni {
 inline void check(JNIEnv *e) {
     if (!e->ExceptionCheck())
         return;
@@ -90,4 +90,4 @@ inline void rotate(JNIEnv *e, jobject m, float x, float y, float z) {
     e->DeleteLocalRef(obj);
     check(e);
 }
-} // namespace vanta::modules::visualports::jni
+} // namespace dt::modules::visualports::jni

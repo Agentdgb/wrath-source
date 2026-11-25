@@ -27,8 +27,8 @@ namespace slog
 
 		inline bool g_enabled{ true };
 
-		// Optional external sink. VantaClient's bootstrap registers one that
-		// pipes into vanta.log, so vgui traces (font loading, overlay create,
+		// Optional external sink. DtClient's bootstrap registers one that
+		// pipes into dt.log, so vgui traces (font loading, overlay create,
 		// device init, ...) become visible in the same file as everything else.
 		using external_sink_t = void(*)(int level, const char* message);
 		inline external_sink_t g_external_sink{ nullptr };

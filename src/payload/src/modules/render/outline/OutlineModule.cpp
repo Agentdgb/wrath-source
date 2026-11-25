@@ -4,7 +4,7 @@
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Outline : public Module {
 public:
@@ -68,6 +68,6 @@ private:
     void onDisable() override { outline::g_enabled = false; }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::Outline)
+DT_REGISTER_MODULE(dt::modules::Outline)

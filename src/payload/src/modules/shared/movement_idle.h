@@ -22,7 +22,7 @@
 
 #include <jni.h>
 
-namespace vanta::shared {
+namespace dt::shared {
 
 // True when the player is pressing none of forward/back/left/right/jump/sneak
 // AND is not sprinting.
@@ -105,4 +105,4 @@ bool sprint_key_owned();
 // sprint binding must consult this and leave the key alone.
 bool sprint_reset_active();
 
-} // namespace vanta::shared
+} // namespace dt::shared

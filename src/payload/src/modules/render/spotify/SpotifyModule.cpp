@@ -3,7 +3,7 @@
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Spotify : public Module {
 public:
@@ -54,4 +54,4 @@ private:
 
 }
 
-VANTA_REGISTER_MODULE(vanta::modules::Spotify)
+DT_REGISTER_MODULE(dt::modules::Spotify)

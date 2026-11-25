@@ -18,7 +18,7 @@
 #include <mutex>
 #include <string>
 
-namespace vanta::hook {
+namespace dt::hook {
 
 // ── ClassFileLoadHook trampoline ─────────────────────────────────────────────
 namespace {
@@ -121,7 +121,7 @@ void HookManager::install(jvmtiEnv* jvmti, JNIEnv* env) {
 }
 
 void HookManager::retransformKnown() {
-    auto& ctx = vanta::jvm::ctx();
+    auto& ctx = dt::jvm::ctx();
     if (!ctx.jvmti.load()) return;
 
     jint    n     = 0;
@@ -131,7 +131,7 @@ void HookManager::retransformKnown() {
     std::vector<jclass> targets;
     targets.reserve(64);
 
-    auto env = vanta::jvm::thisThreadEnv();
+    auto env = dt::jvm::thisThreadEnv();
     for (jint i = 0; i < n; ++i) {
         char* sig = nullptr;
         if (ctx.jvmti.load()->GetClassSignature(all[i], &sig, nullptr) != JVMTI_ERROR_NONE || !sig) continue;
@@ -139,7 +139,7 @@ void HookManager::retransformKnown() {
         std::string_view sv(sig);
         if (sv.size() >= 3 && sv.front() == 'L' && sv.back() == ';') sv = sv.substr(1, sv.size() - 2);
 
-        auto canon = vanta::mappings::MappingRegistry::get().canonForRuntimeClass(sv);
+        auto canon = dt::mappings::MappingRegistry::get().canonForRuntimeClass(sv);
         if (!canon.empty()) targets.push_back(all[i]);
         ctx.jvmti.load()->Deallocate(reinterpret_cast<unsigned char*>(sig));
     }
@@ -186,7 +186,7 @@ bool HookManager::transformIncoming(std::string_view runtimeClassName,
                                     std::uint8_t**      newBytes,
                                     std::size_t*        newLen)
 {
-    auto canon = vanta::mappings::MappingRegistry::get().canonForRuntimeClass(runtimeClassName);
+    auto canon = dt::mappings::MappingRegistry::get().canonForRuntimeClass(runtimeClassName);
     if (canon.empty()) return false;
 
     // Find rows targeting this owner.
@@ -199,8 +199,8 @@ bool HookManager::transformIncoming(std::string_view runtimeClassName,
     if (owned.empty()) return false;
 
     // Parse the class.
-    vanta::asm_::ClassView v;
-    if (!vanta::asm_::ClassReader::parse(classBytes, classLen, v)) {
+    dt::asm_::ClassView v;
+    if (!dt::asm_::ClassReader::parse(classBytes, classLen, v)) {
         VLOG_WARN("hook", "ClassReader::parse failed for '{}'", runtimeClassName);
         return false;
     }
@@ -213,7 +213,7 @@ bool HookManager::transformIncoming(std::string_view runtimeClassName,
     const asm_::MethodView* mv     = nullptr;
     std::string             mName, mDesc;
     for (auto& cand : row->candidates) {
-        auto mr = vanta::mappings::MappingRegistry::get().methodFor(row->ownerCanon, cand.canonName);
+        auto mr = dt::mappings::MappingRegistry::get().methodFor(row->ownerCanon, cand.canonName);
         if (mr.name.empty()) continue;
         mName.assign(mr.name); mDesc.assign(mr.desc);
         for (auto& m : v.methods) {
@@ -245,7 +245,7 @@ bool HookManager::transformIncoming(std::string_view runtimeClassName,
         return false;
     }
 
-    auto out = vanta::asm_::ClassWriter::emit(v, r);
+    auto out = dt::asm_::ClassWriter::emit(v, r);
     if (out.empty()) return false;
 
     // Cache originals for later restoration.
@@ -265,7 +265,7 @@ bool HookManager::transformIncoming(std::string_view runtimeClassName,
 }
 
 void HookManager::uninstall() {
-    auto& ctx = vanta::jvm::ctx();
+    auto& ctx = dt::jvm::ctx();
     if (!ctx.jvmti.load()) return;
     ctx.jvmti.load()->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, nullptr);
     ctx.jvmti.load()->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_VM_DEATH, nullptr);
@@ -276,4 +276,4 @@ std::size_t HookManager::transformedClassCount() const noexcept {
     return impl_->transformed.load(std::memory_order_relaxed);
 }
 
-} // namespace vanta::hook
+} // namespace dt::hook

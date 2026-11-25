@@ -1,5 +1,5 @@
 #pragma once
 
-namespace vanta::modules::targetesp {
+namespace dt::modules::targetesp {
 void render(int width, int height);
 }

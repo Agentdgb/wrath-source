@@ -9,7 +9,7 @@
 #include <cstring>
 #include <string>
 
-namespace vanta::mappings {
+namespace dt::mappings {
 
 // ── singleton ────────────────────────────────────────────────────────────────
 MappingRegistry& MappingRegistry::get() {
@@ -120,4 +120,4 @@ std::string MappingRegistry::remapDescriptor(std::string_view canonDesc) const {
     return out;
 }
 
-} // namespace vanta::mappings
+} // namespace dt::mappings

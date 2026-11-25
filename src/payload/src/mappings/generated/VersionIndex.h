@@ -4,7 +4,7 @@
 #include <span>
 #include <string_view>
 
-namespace vanta::mappings::gen {
+namespace dt::mappings::gen {
 
 // Runtime lookup entry point implemented by generated/mappings_index.cpp.
 // Returns nullptr when the version string is not one this DLL ships tables
@@ -24,4 +24,4 @@ struct IndexRow {
 };
 std::span<const IndexRow> allVersionTables() noexcept;
 
-} // namespace vanta::mappings::gen
+} // namespace dt::mappings::gen

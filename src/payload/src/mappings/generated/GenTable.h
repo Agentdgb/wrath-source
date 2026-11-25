@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace vanta::mappings::gen {
+namespace dt::mappings::gen {
 
 struct ClassEntry {
     std::uint64_t     canonHash;   // fnv1a64(canonical short name)
@@ -43,4 +43,4 @@ struct VersionTable {
     std::size_t              reverseClassCount;
 };
 
-} // namespace vanta::mappings::gen
+} // namespace dt::mappings::gen

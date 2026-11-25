@@ -1,7 +1,7 @@
 // al_gl.h — thin RAII wrappers around the GL 3 primitives the arraylist
 // pipeline needs. Ports of AlShader / AlQuad / AlFbo from the Java source.
 //
-// Every ctor / method routes GL calls through vanta::al::gl::api(), so the
+// Every ctor / method routes GL calls through dt::al::gl::api(), so the
 // pipeline stays inert if the loader failed (the wrappers just report "not
 // ready" instead of crashing on null function pointers).
 
@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace vanta::al {
+namespace dt::al {
 
 // ── AlShader ─────────────────────────────────────────────────────────────────
 // A linked vertex + fragment program. Uniform locations are looked up lazily
@@ -109,4 +109,4 @@ private:
     int          height_ = 0;
 };
 
-} // namespace vanta::al
+} // namespace dt::al

@@ -3,7 +3,7 @@
 #include <chrono>
 #include <thread>
 
-namespace vanta {
+namespace dt {
 inline std::atomic<unsigned> g_nativeCallbacks{0};
 struct NativeCallback {
     NativeCallback() { g_nativeCallbacks.fetch_add(1, std::memory_order_acq_rel); }

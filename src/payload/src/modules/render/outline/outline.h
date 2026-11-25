@@ -64,7 +64,7 @@
 
 #include <functional>
 
-namespace vanta::modules::outline {
+namespace dt::modules::outline {
 
 struct settings {
     // Line width. Not pixels: a figure fifty metres away wants the same line as
@@ -100,7 +100,7 @@ void install();
 void shutdown();
 
 // One frame. Called from gl_hook's raw-GL pass, before ImGui exists, with
-// VANTA's context current and `composite_fbo` bound. No-op when disabled.
+// DT's context current and `composite_fbo` bound. No-op when disabled.
 void render_background(int display_w, int display_h, unsigned int composite_fbo);
 
-} // namespace vanta::modules::outline
+} // namespace dt::modules::outline

@@ -8,7 +8,7 @@
 #include <windows.h>
 #include <gl/GL.h>
 
-namespace vanta::modules::arraylist {
+namespace dt::modules::arraylist {
 
 namespace {
 
@@ -172,7 +172,7 @@ bool font_pool::ensure()
     }
 
     /* Upload the alpha8 mask as an RGBA texture. RGBA32 lets us keep the
-       same shader path the rest of vanta uses (a single sampled-white glyph
+       same shader path the rest of dt uses (a single sampled-white glyph
        tinted by the vertex colour). */
     unsigned char* pixels = nullptr;
     int tex_w = 0, tex_h = 0;
@@ -262,4 +262,4 @@ void font_pool::destroy()
     built_ = false;
 }
 
-} // namespace vanta::modules::arraylist
+} // namespace dt::modules::arraylist

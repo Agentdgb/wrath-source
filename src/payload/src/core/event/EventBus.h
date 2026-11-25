@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 template <typename T>
 consteval uint64_t typeHash() noexcept {
@@ -51,7 +51,7 @@ public:
 
     template <class E, class Fn>
     [[nodiscard]] std::unique_ptr<IListenerToken> subscribe(Fn&& fn, Priority p = Priority::Normal) {
-        static_assert(std::is_base_of_v<Event, E>, "E must derive from vanta::Event");
+        static_assert(std::is_base_of_v<Event, E>, "E must derive from dt::Event");
         auto& bucket = bucketFor(typeHash<E>());
         std::unique_lock lk(bucket.mx);
 
@@ -91,7 +91,7 @@ public:
     // survived (for Cancellable events, false when a listener cancelled).
     template <class E>
     bool post(E& evt) {
-        static_assert(std::is_base_of_v<Event, E>, "E must derive from vanta::Event");
+        static_assert(std::is_base_of_v<Event, E>, "E must derive from dt::Event");
         auto& bucket = bucketFor(typeHash<E>());
         const auto snapshot = bucket.snapshot.load();
         std::lock_guard dispatch(clientStateMutex());
@@ -107,9 +107,9 @@ public:
             try {
                 s->fn(&evt);
             } catch (const std::exception& ex) {
-                vanta::log::write(vanta::log::Level::Error, "event", std::string("Listener exception: ") + ex.what());
+                dt::log::write(dt::log::Level::Error, "event", std::string("Listener exception: ") + ex.what());
             } catch (...) {
-                vanta::log::write(vanta::log::Level::Error, "event", "Unknown listener exception");
+                dt::log::write(dt::log::Level::Error, "event", "Unknown listener exception");
             }
         }
         if constexpr (std::is_base_of_v<Cancellable, E>) return !evt.cancelled;
@@ -142,4 +142,4 @@ private:
     ankerl::unordered_dense::map<uint64_t, std::unique_ptr<Bucket>> buckets_;
 };
 
-} // namespace vanta
+} // namespace dt

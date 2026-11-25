@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-namespace vanta::modules::antibot {
+namespace dt::modules::antibot {
 // Input time and held movement keys only: entity motion and damage never arm it.
 struct Activity {
     std::uint64_t last_ms = 0;

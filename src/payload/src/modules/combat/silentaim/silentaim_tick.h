@@ -3,7 +3,7 @@
 // Pump + state reset for SilentAim. The implementation lives in
 // silentaim_tick.cpp; the module glue in SilentAimModule.cpp only calls these.
 
-namespace vanta::modules::silentaim_tick {
+namespace dt::modules::silentaim_tick {
 
 // One controller step, throttled internally to the 20 Hz world-tick rate.
 // Called from GameLoopEvent, i.e. the wglSwapBuffers pump — which in MC 1.21
@@ -25,4 +25,4 @@ float observed_lattice_deg();
 // implausible, so an unknown lattice never blocks an action.
 float snap_action_angle(float target, float real, float lattice);
 
-} // namespace vanta::modules::silentaim_tick
+} // namespace dt::modules::silentaim_tick

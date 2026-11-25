@@ -6,7 +6,7 @@
 #include <jni.h>
 #include <string_view>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 // Cached class/method/field lookups keyed by canonical name.
 // Every module and hook site talks to the JVM through this API — never
@@ -47,4 +47,4 @@ void setDoubleFieldCanon(JNIEnv* env, jobject self, std::string_view owner, std:
 void setIntFieldCanon(JNIEnv* env,    jobject self, std::string_view owner, std::string_view field, jint v);
 void setBoolFieldCanon(JNIEnv* env,   jobject self, std::string_view owner, std::string_view field, jboolean v);
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

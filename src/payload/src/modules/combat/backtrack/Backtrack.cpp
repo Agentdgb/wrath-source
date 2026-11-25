@@ -60,11 +60,11 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::backtrack {
+namespace dt::modules::backtrack {
 namespace {
 
-using vanta::jvm::LocalObject;
-using vanta::jvm::LocalClass;
+using dt::jvm::LocalObject;
+using dt::jvm::LocalClass;
 using Millis = std::int64_t;
 
 constexpr float kDeg = 3.14159265358979323846f / 180.f;
@@ -152,7 +152,7 @@ bool clear_error(JNIEnv* env) {
     return true;
 }
 jclass klass(JNIEnv* env, const char* name) {
-    LocalClass local(env, vanta::jvm::findClassAnyLoader(env, name));
+    LocalClass local(env, dt::jvm::findClassAnyLoader(env, name));
     if (clear_error(env) || !local) return nullptr;
     auto result = static_cast<jclass>(env->NewGlobalRef(local.get()));
     if (result) c.classes.push_back(result);
@@ -215,9 +215,9 @@ bool weapon_held(JNIEnv* env, jobject player) {
     if (clear_error(env) || !stack) return false;
     LocalObject item(env, env->CallObjectMethod(stack.get(), c.item));
     if (clear_error(env) || !item) return false;
-    vanta::jvm::LocalString key(env, static_cast<jstring>(env->CallObjectMethod(item.get(), c.item_key)));
+    dt::jvm::LocalString key(env, static_cast<jstring>(env->CallObjectMethod(item.get(), c.item_key)));
     if (clear_error(env) || !key) return false;
-    const std::string name = vanta::jvm::toStdString(env, key.get());
+    const std::string name = dt::jvm::toStdString(env, key.get());
     return name.ends_with("_sword") || name.ends_with("_axe")
         || name.ends_with(".trident") || name.ends_with(".mace");
 }
@@ -230,7 +230,7 @@ bool valid_target(JNIEnv* env, jobject entity, jobject player) {
     if (clear_error(env) || spectator) return false;
     const double distance = distance_squared(position(env, entity), position(env, player));
     if (clear_error(env) || !std::isfinite(distance) || distance > kTrackRangeSq) return false;
-    return !vanta::social::isFriend(env, entity);
+    return !dt::social::isFriend(env, entity);
 }
 
 // ── target lifecycle ─────────────────────────────────────────────────────────
@@ -494,7 +494,7 @@ void pump(JNIEnv* env) {
     if (clear_error(env) || !player || !world) { drop(env, "No world"); return; }
 
     if (!options.enabled) { drop(env, "Disabled"); return; }
-    if (vanta::vgui::bridge::isOverlayVisible()) { drop(env, "GUI open"); return; }
+    if (dt::vgui::bridge::isOverlayVisible()) { drop(env, "GUI open"); return; }
     {
         LocalObject screen(env, env->GetObjectField(mc.get(), c.screen));
         if (clear_error(env) || screen) { drop(env, "Screen open"); return; }
@@ -512,7 +512,7 @@ void pump(JNIEnv* env) {
     DWORD foreground_pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &foreground_pid);
     const bool  focused = foreground_pid == GetCurrentProcessId();
-    if (!focused || vanta::vgui::bridge::isEnabled("Freecam")) { drop(env, "Input unavailable"); return; }
+    if (!focused || dt::vgui::bridge::isEnabled("Freecam")) { drop(env, "Input unavailable"); return; }
     const SHORT lmb     = GetAsyncKeyState(VK_LBUTTON);
     const bool  down    = (lmb & 0x8000) != 0;
     // The press edge, or a press shorter than a frame (bit 0: pressed since
@@ -520,7 +520,7 @@ void pump(JNIEnv* env) {
     // own dispatch counter is a hit as well.
     const bool  clicked = (down && !lmb_was_down) || (lmb & 1) != 0;
     lmb_was_down = down;
-    const auto  attacks = vanta::modules::triggerbot_hook::debug_attack_dispatch_count();
+    const auto  attacks = dt::modules::triggerbot_hook::debug_attack_dispatch_count();
     const bool  bot_hit = attacks != bot_attacks;
     bot_attacks = attacks;
     const bool  pressed = focused && (clicked || bot_hit);
@@ -627,7 +627,7 @@ void pump(JNIEnv* env) {
 void shutdown() {
     std::lock_guard lock(mx);
     options.enabled = false;
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     if (!scope) return;
     JNIEnv* env = scope.get();
     drop(env, "Shutdown");
@@ -712,11 +712,11 @@ void render(int width, int height) {
         g = ghost; opts = options; aimed = ghost_aimed;
     }
     if (width < 2 || height < 2) return;
-    if (vanta::vgui::bridge::isOverlayVisible()) return;
+    if (dt::vgui::bridge::isOverlayVisible()) return;
 
-    namespace cap = vanta::modules::hitfx::capture;
+    namespace cap = dt::modules::hitfx::capture;
     if (!cap::is_installed() && !cap::install()) return;
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     if (!scope) return;
     cap::set_capture_enabled(true);
     cap::capture_now(scope.get());
@@ -832,7 +832,7 @@ public:
             options.border  = border_.value();
             options.fill    = fill_.value();
             if (!options.enabled && !target) return;
-            vanta::jvm::JniScope scope;
+            dt::jvm::JniScope scope;
             if (!scope) return;
             if (!c.tried && !install(scope.get())) return;
             pump(scope.get());
@@ -857,16 +857,16 @@ private:
         std::lock_guard lock(mx);
         options.enabled = true;
         lmb_was_down = true;
-        bot_attacks = vanta::modules::triggerbot_hook::debug_attack_dispatch_count();
+        bot_attacks = dt::modules::triggerbot_hook::debug_attack_dispatch_count();
     }
     void onDisable() override {
         std::lock_guard lock(mx);
         options.enabled = false;
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         if (scope) drop(scope.get(), "Module disabled");
         else { history.clear(); ghost_valid = false; ghost_aimed = false; }
     }
 };
-VANTA_REGISTER_MODULE(Backtrack);
+DT_REGISTER_MODULE(Backtrack);
 
-} // namespace vanta::modules::backtrack
+} // namespace dt::modules::backtrack

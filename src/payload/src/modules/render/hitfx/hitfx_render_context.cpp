@@ -2,7 +2,7 @@
 
 #include <mutex>
 
-namespace vanta::modules::hitfx {
+namespace dt::modules::hitfx {
 
 namespace {
     std::mutex   g_mx;
@@ -71,4 +71,4 @@ bool world_to_screen(const render_frame& f,
     return true;
 }
 
-} // namespace vanta::modules::hitfx
+} // namespace dt::modules::hitfx

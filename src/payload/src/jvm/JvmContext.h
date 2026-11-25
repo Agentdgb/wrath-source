@@ -3,7 +3,7 @@
 #include <jvmti.h>
 #include <atomic>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 struct JvmContext {
     std::atomic<JavaVM*> vm{nullptr};
@@ -13,7 +13,7 @@ struct JvmContext {
 JvmContext& ctx() noexcept;
 
 void init(JavaVM* vm);                        // called from Agent_On*
-void initFromRunningProcess();                // called from VantaInit (LoadLibrary path)
+void initFromRunningProcess();                // called from DtInit (LoadLibrary path)
 void requestCapabilities();                   // requests full hard-required set + optional
 void shutdown();
 
@@ -36,4 +36,4 @@ public:
     explicit operator bool() const noexcept { return env_ != nullptr; }
 };
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

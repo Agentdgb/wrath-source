@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 // NT prototype for NtUnmapViewOfSection (ntdll export, always present).
 using pfnNtUnmapViewOfSection_t =
@@ -159,4 +159,4 @@ inline void executeManualUnloadAndExit(HMODULE self) noexcept {
     runStub();
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

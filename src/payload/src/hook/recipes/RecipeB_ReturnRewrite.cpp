@@ -5,8 +5,8 @@
 // and Damage-arg replacement. See docs/hook_layer.md §Recipe B for the
 // pre-assembled bytecode template and StackMap analysis.
 
-namespace vanta::hook::recipes {
+namespace dt::hook::recipes {
 
 // int applyRecipeB_ReturnRewrite(...) — TODO.
 
-} // namespace vanta::hook::recipes
+} // namespace dt::hook::recipes

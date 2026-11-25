@@ -29,7 +29,7 @@
 #include <functional>
 #include <string>
 
-namespace vanta::modules::notifier {
+namespace dt::modules::notifier {
 
 extern bool g_enabled;
 
@@ -80,4 +80,4 @@ void set_top_left(float x, float y);
     drain time, where the render thread already owns the list. */
 void reset();
 
-} // namespace vanta::modules::notifier
+} // namespace dt::modules::notifier

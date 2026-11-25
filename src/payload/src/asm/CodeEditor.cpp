@@ -2,7 +2,7 @@
 
 #include "asm/Opcodes.h"
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 bool emitRecipeA_PreCancel(
     const ClassView& v,
@@ -52,4 +52,4 @@ bool emitRecipeA_PreCancel(
     return true;
 }
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

@@ -5,7 +5,7 @@
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class Radar : public Module {
 public:
@@ -76,6 +76,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::Radar)
+DT_REGISTER_MODULE(dt::modules::Radar)

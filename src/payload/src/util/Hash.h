@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace vanta {
+namespace dt {
 
 constexpr std::uint64_t kFnvOffset = 0xcbf29ce484222325ull;
 constexpr std::uint64_t kFnvPrime  = 0x100000001b3ull;
@@ -17,4 +17,4 @@ constexpr std::uint64_t operator""_fnv(const char* s, std::size_t n) noexcept {
     return fnv1a64({s, n});
 }
 
-} // namespace vanta
+} // namespace dt

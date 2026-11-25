@@ -1,7 +1,7 @@
 #pragma once
 #include <jni.h>
 
-namespace vanta::modules::shieldbreaker {
+namespace dt::modules::shieldbreaker {
 struct Options {
     bool only_swords = true;
     bool switch_back = true;

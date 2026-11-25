@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
 
-namespace vanta::modules::triggerbot::critical {
+namespace dt::modules::triggerbot::critical {
 inline constexpr float charge_floor(bool on_ground) noexcept {
     return on_ground ? 0.94f : 0.91f;
 }

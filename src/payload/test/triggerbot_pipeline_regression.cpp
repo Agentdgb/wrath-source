@@ -7,7 +7,7 @@
 #include <limits>
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr,"failed line %d: %s\n",__LINE__,#x); return 1; } } while(false)
 int main() {
-    using namespace vanta::modules::triggerbot;
+    using namespace dt::modules::triggerbot;
     RechargeConfirmation recharge;
     recharge.after_attack(0.94f, 0.f, 100);
     CHECK(!recharge.blocked(0.f, 100)); // real reset adds no fixed delay

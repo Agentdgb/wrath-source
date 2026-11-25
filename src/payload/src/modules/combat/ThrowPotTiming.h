@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace vanta::modules::throwpot {
+namespace dt::modules::throwpot {
 
 // Keep a floor between consecutive uses and before restoring after a use.
 // Selecting a slot BEFORE using its potion is valid in the same input tick.
@@ -17,4 +17,4 @@ inline constexpr int throwDelayMs(int cooldown, bool randomized, std::uint32_t r
         ? static_cast<int>(random % static_cast<std::uint32_t>(base / 4 + 1)) : 0);
 }
 
-} // namespace vanta::modules::throwpot
+} // namespace dt::modules::throwpot

@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 
-namespace vanta {
+namespace dt {
 
 void* Arena::alloc(std::size_t bytes, std::size_t align) noexcept {
     std::size_t off  = off_;
@@ -41,4 +41,4 @@ Arena& threadArena() {
     return *tl_arena_;
 }
 
-} // namespace vanta
+} // namespace dt

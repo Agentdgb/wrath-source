@@ -3,7 +3,7 @@
 #include <array>
 #include <jni.h>
 #include <vector>
-namespace vanta::modules::visualports {
+namespace dt::modules::visualports {
 struct SwingConfig {
     bool enabled = false, offhand = true, combatOnly = false;
     int style = 0;
@@ -29,4 +29,4 @@ struct Op {
 }; // -1 = translate, 0/1/2 = rotate X/Y/Z in degrees
 std::vector<Op> swingPose(int style, float progress, int side, float intensity);
 } // namespace math
-} // namespace vanta::modules::visualports
+} // namespace dt::modules::visualports

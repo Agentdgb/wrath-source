@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::blockesp {
+namespace dt::modules::blockesp {
 
 struct settings {
     int   range          = 32;         // scan + render radius, blocks
@@ -80,4 +80,4 @@ void shutdown();
 // covers the currently-loaded world without waiting for ChunkData packets.
 void enqueue_loaded_chunks();
 
-} // namespace vanta::modules::blockesp
+} // namespace dt::modules::blockesp

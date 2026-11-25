@@ -16,7 +16,7 @@
 #endif
 #include <windows.h>
 
-namespace vanta::modules::aimassist::regular {
+namespace dt::modules::aimassist::regular {
 
 namespace {
 
@@ -897,8 +897,8 @@ void workerTick(JNIEnv* env, SharedState& sh, const SettingsView& sv,
     if (env->ExceptionCheck()) env->ExceptionClear();
 
     const bool screenOpen = screen != nullptr
-                         || ::vanta::vgui::bridge::isOverlayVisible()
-                         || ::vanta::vgui::bridge::isEnabled("Freecam");   // rotation is frozen there
+                         || ::dt::vgui::bridge::isOverlayVisible()
+                         || ::dt::vgui::bridge::isEnabled("Freecam");   // rotation is frozen there
     if (screen) env->DeleteLocalRef(screen);
 
     const bool inAimRange = target
@@ -930,7 +930,7 @@ void onDisable(JNIEnv* env, SharedState& sh)
 void renderApply(JNIEnv* env, jobject player, SharedState& sh, const SettingsView& sv)
 {
     const JniCache& c = cache();
-    if (::vanta::vgui::bridge::isOverlayVisible()) {
+    if (::dt::vgui::bridge::isOverlayVisible()) {
         debug::renderStage("panel visible"); return;
     }
 

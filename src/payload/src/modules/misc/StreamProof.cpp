@@ -1,7 +1,7 @@
 #include "core/module/Module.h"
 #include "vgui/vgui.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class StreamProof : public Module {
 public:
@@ -12,14 +12,14 @@ public:
 
 protected:
     void onEnable() override {
-        vanta::vgui::setStreamProof(true);
+        dt::vgui::setStreamProof(true);
     }
 
     void onDisable() override {
-        vanta::vgui::setStreamProof(false);
+        dt::vgui::setStreamProof(false);
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::StreamProof)
+DT_REGISTER_MODULE(dt::modules::StreamProof)

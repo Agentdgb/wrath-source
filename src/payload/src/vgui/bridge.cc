@@ -2,8 +2,8 @@
 
 #include "bridge.h"
 
-#include "vanta/views/hud_editor.hh"
-#include "vanta/views/intro.hh"
+#include "dt/views/hud_editor.hh"
+#include "dt/views/intro.hh"
 #include "modules/render/keybindhud/keybindhud.h"
 #include "modules/combat/triggerbot/focus_visual_draw.h"
 
@@ -31,15 +31,15 @@ void set_freecam_capture(bool on);
 int  take_freecam_wheel();
 }
 
-namespace vanta::vgui::bridge {
+namespace dt::vgui::bridge {
 
 namespace {
 
-::vanta::Module* findReal(const std::string& name) {
-    return ::vanta::ModuleManager::get().find(name);
+::dt::Module* findReal(const std::string& name) {
+    return ::dt::ModuleManager::get().find(name);
 }
 
-::vanta::Setting* findRealSetting(::vanta::Module* m, const std::string& settingName) {
+::dt::Setting* findRealSetting(::dt::Module* m, const std::string& settingName) {
     if (!m) return nullptr;
     for (auto* s : m->settings()) {
         if (s->name() == settingName) return s;
@@ -49,15 +49,15 @@ namespace {
 
 // A display-only setting row. It reads the real preferences directly, so the
 // preview works even with the module disabled and never needs a game entity.
-class FocusPreviewRow final : public ::vanta::c_setting {
+class FocusPreviewRow final : public ::dt::c_setting {
 public:
-    explicit FocusPreviewRow(::vanta::Module* module)
+    explicit FocusPreviewRow(::dt::Module* module)
         : c_setting("Focus Preview"), module_(module) {}
 
     void update(float) override {}
     float height() const override { return 160.f; }
 
-    void render(float x, float y, float w, const ::vanta::frame_input_t&, float alpha) override {
+    void render(float x, float y, float w, const ::dt::frame_input_t&, float alpha) override {
         if (!g_render || !g_render->draw_list() || alpha <= 0.f || w < 60.f) return;
         ImDrawList* dl = g_render->draw_list();
         const auto opacity = [alpha](int a) { return static_cast<int>(a * std::clamp(alpha, 0.f, 1.f)); };
@@ -83,16 +83,16 @@ public:
 
         const auto read_enum = [&](const char* name, int fallback) {
             auto* setting = findRealSetting(module_, name);
-            return setting && setting->type() == ::vanta::SettingType::Enum
-                ? static_cast<::vanta::EnumSetting*>(setting)->index() : fallback;
+            return setting && setting->type() == ::dt::SettingType::Enum
+                ? static_cast<::dt::EnumSetting*>(setting)->index() : fallback;
         };
         const auto read_bool = [&](const char* name, bool fallback) {
             auto* setting = findRealSetting(module_, name);
-            return setting && setting->type() == ::vanta::SettingType::Bool
-                ? static_cast<::vanta::BoolSetting*>(setting)->value() : fallback;
+            return setting && setting->type() == ::dt::SettingType::Bool
+                ? static_cast<::dt::BoolSetting*>(setting)->value() : fallback;
         };
         const int first_marker_vertex = dl->VtxBuffer.Size;
-        ::vanta::modules::triggerbot::focus_visual::draw(
+        ::dt::modules::triggerbot::focus_visual::draw(
             dl, cx - 28.f, y + 48.f, cx + 28.f, y + 148.f, 6.f,
             read_enum("Focus Style", 0), read_enum("Arrow Style", 0),
             read_bool("Focus Arrow", true), read_bool("Focus Distance", true));
@@ -107,28 +107,28 @@ public:
         dl->PopClipRect();
     }
 private:
-    ::vanta::Module* module_;
+    ::dt::Module* module_;
 };
 
 // Secondary setting binds must not be confused with the module's own toggle pill.
-class AuxiliaryKeybindRow final : public ::vanta::c_setting {
+class AuxiliaryKeybindRow final : public ::dt::c_setting {
 public:
-    explicit AuxiliaryKeybindRow(::vanta::KeybindSetting* setting)
+    explicit AuxiliaryKeybindRow(::dt::KeybindSetting* setting)
         : c_setting(std::string(setting->name())), setting_(setting) {}
     ~AuxiliaryKeybindRow() override { stop(); }
     float height() const override { return 34.f; }
     void update(float) override {
         if (!capture_.active()) return;
-        if (!visible() || !isOverlayVisible() || !::vanta::c_module::auxiliary_binding_active()) { stop(); return; }
+        if (!visible() || !isOverlayVisible() || !::dt::c_module::auxiliary_binding_active()) { stop(); return; }
         if (auto result = capture_.poll(snapshot(), guiToggleKey())) {
             if (!result->cancelled) {
                 setting_->setVK(result->virtualKey);
-                if (!::vanta::ConfigManager::get().isLoading()) ::vanta::ConfigManager::get().markDirty();
+                if (!::dt::ConfigManager::get().isLoading()) ::dt::ConfigManager::get().markDirty();
             }
             stop();
         }
     }
-    void render(float x,float y,float width,const ::vanta::frame_input_t& input,float alpha) override {
+    void render(float x,float y,float width,const ::dt::frame_input_t& input,float alpha) override {
         if (!g_render || !g_render->draw_list() || alpha<=0) return;
         const std::string label = capture_.active() ? "Press a key" : keyLabel(setting_->vk());
         const float pillWidth = std::max(78.f, ImGui::CalcTextSize(label.c_str()).x+16.f);
@@ -136,10 +136,10 @@ public:
         if (input.hovered(pillX,y+3,pillWidth,23) && input.m_left_clicked && alpha>0.35f) {
             if (capture_.active()) stop();
             else {
-                ::vanta::c_module::cancel_binding();
+                ::dt::c_module::cancel_binding();
                 if (active_ && active_!=this) active_->stop();
                 capture_.start(snapshot()); active_=this;
-                ::vanta::c_module::set_auxiliary_binding(true);
+                ::dt::c_module::set_auxiliary_binding(true);
             }
         }
         auto* draw=g_render->draw_list();
@@ -151,8 +151,8 @@ public:
         draw->AddText(ImGui::GetFont(),11,ImVec2(pillX+8,y+8),IM_COL32(240,240,248,opacity),label.c_str());
     }
 private:
-    static ::vanta::KeyCaptureState::Snapshot snapshot() {
-        ::vanta::KeyCaptureState::Snapshot keys{};
+    static ::dt::KeyCaptureState::Snapshot snapshot() {
+        ::dt::KeyCaptureState::Snapshot keys{};
         for(int key=1;key<256;++key) keys[key]=(GetAsyncKeyState(key)&0x8000)!=0;
         return keys;
     }
@@ -169,26 +169,26 @@ private:
     }
     void stop() {
         capture_.cancel();
-        if (active_==this) { active_=nullptr;::vanta::c_module::set_auxiliary_binding(false); }
+        if (active_==this) { active_=nullptr;::dt::c_module::set_auxiliary_binding(false); }
     }
-    ::vanta::KeybindSetting* setting_;
-    ::vanta::KeyCaptureState capture_;
+    ::dt::KeybindSetting* setting_;
+    ::dt::KeyCaptureState capture_;
     static inline AuxiliaryKeybindRow* active_=nullptr;
 };
 
 // Map our Category enum onto the GUI's category strings (they already match
 // after the rename, but going through a function keeps the coupling explicit).
-std::string categoryName(::vanta::Category c) {
-    return std::string(::vanta::toString(c));
+std::string categoryName(::dt::Category c) {
+    return std::string(::dt::toString(c));
 }
 
 } // namespace
 
-std::vector<std::shared_ptr<::vanta::c_module>> buildCardsFromRealModules() {
-    std::vector<std::shared_ptr<::vanta::c_module>> cards;
+std::vector<std::shared_ptr<::dt::c_module>> buildCardsFromRealModules() {
+    std::vector<std::shared_ptr<::dt::c_module>> cards;
 
-    for (const auto& real : ::vanta::ModuleManager::get().all()) {
-        auto card = std::make_shared<::vanta::c_module>(
+    for (const auto& real : ::dt::ModuleManager::get().all()) {
+        auto card = std::make_shared<::dt::c_module>(
             std::string(real->name()),
             std::string(real->description()),
             categoryName(real->category()));
@@ -210,30 +210,30 @@ std::vector<std::shared_ptr<::vanta::c_module>> buildCardsFromRealModules() {
             const std::size_t before = card->settings().size();
 
             switch (s->type()) {
-            case ::vanta::SettingType::Bool: {
-                auto* b = static_cast<::vanta::BoolSetting*>(s);
-                card->add_setting(std::make_shared<::vanta::c_boolean_setting>(sname, b->value()));
+            case ::dt::SettingType::Bool: {
+                auto* b = static_cast<::dt::BoolSetting*>(s);
+                card->add_setting(std::make_shared<::dt::c_boolean_setting>(sname, b->value()));
                 break;
             }
-            case ::vanta::SettingType::Int: {
-                auto* i = static_cast<::vanta::IntSetting*>(s);
-                card->add_setting(std::make_shared<::vanta::c_slider_setting>(
+            case ::dt::SettingType::Int: {
+                auto* i = static_cast<::dt::IntSetting*>(s);
+                card->add_setting(std::make_shared<::dt::c_slider_setting>(
                     sname, static_cast<double>(i->min()), static_cast<double>(i->max()),
                     static_cast<double>(i->value()), 1.0, ""));
                 break;
             }
-            case ::vanta::SettingType::Float: {
-                auto* f = static_cast<::vanta::FloatSetting*>(s);
+            case ::dt::SettingType::Float: {
+                auto* f = static_cast<::dt::FloatSetting*>(s);
                 const double range = static_cast<double>(f->max()) - static_cast<double>(f->min());
                 const double fallback = range > 20.0 ? 1.0 : (range > 4.0 ? 0.1 : 0.05);
                 const double step = std::isfinite(f->step()) && f->step()>0 ? f->step() : fallback;
-                card->add_setting(std::make_shared<::vanta::c_slider_setting>(
+                card->add_setting(std::make_shared<::dt::c_slider_setting>(
                     sname, static_cast<double>(f->min()), static_cast<double>(f->max()),
                     static_cast<double>(f->value()), step, ""));
                 break;
             }
-            case ::vanta::SettingType::Enum: {
-                auto* e = static_cast<::vanta::EnumSetting*>(s);
+            case ::dt::SettingType::Enum: {
+                auto* e = static_cast<::dt::EnumSetting*>(s);
                 std::vector<std::string> modes;
                 // EnumSetting stores options internally; expose the current one
                 // plus the full list via its public surface.
@@ -246,26 +246,26 @@ std::vector<std::shared_ptr<::vanta::c_module>> buildCardsFromRealModules() {
                     if (idx > 32) break;   // guard
                 }
                 if (modes.empty()) modes.emplace_back(std::string(e->current()));
-                card->add_setting(std::make_shared<::vanta::c_mode_setting>(
+                card->add_setting(std::make_shared<::dt::c_mode_setting>(
                     sname, std::move(modes), e->index()));
                 break;
             }
-            case ::vanta::SettingType::Keybind:
-                if (s != &real->keybind()) card->add_setting(std::make_shared<AuxiliaryKeybindRow>(static_cast<::vanta::KeybindSetting*>(s)));
+            case ::dt::SettingType::Keybind:
+                if (s != &real->keybind()) card->add_setting(std::make_shared<AuxiliaryKeybindRow>(static_cast<::dt::KeybindSetting*>(s)));
                 break;
-            case ::vanta::SettingType::Color: {
-                auto* c = static_cast<::vanta::ColorSetting*>(s);
+            case ::dt::SettingType::Color: {
+                auto* c = static_cast<::dt::ColorSetting*>(s);
                 const auto v = c->value();
-                card->add_setting(std::make_shared<::vanta::c_color_setting>(
+                card->add_setting(std::make_shared<::dt::c_color_setting>(
                     sname, v.r, v.g, v.b, v.a));
                 break;
             }
-            case ::vanta::SettingType::String:
+            case ::dt::SettingType::String:
                 // no GUI row type for this yet; stays config-file only
                 break;
-            case ::vanta::SettingType::SlotMap: {
-                auto* sm = static_cast<::vanta::SlotMapSetting*>(s);
-                auto row = std::make_shared<::vanta::c_slot_map_setting>(sname, sm->options());
+            case ::dt::SettingType::SlotMap: {
+                auto* sm = static_cast<::dt::SlotMapSetting*>(s);
+                auto row = std::make_shared<::dt::c_slot_map_setting>(sname, sm->options());
                 // Both providers read the real setting every frame, so the
                 // strip has no copy of its own to fall out of date -- ticking
                 // an item kind off upstream empties its squares immediately.
@@ -274,20 +274,20 @@ std::vector<std::shared_ptr<::vanta::c_module>> buildCardsFromRealModules() {
                 card->add_setting(std::move(row));
                 break;
             }
-            case ::vanta::SettingType::Range: {
-                auto* r = static_cast<::vanta::RangeSetting*>(s);
+            case ::dt::SettingType::Range: {
+                auto* r = static_cast<::dt::RangeSetting*>(s);
                 const std::string suffix = sname.find("Delay") != std::string::npos
                     ? " ms" : "";
-                card->add_setting(std::make_shared<::vanta::c_range_slider_setting>(
+                card->add_setting(std::make_shared<::dt::c_range_slider_setting>(
                     sname,
                     static_cast<double>(r->absoluteMin()), static_cast<double>(r->absoluteMax()),
                     static_cast<double>(r->min()),        static_cast<double>(r->max()),
                     /*step=*/1.0, suffix));
                 break;
             }
-            case ::vanta::SettingType::BlockSet: {
-                auto* bs = static_cast<::vanta::BlockSetSetting*>(s);
-                card->add_setting(std::make_shared<::vanta::c_block_picker_setting>(
+            case ::dt::SettingType::BlockSet: {
+                auto* bs = static_cast<::dt::BlockSetSetting*>(s);
+                card->add_setting(std::make_shared<::dt::c_block_picker_setting>(
                     sname, bs->value()));
                 break;
             }
@@ -307,8 +307,8 @@ std::vector<std::shared_ptr<::vanta::c_module>> buildCardsFromRealModules() {
             }
 
             if (real->name() == "Hit Assist" && sname == "Preview Mode" &&
-                s->type() == ::vanta::SettingType::Bool) {
-                auto* enabled = static_cast<::vanta::BoolSetting*>(s);
+                s->type() == ::dt::SettingType::Bool) {
+                auto* enabled = static_cast<::dt::BoolSetting*>(s);
                 auto preview = std::make_shared<FocusPreviewRow>(real.get());
                 // Keep the row nested under ShowFocusHighlight even when the
                 // saved preview preference remains on while its parent hides.
@@ -337,35 +337,35 @@ void applyNumeric(const std::string& moduleName, const std::string& settingName,
     auto* s = findRealSetting(m, settingName);
     if (!s) return;
     bool changed = false;
-    if (s->type() == ::vanta::SettingType::Int) {
-        auto* is = static_cast<::vanta::IntSetting*>(s);
+    if (s->type() == ::dt::SettingType::Int) {
+        auto* is = static_cast<::dt::IntSetting*>(s);
         int iv = static_cast<int>(value);
         if (is->value() != iv) {
             is->set(iv);
             changed = true;
         }
-    } else if (s->type() == ::vanta::SettingType::Float) {
-        auto* fs = static_cast<::vanta::FloatSetting*>(s);
+    } else if (s->type() == ::dt::SettingType::Float) {
+        auto* fs = static_cast<::dt::FloatSetting*>(s);
         float fv = static_cast<float>(value);
         if (std::fabs(fs->value() - fv) > 0.0001f) {
             fs->set(fv);
             changed = true;
         }
     }
-    if (changed && !::vanta::ConfigManager::get().isLoading()) {
-        ::vanta::ConfigManager::get().markDirty();
+    if (changed && !::dt::ConfigManager::get().isLoading()) {
+        ::dt::ConfigManager::get().markDirty();
     }
 }
 
 void applyBool(const std::string& moduleName, const std::string& settingName, bool value) {
     auto* m = findReal(moduleName);
     auto* s = findRealSetting(m, settingName);
-    if (s && s->type() == ::vanta::SettingType::Bool) {
-        auto* bs = static_cast<::vanta::BoolSetting*>(s);
+    if (s && s->type() == ::dt::SettingType::Bool) {
+        auto* bs = static_cast<::dt::BoolSetting*>(s);
         if (bs->value() != value) {
             bs->set(value);
-            if (!::vanta::ConfigManager::get().isLoading()) {
-                ::vanta::ConfigManager::get().markDirty();
+            if (!::dt::ConfigManager::get().isLoading()) {
+                ::dt::ConfigManager::get().markDirty();
             }
         }
     }
@@ -375,12 +375,12 @@ void applyRange(const std::string& moduleName, const std::string& settingName,
                 int minValue, int maxValue) {
     auto* m = findReal(moduleName);
     auto* s = findRealSetting(m, settingName);
-    if (s && s->type() == ::vanta::SettingType::Range) {
-        auto* rs = static_cast<::vanta::RangeSetting*>(s);
+    if (s && s->type() == ::dt::SettingType::Range) {
+        auto* rs = static_cast<::dt::RangeSetting*>(s);
         if (rs->min() != minValue || rs->max() != maxValue) {
             rs->set(minValue, maxValue);
-            if (!::vanta::ConfigManager::get().isLoading()) {
-                ::vanta::ConfigManager::get().markDirty();
+            if (!::dt::ConfigManager::get().isLoading()) {
+                ::dt::ConfigManager::get().markDirty();
             }
         }
     }
@@ -390,13 +390,13 @@ void applyColor(const std::string& moduleName, const std::string& settingName,
                 float r, float g, float b, float a) {
     auto* m = findReal(moduleName);
     auto* s = findRealSetting(m, settingName);
-    if (s && s->type() == ::vanta::SettingType::Color) {
-        auto* cs = static_cast<::vanta::ColorSetting*>(s);
+    if (s && s->type() == ::dt::SettingType::Color) {
+        auto* cs = static_cast<::dt::ColorSetting*>(s);
         auto old = cs->value();
         if (old.r != r || old.g != g || old.b != b || old.a != a) {
-            cs->set(::vanta::RGBA{ r, g, b, a });
-            if (!::vanta::ConfigManager::get().isLoading()) {
-                ::vanta::ConfigManager::get().markDirty();
+            cs->set(::dt::RGBA{ r, g, b, a });
+            if (!::dt::ConfigManager::get().isLoading()) {
+                ::dt::ConfigManager::get().markDirty();
             }
         }
     }
@@ -405,16 +405,16 @@ void applyColor(const std::string& moduleName, const std::string& settingName,
 void applyMode(const std::string& moduleName, const std::string& settingName, const std::string& selected) {
     auto* m = findReal(moduleName);
     auto* s = findRealSetting(m, settingName);
-    if (s && s->type() == ::vanta::SettingType::Enum) {
-        auto* e = static_cast<::vanta::EnumSetting*>(s);
+    if (s && s->type() == ::dt::SettingType::Enum) {
+        auto* e = static_cast<::dt::EnumSetting*>(s);
         if (e->current() != selected) {
             for (int idx = 0; idx < 64; ++idx) {
                 const int saved = e->index();
                 e->set(idx);
                 if (e->index() != idx) { e->set(saved); break; }
                 if (e->current() == selected) {
-                    if (!::vanta::ConfigManager::get().isLoading()) {
-                        ::vanta::ConfigManager::get().markDirty();
+                    if (!::dt::ConfigManager::get().isLoading()) {
+                        ::dt::ConfigManager::get().markDirty();
                     }
                     return;
                 }
@@ -427,10 +427,10 @@ void applyMode(const std::string& moduleName, const std::string& settingName, co
 void cycleSlot(const std::string& moduleName, const std::string& settingName, int slotIndex) {
     auto* m = findReal(moduleName);
     auto* s = findRealSetting(m, settingName);
-    if (s && s->type() == ::vanta::SettingType::SlotMap) {
-        static_cast<::vanta::SlotMapSetting*>(s)->cycleSlot(slotIndex);
-        if (!::vanta::ConfigManager::get().isLoading()) {
-            ::vanta::ConfigManager::get().markDirty();
+    if (s && s->type() == ::dt::SettingType::SlotMap) {
+        static_cast<::dt::SlotMapSetting*>(s)->cycleSlot(slotIndex);
+        if (!::dt::ConfigManager::get().isLoading()) {
+            ::dt::ConfigManager::get().markDirty();
         }
     }
 }
@@ -439,8 +439,8 @@ void applyKeybind(const std::string& moduleName, int virtualKey) {
     if (auto* m = findReal(moduleName)) {
         if (m->keybind().vk() != virtualKey) {
             m->keybind().setVK(virtualKey);
-            if (!::vanta::ConfigManager::get().isLoading()) {
-                ::vanta::ConfigManager::get().markDirty();
+            if (!::dt::ConfigManager::get().isLoading()) {
+                ::dt::ConfigManager::get().markDirty();
             }
         }
     }
@@ -450,10 +450,10 @@ void applyBlockSet(const std::string& moduleName, const std::string& settingName
                    std::vector<std::string> ids) {
     auto* m = findReal(moduleName);
     auto* s = findRealSetting(m, settingName);
-    if (s && s->type() == ::vanta::SettingType::BlockSet) {
-        static_cast<::vanta::BlockSetSetting*>(s)->set(std::move(ids));
-        if (!::vanta::ConfigManager::get().isLoading()) {
-            ::vanta::ConfigManager::get().markDirty();
+    if (s && s->type() == ::dt::SettingType::BlockSet) {
+        static_cast<::dt::BlockSetSetting*>(s)->set(std::move(ids));
+        if (!::dt::ConfigManager::get().isLoading()) {
+            ::dt::ConfigManager::get().markDirty();
         }
     }
 }
@@ -485,8 +485,8 @@ void applyBindMode(const std::string& name,int mode) {
         if (static_cast<int>(old) != mode) {
             m->keybind().setMode(static_cast<BindMode>(mode));
             if(old==BindMode::Always || mode==1) m->setEnabled(false);
-            if (!::vanta::ConfigManager::get().isLoading()) {
-                ::vanta::ConfigManager::get().markDirty();
+            if (!::dt::ConfigManager::get().isLoading()) {
+                ::dt::ConfigManager::get().markDirty();
             }
         }
     }
@@ -497,20 +497,20 @@ bool isEnabled(const std::string& moduleName) {
 }
 
 std::string moduleDescription(const std::string& moduleName) {
-    std::lock_guard state(::vanta::clientStateMutex());
+    std::lock_guard state(::dt::clientStateMutex());
     auto* m = findReal(moduleName);
     return m ? std::string(m->description()) : std::string{};
 }
 bool isHudEditorActive() {
-    return ::vanta::hud_editor::is_active();
+    return ::dt::hud_editor::is_active();
 }
 
 bool isGlassEnabled() {
-    return ::vanta::theme::glass_enabled;
+    return ::dt::theme::glass_enabled;
 }
 
 void clientAccent(float& r, float& g, float& b, float& a) {
-    const hue::c_color accent = ::vanta::theme::accent_violet;
+    const hue::c_color accent = ::dt::theme::accent_violet;
 
     r = static_cast<float>(accent.r) / 255.f;
     g = static_cast<float>(accent.g) / 255.f;
@@ -519,8 +519,8 @@ void clientAccent(float& r, float& g, float& b, float& a) {
 }
 
 unsigned long long iconTexture(const std::string& name, int pixel_size) {
-    if (!::vanta::g_icons || pixel_size < 1) return 0;
-    return static_cast<unsigned long long>(::vanta::g_icons->get(name, pixel_size));
+    if (!::dt::g_icons || pixel_size < 1) return 0;
+    return static_cast<unsigned long long>(::dt::g_icons->get(name, pixel_size));
 }
 
 bool isOverlayVisible() {
@@ -528,18 +528,18 @@ bool isOverlayVisible() {
     // render thread and callers read it from the game thread; that race is
     // benign (worst case a module stands down or resumes one frame late) and
     // is the same access pattern core::cursor_guard already relies on.
-    return ::vanta::g_app != nullptr && ::vanta::g_app->visible();
+    return ::dt::g_app != nullptr && ::dt::g_app->visible();
 }
 
 bool panelRect(float& x, float& y, float& w, float& h) {
-    if (!::vanta::g_app || !::vanta::g_app->visible()) return false;
+    if (!::dt::g_app || !::dt::g_app->visible()) return false;
 
-    const float s = ::vanta::g_app->panel_scale();
+    const float s = ::dt::g_app->panel_scale();
 
-    x = ::vanta::g_app->panel_x();
-    y = ::vanta::g_app->panel_y();
-    w = static_cast<float>(::vanta::c_app::k_window_width)  * s;
-    h = static_cast<float>(::vanta::c_app::k_window_height) * s;
+    x = ::dt::g_app->panel_x();
+    y = ::dt::g_app->panel_y();
+    w = static_cast<float>(::dt::c_app::k_window_width)  * s;
+    h = static_cast<float>(::dt::c_app::k_window_height) * s;
     return true;
 }
 
@@ -591,16 +591,16 @@ float consumePendingScale() {
 }
 
 int guiToggleKey() {
-    return ::vanta::KeybindManager::get().guiToggleKey();
+    return ::dt::KeybindManager::get().guiToggleKey();
 }
 
 void setGuiToggleKey(int vk) {
     if (vk <= 0 || vk >= 256) return;
-    auto& km = ::vanta::KeybindManager::get();
+    auto& km = ::dt::KeybindManager::get();
     km.setGuiToggleKey(vk);
-    ::vanta::vgui::setHotkeys(vk, km.panicKey());
-    if (!::vanta::ConfigManager::get().isLoading()) {
-        ::vanta::ConfigManager::get().markDirty();
+    ::dt::vgui::setHotkeys(vk, km.panicKey());
+    if (!::dt::ConfigManager::get().isLoading()) {
+        ::dt::ConfigManager::get().markDirty();
     }
 }
 
@@ -646,83 +646,83 @@ bool isMenuKeyBinding() {
 
 void saveGuiState(nlohmann::json& j) {
     auto& themeObj = j["#theme"] = nlohmann::json::object();
-    themeObj["glass"] = ::vanta::theme::glass_enabled;
-    themeObj["keybinds_hud"] = ::vanta::modules::keybindhud::enabled;
-    themeObj["preset"] = ::vanta::theme::current_preset;
+    themeObj["glass"] = ::dt::theme::glass_enabled;
+    themeObj["keybinds_hud"] = ::dt::modules::keybindhud::enabled;
+    themeObj["preset"] = ::dt::theme::current_preset;
 
-    const auto& acc = ::vanta::theme::accent_violet;
+    const auto& acc = ::dt::theme::accent_violet;
     themeObj["accent"] = { {"r", acc.r}, {"g", acc.g}, {"b", acc.b}, {"a", acc.a} };
 
-    const auto& sbg = ::vanta::theme::bg_sidebar;
+    const auto& sbg = ::dt::theme::bg_sidebar;
     themeObj["sidebar"] = { {"r", sbg.r}, {"g", sbg.g}, {"b", sbg.b}, {"a", sbg.a} };
 
-    const auto& srch = ::vanta::theme::bg_search;
+    const auto& srch = ::dt::theme::bg_search;
     themeObj["search"] = { {"r", srch.r}, {"g", srch.g}, {"b", srch.b}, {"a", srch.a} };
 
-    const auto& intro = ::vanta::theme::intro_colour;
+    const auto& intro = ::dt::theme::intro_colour;
     themeObj["intro"] = { {"r", intro.r}, {"g", intro.g}, {"b", intro.b}, {"a", intro.a} };
 
-    const auto& win = ::vanta::theme::bg_window;
+    const auto& win = ::dt::theme::bg_window;
     themeObj["window"] = { {"r", win.r}, {"g", win.g}, {"b", win.b}, {"a", win.a} };
 
-    const float scale = ::vanta::g_app
-        ? ::vanta::g_app->m_user_scale
+    const float scale = ::dt::g_app
+        ? ::dt::g_app->m_user_scale
         : (s_pendingScale > 0.f ? s_pendingScale : 1.15f);
     j["#client"] = {
         {"scale", scale},
-        {"toggle_vk", ::vanta::KeybindManager::get().guiToggleKey()},
-        {"intro_mode", ::vanta::intro::mode()},
-        {"intro_custom_name", ::vanta::intro::custom_name()},
-        {"intro_custom_wordmark", ::vanta::intro::custom_wordmark()}
+        {"toggle_vk", ::dt::KeybindManager::get().guiToggleKey()},
+        {"intro_mode", ::dt::intro::mode()},
+        {"intro_custom_name", ::dt::intro::custom_name()},
+        {"intro_custom_wordmark", ::dt::intro::custom_wordmark()}
     };
 
-    ::vanta::hud_editor::save_positions(j["#hud"]);
+    ::dt::hud_editor::save_positions(j["#hud"]);
 }
 
 void loadGuiState(const nlohmann::json& j) {
     // A profile without intro preferences must not inherit the previous one.
-    ::vanta::intro::set_mode(0);
-    ::vanta::intro::set_custom_name("");
-    ::vanta::intro::set_custom_wordmark("");
+    ::dt::intro::set_mode(0);
+    ::dt::intro::set_custom_name("");
+    ::dt::intro::set_custom_wordmark("");
     if (j.contains("#theme") && j["#theme"].is_object()) {
         const auto& t = j["#theme"];
         if (t.contains("preset") && t["preset"].is_string()) {
-            ::vanta::theme::apply_preset_by_id(t["preset"].get<std::string>());
+            ::dt::theme::apply_preset_by_id(t["preset"].get<std::string>());
         }
         if (t.contains("glass") && t["glass"].is_boolean()) {
-            ::vanta::theme::glass_enabled = t["glass"].get<bool>();
+            ::dt::theme::glass_enabled = t["glass"].get<bool>();
         }
         if (t.contains("keybinds_hud") && t["keybinds_hud"].is_boolean()) {
-            ::vanta::modules::keybindhud::enabled = t["keybinds_hud"].get<bool>();
+            ::dt::modules::keybindhud::enabled = t["keybinds_hud"].get<bool>();
         }
         if (t.contains("accent") && t["accent"].is_object()) {
             const auto& a = t["accent"];
-            ::vanta::theme::set_accent(hue::c_color(
+            ::dt::theme::set_accent(hue::c_color(
                 a.value("r", 155), a.value("g", 75), a.value("b", 220), a.value("a", 255)
             ));
         }
         if (t.contains("sidebar") && t["sidebar"].is_object()) {
             const auto& s = t["sidebar"];
-            ::vanta::theme::bg_sidebar = hue::c_color(
+            ::dt::theme::bg_sidebar = hue::c_color(
                 s.value("r", 12), s.value("g", 12), s.value("b", 14), s.value("a", 255)
             );
         }
         if (t.contains("search") && t["search"].is_object()) {
             const auto& s = t["search"];
-            ::vanta::theme::bg_search = hue::c_color(
+            ::dt::theme::bg_search = hue::c_color(
                 s.value("r", 18), s.value("g", 18), s.value("b", 22), s.value("a", 255)
             );
         }
         if (t.contains("intro") && t["intro"].is_object()) {
             const auto& i = t["intro"];
-            ::vanta::theme::intro_colour = hue::c_color(
+            ::dt::theme::intro_colour = hue::c_color(
                 std::clamp(i.value("r", 154), 0, 255), std::clamp(i.value("g", 71), 0, 255),
                 std::clamp(i.value("b", 245), 0, 255), std::clamp(i.value("a", 255), 40, 255)
             );
         }
         if (t.contains("window") && t["window"].is_object()) {
             const auto& w = t["window"];
-            ::vanta::theme::bg_window = hue::c_color(
+            ::dt::theme::bg_window = hue::c_color(
                 w.value("r", 15), w.value("g", 15), w.value("b", 18), w.value("a", 255)
             );
         }
@@ -732,48 +732,48 @@ void loadGuiState(const nlohmann::json& j) {
         const auto& c = j["#client"];
         if (c.contains("intro_mode") && c["intro_mode"].is_number_integer() &&
             c["intro_mode"] >= 0 && c["intro_mode"] <= 2) {
-            ::vanta::intro::set_mode(c["intro_mode"].get<int>());
+            ::dt::intro::set_mode(c["intro_mode"].get<int>());
         }
         if (c.contains("intro_custom_name") && c["intro_custom_name"].is_string()) {
-            ::vanta::intro::set_custom_name(c["intro_custom_name"].get<std::string>());
+            ::dt::intro::set_custom_name(c["intro_custom_name"].get<std::string>());
         }
         if (c.contains("intro_custom_wordmark") && c["intro_custom_wordmark"].is_string()) {
-            ::vanta::intro::set_custom_wordmark(c["intro_custom_wordmark"].get<std::string>());
+            ::dt::intro::set_custom_wordmark(c["intro_custom_wordmark"].get<std::string>());
         }
         if (c.contains("scale") && c["scale"].is_number()) {
             float s = c["scale"].get<float>();
             if (s >= 0.5f && s <= 2.5f) {
                 s_pendingScale = s;
-                if (::vanta::g_app) {
-                    ::vanta::g_app->m_user_scale = s;
+                if (::dt::g_app) {
+                    ::dt::g_app->m_user_scale = s;
                 }
             }
         }
         if (c.contains("toggle_vk") && c["toggle_vk"].is_number_integer()) {
             int vk = c["toggle_vk"].get<int>();
             if (vk > 0 && vk < 256) {
-                auto& km = ::vanta::KeybindManager::get();
+                auto& km = ::dt::KeybindManager::get();
                 km.setGuiToggleKey(vk);
-                ::vanta::vgui::setHotkeys(vk, km.panicKey());
+                ::dt::vgui::setHotkeys(vk, km.panicKey());
             }
         }
     }
 
     if (j.contains("#hud") && j["#hud"].is_object()) {
-        ::vanta::hud_editor::load_positions(j["#hud"]);
+        ::dt::hud_editor::load_positions(j["#hud"]);
     }
 }
 
 void switchProfile(const std::string& profile) {
-    auto& cm = ::vanta::ConfigManager::get();
+    auto& cm = ::dt::ConfigManager::get();
     cm.loadProfile(profile);
-    if (::vanta::g_app) {
-        ::vanta::g_app->reload_module_cards();
+    if (::dt::g_app) {
+        ::dt::g_app->reload_module_cards();
     }
 }
 
 const std::string& currentProfile() {
-    return ::vanta::ConfigManager::get().currentProfile();
+    return ::dt::ConfigManager::get().currentProfile();
 }
 
-} // namespace vanta::vgui::bridge
+} // namespace dt::vgui::bridge

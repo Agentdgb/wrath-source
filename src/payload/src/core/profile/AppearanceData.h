@@ -6,7 +6,7 @@
 #include <nlohmann/json.hpp>
 #include "PlayerAppearance.h"
 
-namespace vanta::appearance {
+namespace dt::appearance {
 inline std::string compactUuid(std::string_view value) {
     std::string result;
     for (unsigned char ch : value) {
@@ -103,4 +103,4 @@ inline std::vector<NameRecord> parseNameHistory(const nlohmann::json& json) {
     }
     return result;
 }
-} // namespace vanta::appearance
+} // namespace dt::appearance

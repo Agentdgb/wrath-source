@@ -1,7 +1,7 @@
 #include "asm/Opcodes.h"
 #include "hook/HookRow.h"
 
-namespace vanta::hook {
+namespace dt::hook {
 
 static HookRow buildKeyPressSite() {
     return HookRow{
@@ -12,11 +12,11 @@ static HookRow buildKeyPressSite() {
         },
         Recipe::A_PreCancel,
         HookLoad::Installed,
-        vanta::asm_::OP_RETURN,
+        dt::asm_::OP_RETURN,
         "onKeyPress",
         "(IIII)I",
     };
 }
-VANTA_REGISTER_HOOK_SITE(buildKeyPressSite);
+DT_REGISTER_HOOK_SITE(buildKeyPressSite);
 
-} // namespace vanta::hook
+} // namespace dt::hook

@@ -1,6 +1,6 @@
 #include "asm/StackMapRebuilder.h"
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 std::vector<std::uint8_t> emitRecipeAStackMap(const std::uint8_t* originalStackMap, std::size_t originalLen) {
     std::vector<std::uint8_t> out;
@@ -104,4 +104,4 @@ std::vector<std::uint8_t> emitRecipeAStackMap(const std::uint8_t* originalStackM
     return out;
 }
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

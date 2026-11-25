@@ -1,6 +1,6 @@
 #include "mappings/Bootstrap.h"
 
-namespace vanta::mappings {
+namespace dt::mappings {
 
 namespace {
 
@@ -17,4 +17,4 @@ std::span<const char* const> bootstrapSharedConstantsCandidates() {
             sizeof(kSharedConstantsCandidates) / sizeof(*kSharedConstantsCandidates)};
 }
 
-} // namespace vanta::mappings
+} // namespace dt::mappings

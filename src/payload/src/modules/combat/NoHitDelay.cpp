@@ -31,7 +31,7 @@
 #include <sdk/mappings/mappings.hpp>
 #include <jni.h>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -56,7 +56,7 @@ void build_cache(JNIEnv* env)
     if (g_c.tried) return;
     g_c.tried = true;
 
-    jclass local = vanta::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return; }
     g_c.mc_class = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -93,7 +93,7 @@ public:
 private:
     void onDisable() override { releaseCache(); }
     static void releaseCache() {
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         if (!scope) return;
         if (g_c.mc_class) scope.get()->DeleteGlobalRef(g_c.mc_class);
         g_c = {};
@@ -108,7 +108,7 @@ private:
         accum -= TICK_MS;
         if (accum > TICK_MS) accum = TICK_MS;
 
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
@@ -134,6 +134,6 @@ private:
     }
 };
 
-VANTA_REGISTER_MODULE(NoHitDelay);
+DT_REGISTER_MODULE(NoHitDelay);
 
-} // namespace vanta::modules
+} // namespace dt::modules

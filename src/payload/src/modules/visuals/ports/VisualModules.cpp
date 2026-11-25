@@ -1,6 +1,6 @@
 #include "VisualPorts.h"
 #include "core/module/Module.h"
-namespace vanta::modules::visualports {
+namespace dt::modules::visualports {
 SwingConfig swing;
 class SwingAnimation final : public Module {
     EnumSetting style_{this, "Style", {"Slash", "Chop", "Hook", "Spin", "Double Tap", "Push"}, 0};
@@ -26,5 +26,5 @@ class SwingAnimation final : public Module {
     }
     void onDisable() override { swing.enabled = false; }
 };
-} // namespace vanta::modules::visualports
-VANTA_REGISTER_MODULE(vanta::modules::visualports::SwingAnimation)
+} // namespace dt::modules::visualports
+DT_REGISTER_MODULE(dt::modules::visualports::SwingAnimation)

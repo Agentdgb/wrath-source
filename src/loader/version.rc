@@ -1,8 +1,10 @@
 #include <winver.h>
 
+1 ICON "../shared/display_tuner.ico"
+
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,4,1,108
- PRODUCTVERSION 2,4,1,108
+ FILEVERSION 1,4,2,0
+ PRODUCTVERSION 1,4,2,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS VOS_NT_WINDOWS32
@@ -14,13 +16,13 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "Display Solutions Software"
-            VALUE "FileDescription", "Display Color & Tuner Background Service"
-            VALUE "FileVersion", "2.4.1.108"
-            VALUE "InternalName", "DisplayTunerService.exe"
-            VALUE "LegalCopyright", "Copyright (C) Display Solutions. All rights reserved."
-            VALUE "OriginalFilename", "DisplayTunerService.exe"
-            VALUE "ProductName", "Display Tuner Utility"
-            VALUE "ProductVersion", "2.4.1.108"
+            VALUE "FileDescription", "Display Tuner"
+            VALUE "FileVersion", "1.4.2.0"
+            VALUE "InternalName", "DisplayTuner.exe"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Display Solutions Software. All rights reserved."
+            VALUE "OriginalFilename", "DisplayTuner.exe"
+            VALUE "ProductName", "Display Tuner"
+            VALUE "ProductVersion", "1.4.2.0"
         END
     END
     BLOCK "VarFileInfo"

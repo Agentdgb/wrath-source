@@ -6,7 +6,7 @@
 // cancels, with tick-scheduled phases and a bounded healing plan.
 //
 // The source supplied for this module targeted an older wrapper API and the
-// legacy numeric potion metadata.  Vanta supports Minecraft 1.21, where potion
+// legacy numeric potion metadata.  Dt supports Minecraft 1.21, where potion
 // effects live in components, so the implementation below identifies the
 // stack through its translatable display-name key instead. Every action keeps
 // the safe select, use, restore ordering, including multi-potion sequences.
@@ -37,7 +37,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -105,7 +105,7 @@ bool clear_exception(JNIEnv *env) {
 jclass global_class(JNIEnv *env, const char *name) {
     if (!name)
         return nullptr;
-    jclass local = vanta::jvm::findClassAnyLoader(env, name);
+    jclass local = dt::jvm::findClassAnyLoader(env, name);
     if (clear_exception(env) || !local)
         return nullptr;
     jclass global = static_cast<jclass>(env->NewGlobalRef(local));
@@ -535,7 +535,7 @@ class ThrowPot final : public Module {
     ~ThrowPot() override {
         silentaim::unregister_action_callbacks(this);
         std::lock_guard state(clientStateMutex());
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         if (!scope && (g_cache.mc_class || g_cache.translatable_class || g_cache.main_hand)) {
             blockUnload();
             return;
@@ -1124,6 +1124,6 @@ class ThrowPot final : public Module {
     }
 };
 
-VANTA_REGISTER_MODULE(ThrowPot);
+DT_REGISTER_MODULE(ThrowPot);
 
-} // namespace vanta::modules
+} // namespace dt::modules

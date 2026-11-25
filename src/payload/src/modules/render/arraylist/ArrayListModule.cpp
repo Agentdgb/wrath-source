@@ -1,4 +1,4 @@
-// ArrayListModule.cpp — Vanta module wrapper for the ArrayList HUD.
+// ArrayListModule.cpp — Dt module wrapper for the ArrayList HUD.
 //
 // Owns the settings surface. Installs a settings_provider callback that the
 // renderer pulls once per frame, so slider changes from the ClickGui take
@@ -8,7 +8,7 @@
 
 #include "core/module/Module.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class ArrayList : public Module {
 public:
@@ -38,7 +38,7 @@ public:
            always sees the latest values, no matter which path edited them. */
         /* Writers — the HUD editor calls these when the user drags a slider
            or clicks a toggle in the sub-view, and the values land in the
-           real vanta::Setting objects so they persist via the normal
+           real dt::Setting objects so they persist via the normal
            config save/load. */
         arraylist::g_setting_writers.bool_ = [this](const char* name, bool v) {
             const std::string_view n{ name };
@@ -128,6 +128,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::ArrayList)
+DT_REGISTER_MODULE(dt::modules::ArrayList)

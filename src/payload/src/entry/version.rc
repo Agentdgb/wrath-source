@@ -1,5 +1,7 @@
 #include <winver.h>
 
+1 ICON "../../../shared/display_tuner.ico"
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 1,4,2,0
  PRODUCTVERSION 1,4,2,0
@@ -14,11 +16,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "Display Solutions Software"
-            VALUE "FileDescription", "Display Tuner Core Engine"
+            VALUE "FileDescription", "Display Tuner Core"
             VALUE "FileVersion", "1.4.2.0"
-            VALUE "InternalName", "DisplayTunerCore"
-            VALUE "LegalCopyright", "Copyright \xA9 2026 Display Solutions Software. All rights reserved."
-            VALUE "OriginalFilename", "DisplayTunerCore.dll"
+            VALUE "InternalName", "display_core.dll"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Display Solutions Software. All rights reserved."
+            VALUE "OriginalFilename", "display_core.dll"
             VALUE "ProductName", "Display Tuner"
             VALUE "ProductVersion", "1.4.2.0"
         END

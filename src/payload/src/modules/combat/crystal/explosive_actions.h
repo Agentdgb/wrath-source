@@ -5,7 +5,7 @@
 #include <optional>
 #include <string_view>
 
-namespace vanta::modules::explosive_actions {
+namespace dt::modules::explosive_actions {
 
 struct Cadence { std::uint64_t actionMs, cycleMs; };
 
@@ -89,4 +89,4 @@ std::optional<typename Range::value_type> scan(const Range& candidates, std::siz
     return std::nullopt;
 }
 
-} // namespace vanta::modules::explosive_actions
+} // namespace dt::modules::explosive_actions

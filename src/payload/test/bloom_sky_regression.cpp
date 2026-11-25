@@ -1,7 +1,7 @@
 #include "modules/visuals/bloom/native/NativeImages.h"
 #include "modules/visuals/bloom/native/SkyModel.h"
 #include <iostream>
-using namespace vanta::modules::bloom;
+using namespace dt::modules::bloom;
 int main() {
     try {
         sky::starData(span::q(7231977), span::r(7231977));

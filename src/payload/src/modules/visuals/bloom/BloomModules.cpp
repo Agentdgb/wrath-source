@@ -1,7 +1,7 @@
 #include "Bloom.h"
 #include "core/module/Module.h"
 #include "modules/visuals/ports/VisualPorts.h"
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 class WorldParticles final : public Module {
     BoolSetting stars_{this, "Stars", true}, spark_{this, "Spark", false}, flame_{this, "Flame", false},
         runes_{this, "Runes", false}, snow_{this, "Snow", false}, theme_{this, "Theme Color", true};
@@ -25,5 +25,5 @@ class WorldParticles final : public Module {
     }
     void onDisable() override { worldSettings.enabled = false; }
 };
-} // namespace vanta::modules::bloom
-VANTA_REGISTER_MODULE(vanta::modules::bloom::WorldParticles)
+} // namespace dt::modules::bloom
+DT_REGISTER_MODULE(dt::modules::bloom::WorldParticles)

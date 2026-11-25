@@ -51,10 +51,10 @@
 #include <mutex>
 #include <vector>
 
-namespace vanta::modules::worldtweaks {
+namespace dt::modules::worldtweaks {
 
-namespace cap = vanta::modules::hitfx::capture;
-namespace hf  = vanta::modules::hitfx;
+namespace cap = dt::modules::hitfx::capture;
+namespace hf  = dt::modules::hitfx;
 
 settings          g_settings;
 std::atomic<bool> g_enabled{false};
@@ -146,7 +146,7 @@ jmethodID g_class_getName    = nullptr;
 bool      g_timepkt_logged   = false;
 
 jclass global_class(JNIEnv* env, const char* binName) {
-    jclass k = vanta::jvm::findClassAnyLoader(env, binName);
+    jclass k = dt::jvm::findClassAnyLoader(env, binName);
     if (!k) return nullptr;
     jclass g = static_cast<jclass>(env->NewGlobalRef(k));
     env->DeleteLocalRef(k);
@@ -538,7 +538,7 @@ unsigned long long g_timehook_next_try_ms = 0;
 bool               g_timehook_logged_wait = false;
 
 jlong JNICALL hkPacketTimeOfDay(JNIEnv* env, jobject thiz) {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     const long long ours = g_override_tod.load(std::memory_order_relaxed);
     if (ours >= 0) return static_cast<jlong>(ours);
     if (!ORIG_pkt_timeOfDay || !g_timepkt_hook_class) return 0;
@@ -583,7 +583,7 @@ jclass find_class_beside(JNIEnv* env, jclass anchor, const char* dotted_name) {
 }
 
 // Idempotent; pumped from tick() while the override is on, on a 1 s cadence,
-// until it takes. Every outcome is logged to vanta.log under [worldtweaks] so
+// until it takes. Every outcome is logged to dt.log under [worldtweaks] so
 // a silent miss is one grep away.
 void install_time_hook(JNIEnv* env) {
     if (g_timehook_installed.load(std::memory_order_acquire)) return;
@@ -803,7 +803,7 @@ void render_text(int display_w, int display_h) {
     // Arm the shared camera capture every frame (counter + pump), same as blockesp.
     hf::render_frame f{};
     {
-        ::vanta::jvm::JniScope s;
+        ::dt::jvm::JniScope s;
         if (!s) return;
         JNIEnv* env = s.get();
         if (!cap::is_installed()) {
@@ -998,6 +998,6 @@ void render_text(int display_w, int display_h) {
     dl->PopClipRect();
 }
 
-} // namespace vanta::modules::worldtweaks
+} // namespace dt::modules::worldtweaks
 
 

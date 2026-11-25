@@ -17,7 +17,7 @@ jboolean JNICALL sameObject(JNIEnv*, jobject a, jobject b) { return a == b ? JNI
 
 // The fixture substitutes the app/JVM/rotation host, not the explosive module
 // constructors, registered settings, pause path or pure action policies.
-namespace vanta {
+namespace dt {
 Module::Module(std::string name, std::string description, Category category, int key)
     : name_(std::move(name)), desc_(std::move(description)), category_(category),
       keybind_(this, "Bind", key, BindMode::Toggle) { registerSetting(&keybind_); }
@@ -28,23 +28,23 @@ void Module::toggle() { setEnabled(!isEnabled()); }
 void Module::drawImGui() {}
 void _register_module_factory(ModuleFactory) {}
 }
-namespace vanta::jvm {
+namespace dt::jvm {
 JniScope::JniScope() = default;
 JniScope::~JniScope() = default;
 jclass findClassAnyLoader(JNIEnv*, const char*) { return nullptr; }
 std::string toStdString(JNIEnv*, jstring) { return {}; }
 }
-namespace vanta::social {
+namespace dt::social {
 bool isFriend(JNIEnv*, jobject) { return false; }
 }
-namespace vanta::vgui::bridge {
+namespace dt::vgui::bridge {
 bool isOverlayVisible() { return overlay; }
 bool isEnabled(const std::string&) { return false; }
 }
-namespace vanta::modules::blockesp {
+namespace dt::modules::blockesp {
 void set_focus_block(int, int, int, bool) {}
 }
-namespace vanta::modules::silentaim {
+namespace dt::modules::silentaim {
 void ensure_installed() {}
 void release_action_rotation(const void*) {}
 void register_action_callbacks(const void*, const ActionCallbacks&) {}
@@ -56,18 +56,18 @@ float mouse_lattice_deg() { return .15f; }
 bool request_action_rotation(const void*, float, float, float, float, bool, const ActionCallbacks*) { return true; }
 }
 
-class Probe final : public vanta::modules::Explosive {
+class Probe final : public dt::modules::Explosive {
 public:
-    explicit Probe(vanta::modules::Variant variant) : Explosive(variant) {}
-    void queue() { plan.kind = vanta::modules::Kind::Place; haveAim = haveLease = true; }
-    bool queued() const { return plan.kind != vanta::modules::Kind::None || haveAim || haveLease; }
-    void placed() { completedInteraction(vanta::modules::Kind::Place); }
-    void charged() { completedInteraction(vanta::modules::Kind::Use); }
-    void brokeCrystal() { completedInteraction(vanta::modules::Kind::Attack); }
+    explicit Probe(dt::modules::Variant variant) : Explosive(variant) {}
+    void queue() { plan.kind = dt::modules::Kind::Place; haveAim = haveLease = true; }
+    bool queued() const { return plan.kind != dt::modules::Kind::None || haveAim || haveLease; }
+    void placed() { completedInteraction(dt::modules::Kind::Place); }
+    void charged() { completedInteraction(dt::modules::Kind::Use); }
+    void brokeCrystal() { completedInteraction(dt::modules::Kind::Attack); }
     void confirmedAnchorGone() { cycleComplete = true; }
     void pausedPump() { tick(); }
     auto pausedExecute() {
-        vanta::modules::silentaim::ActionContext context{};
+        dt::modules::silentaim::ActionContext context{};
         return execute(context, true);
     }
     bool restoreInDifferentWorld(JNIEnv* env, jobject oldWorld, jobject newWorld, jobject inventory) {
@@ -80,13 +80,13 @@ public:
     }
 };
 
-vanta::Setting* setting(vanta::Module& module, std::string_view name) {
+dt::Setting* setting(dt::Module& module, std::string_view name) {
     for (auto* item : module.settings()) if (item->name() == name) return item;
     return nullptr;
 }
 
 int main() {
-    using namespace vanta::modules::explosive_actions;
+    using namespace dt::modules::explosive_actions;
     try {
         // Charge and detonation must be distinct live inventory operations.
         require(matchesItem(Action::AnchorCharge, "block.minecraft.glowstone", false), "Glowstone charge rejected");
@@ -134,7 +134,7 @@ int main() {
                 "Ray budget discarded an unexamined base");
         require(scan(candidates, cursor, 48, evaluate) == 90, "Ray-limited search failed to resume");
 
-        for (auto variant : {vanta::modules::Variant::Crystal, vanta::modules::Variant::Anchor, vanta::modules::Variant::SafeAnchor}) {
+        for (auto variant : {dt::modules::Variant::Crystal, dt::modules::Variant::Anchor, dt::modules::Variant::SafeAnchor}) {
             Probe module{variant};
             require(setting(module, "Velocidad") && setting(module, "Velocidad")->save() == "Normal", "Default speed is not Normal");
             require(!setting(module, "Min Delay") && !setting(module, "Max Delay"), "Old delay controls remain registered");
@@ -150,12 +150,12 @@ int main() {
             module.queue(); module.pausedPump();
             require(!module.queued(), "Opening the UI left a pending action in the pump");
             module.queue();
-            require(module.pausedExecute() == vanta::modules::silentaim::ActionResult::Abort && !module.queued(),
+            require(module.pausedExecute() == dt::modules::silentaim::ActionResult::Abort && !module.queued(),
                     "Paused callback retained a stale placement");
-            module.keybind().setMode(vanta::BindMode::Once);
+            module.keybind().setMode(dt::BindMode::Once);
             module.placed(); module.pausedPump();
             require(module.isEnabled(), "Single-click auto cycle stopped after placement");
-            if(variant == vanta::modules::Variant::Crystal) module.brokeCrystal();
+            if(variant == dt::modules::Variant::Crystal) module.brokeCrystal();
             else {
                 module.charged(); module.pausedPump();
                 require(module.isEnabled(), "Single-click anchor stopped before detonation");
@@ -171,7 +171,7 @@ int main() {
         functions.IsSameObject = sameObject;
         JNIEnv env{&functions};
         _jobject oldWorld, newWorld, inventory;
-        Probe context{vanta::modules::Variant::Anchor};
+        Probe context{dt::modules::Variant::Anchor};
         require(!context.restoreInDifferentWorld(&env, &oldWorld, &newWorld, &inventory),
                 "Slot restore crossed worlds or retained its stale context");
         std::cout << "Explosives: simple settings, per-step pacing, item validation, tick ownership, slots, search continuation and pause cancellation OK\n";

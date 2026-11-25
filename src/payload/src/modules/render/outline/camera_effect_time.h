@@ -3,7 +3,7 @@
 #include <jni.h>
 #include <cmath>
 
-namespace vanta::modules::outline::view {
+namespace dt::modules::outline::view {
 
 // renderWorld passes Camera.getLastTickProgress() to both hurt tilt and bob.
 // Keep the caller's tick progress as a fallback for older camera mappings.
@@ -33,4 +33,4 @@ inline float camera_effect_time(JNIEnv* env, jobject renderer, float fallback)
     return std::isfinite(progress) ? progress : fallback;
 }
 
-} // namespace vanta::modules::outline::view
+} // namespace dt::modules::outline::view

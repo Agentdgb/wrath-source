@@ -9,7 +9,7 @@
 
 #pragma once
 
-namespace vanta::al::shaders {
+namespace dt::al::shaders {
 
 // Fullscreen triangle-pair vertex shader — clip-space in, UV out.
 inline constexpr const char* fullscreen_vsh = R"GLSL(
@@ -147,4 +147,4 @@ void main() {
 }
 )GLSL";
 
-} // namespace vanta::al::shaders
+} // namespace dt::al::shaders

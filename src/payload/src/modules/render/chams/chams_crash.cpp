@@ -6,7 +6,7 @@
 
 #include <atomic>
 
-namespace vanta::modules::chams::crash {
+namespace dt::modules::chams::crash {
 
 namespace {
 
@@ -83,7 +83,7 @@ LONG CALLBACK handler(EXCEPTION_POINTERS* ep)
     // log would be useless noise and the VM measurably slower. A fault is only
     // interesting when a chams detour is on the stack, or when the faulting
     // instruction is inside this DLL.
-    const bool in_detour = ::vanta::modules::chams::gl::in_detour_this_thread() > 0;
+    const bool in_detour = ::dt::modules::chams::gl::in_detour_this_thread() > 0;
     bool ours = in_detour;
     if (!ours) {
         static const char anchor = 0;    // an address known to be in this DLL
@@ -108,7 +108,7 @@ LONG CALLBACK handler(EXCEPTION_POINTERS* ep)
 
     const char* mk = g_mark.load(std::memory_order_relaxed);
 
-    ::vanta::desklog::section(dbg::ch(), "CRASH");
+    ::dt::desklog::section(dbg::ch(), "CRASH");
     CHAMS_LOG("crash: %s (0x%08lX) at %p in %s",
               name_of(er.ExceptionCode), (unsigned long)er.ExceptionCode,
               er.ExceptionAddress, mod);
@@ -116,8 +116,8 @@ LONG CALLBACK handler(EXCEPTION_POINTERS* ep)
     CHAMS_LOG("crash: inside a chams GL detour on THIS thread = %s (depth=%d); "
               "process-wide depth=%d",
               in_detour ? "YES" : "no",
-              ::vanta::modules::chams::gl::in_detour_this_thread(),
-              ::vanta::modules::chams::gl::in_detour());
+              ::dt::modules::chams::gl::in_detour_this_thread(),
+              ::dt::modules::chams::gl::in_detour());
     CHAMS_LOG("crash: thread=%lu", GetCurrentThreadId());
 
     if (er.ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er.NumberParameters >= 2) {
@@ -153,7 +153,7 @@ LONG CALLBACK handler(EXCEPTION_POINTERS* ep)
         }
     }
 #endif
-    ::vanta::desklog::flush(dbg::ch());
+    ::dt::desklog::flush(dbg::ch());
 
     return EXCEPTION_CONTINUE_SEARCH;   // let the JVM produce its own report too
 }
@@ -180,4 +180,4 @@ void mark(const char* where)
     g_mark.store(where, std::memory_order_relaxed);
 }
 
-} // namespace vanta::modules::chams::crash
+} // namespace dt::modules::chams::crash

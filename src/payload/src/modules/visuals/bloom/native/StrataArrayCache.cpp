@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::strata {
+namespace dt::modules::bloom::strata {
 
 int DW = 256;
 int CH = 1024;
@@ -817,4 +817,4 @@ const bool initialized = []() {
     }
     return true;
 }();
-} // namespace vanta::modules::bloom::strata
+} // namespace dt::modules::bloom::strata

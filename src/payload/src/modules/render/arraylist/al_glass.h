@@ -7,7 +7,7 @@
 
 #include <vector>
 
-namespace vanta::al {
+namespace dt::al {
 
 // One rounded rectangle in framebuffer pixels, bottom-left origin, with four
 // independent corner radii so vertically-adjacent rows can merge cleanly.
@@ -87,4 +87,4 @@ private:
     int          scene_h_ = 0;
 };
 
-} // namespace vanta::al
+} // namespace dt::al

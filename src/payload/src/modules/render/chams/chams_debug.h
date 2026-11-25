@@ -14,10 +14,10 @@
 
 #include "util/DeskLog.h"
 
-namespace vanta::modules::chams::dbg {
+namespace dt::modules::chams::dbg {
 
 // The channel. Opened on first use; safe to call before anything is installed.
-::vanta::desklog::Channel ch();
+::dt::desklog::Channel ch();
 
 // Slot allocation for the rate-limited and once-only lines. Keeping them in one
 // enum is what stops two call sites silently sharing a slot and suppressing
@@ -51,7 +51,7 @@ enum Slot : int {
     kSlotForensics,
 };
 
-#define CHAMS_LOG(...)          ::vanta::desklog::logf(::vanta::modules::chams::dbg::ch(), __VA_ARGS__)
+#define CHAMS_LOG(...)          ::dt::desklog::logf(::dt::modules::chams::dbg::ch(), __VA_ARGS__)
 // The `slot` argument is now IGNORED and kept only so the ~20 existing call
 // sites did not all have to change. Identity comes from a function-local static
 // unique to each call site, so two of them can no longer suppress each other.
@@ -64,11 +64,11 @@ enum Slot : int {
     do {                                                                    \
         (void)sizeof(slot);   /* accepted and ignored — see above */        \
         static const char kChamsRlSite = 0;                                 \
-        ::vanta::desklog::logf_site(::vanta::modules::chams::dbg::ch(),     \
+        ::dt::desklog::logf_site(::dt::modules::chams::dbg::ch(),     \
                                     &kChamsRlSite, (ms), __VA_ARGS__);      \
     } while (0)
-#define CHAMS_ONCE(slot, ...)   ::vanta::desklog::logf_once(::vanta::modules::chams::dbg::ch(), (slot), __VA_ARGS__)
-#define CHAMS_BUMP(name)        ::vanta::desklog::bump(::vanta::modules::chams::dbg::ch(), (name))
+#define CHAMS_ONCE(slot, ...)   ::dt::desklog::logf_once(::dt::modules::chams::dbg::ch(), (slot), __VA_ARGS__)
+#define CHAMS_BUMP(name)        ::dt::desklog::bump(::dt::modules::chams::dbg::ch(), (name))
 
-} // namespace vanta::modules::chams::dbg
+} // namespace dt::modules::chams::dbg
 

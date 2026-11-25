@@ -1,5 +1,5 @@
 #pragma once
 #include <span>
-namespace vanta::assets {
+namespace dt::assets {
 std::span<const unsigned char> embeddedResource(int id);
 }

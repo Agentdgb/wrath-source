@@ -2,7 +2,7 @@
 
 #include "asm/Opcodes.h"
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 ConstantPoolExtender::ConstantPoolExtender(std::uint16_t existingCount)
     : nextIndex_(existingCount) {}
@@ -46,4 +46,4 @@ std::uint16_t ConstantPoolExtender::addMethodRef(std::string_view owner, std::st
     return nextIndex_++;
 }
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

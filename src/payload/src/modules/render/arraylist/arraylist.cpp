@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::arraylist {
+namespace dt::modules::arraylist {
 
 bool     g_enabled = false;
 settings g_settings{};
@@ -63,7 +63,7 @@ struct row {
 };
 
 /* The dedicated arraylist font pool is populated lazily on first render, and
-   picked over the shared vanta atlas because it holds bigger bakes at higher
+   picked over the shared dt atlas because it holds bigger bakes at higher
    oversampling. */
 ImFont* pick_font_for(float desired_canvas_size)
 {
@@ -244,18 +244,18 @@ ImU32 gradient_at(float frag_x, float frag_y, float time)
    First rather than all of them because a module declares its own Mode before
    its secondary pickers -- AimAssist's "Regular" comes before its "Chest" --
    so the first one is the headline by construction. */
-std::string format_module_meta(const vanta::Module* mod)
+std::string format_module_meta(const dt::Module* mod)
 {
     if (mod == nullptr)
         return {};
 
-    for (const vanta::Setting* s : mod->settings()) {
+    for (const dt::Setting* s : mod->settings()) {
         if (s == nullptr || !s->visible())
             continue;
-        if (s->type() != vanta::SettingType::Enum)
+        if (s->type() != dt::SettingType::Enum)
             continue;
 
-        const auto* e  = static_cast<const vanta::EnumSetting*>(s);
+        const auto* e  = static_cast<const dt::EnumSetting*>(s);
         const auto  sv = e->current();
         if (sv.empty())
             continue;
@@ -341,7 +341,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     if (g_settings_provider)
         g_settings_provider(g_settings);
 
-    /* Build the dedicated atlas the first time we render — the shared vanta
+    /* Build the dedicated atlas the first time we render — the shared dt
        atlas maxes out around 26 fb-px of glyph resolution which is why the
        arraylist looked pixelated on higher Scale settings. shared_pool bakes
        up to 96 fb-px at OversampleH=3, so a Scale=3 render (48 fb-px text)
@@ -370,8 +370,8 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     const float row_height   = font_size + 2.f * pad_y;
     const float margin       = 6.f * g_settings.scale;
 
-    /* Collect enabled Vanta modules — the ArrayList itself is filtered out so
-       it doesn't self-list. Metadata is left blank until Vanta modules expose
+    /* Collect enabled Dt modules — the ArrayList itself is filtered out so
+       it doesn't self-list. Metadata is left blank until Dt modules expose
        a "current mode" the same way Vape's ModeValue does. */
     std::vector<row> rows;
     rows.reserve(16);
@@ -383,8 +383,8 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     const float meta_size = std::max(6.f, font_size * (mono ? 1.f : 0.78f));
     const float meta_gap  = std::max(4.f, 6.f * g_settings.scale);
 
-    for (const auto& mod_ptr : vanta::ModuleManager::get().all()) {
-        const vanta::Module* mod = mod_ptr.get();
+    for (const auto& mod_ptr : dt::ModuleManager::get().all()) {
+        const dt::Module* mod = mod_ptr.get();
         if (mod == nullptr || !mod->isEnabled())
             continue;
         if (!category_enabled(mod->category()))
@@ -630,7 +630,7 @@ void render_text(int display_w, int display_h)
     if (!g_enabled || !g_layout.valid)
         return;
 
-    /* Re-resolve the font this frame — Vanta rebakes the atlas on scale
+    /* Re-resolve the font this frame — Dt rebakes the atlas on scale
        change, and that invalidates every ImFont* we might have cached. */
     ImFont* font = pick_font_for(g_layout.font_size);
     if (font == nullptr)
@@ -652,7 +652,7 @@ void render_text(int display_w, int display_h)
           come out invisible or garbled. Push the atlas explicitly.
 
        2) ClipRect — gl_hook seeds io.DisplaySize to the CANVAS size
-          (1120x700) so the vanta panel gets scissored inside the canvas.
+          (1120x700) so the dt panel gets scissored inside the canvas.
           That means the foreground list opens each frame with
           ClipRect = (0,0,1120,700). Our text lives in framebuffer pixels
           (right-anchored around x = display_w - margin), which on a 2K
@@ -661,7 +661,7 @@ void render_text(int display_w, int display_h)
           the enclosing 1120x700 doesn't clamp us. */
     /* Push the pool's own atlas texture. font->ContainerAtlas points to it
        already, but ImDrawList's cmd-header carries a separate texture we
-       must set explicitly — the vanta atlas may have been the last thing
+       must set explicitly — the dt atlas may have been the last thing
        bound, and glyphs would be sampled from THAT (garbage). */
     dl->PushTextureID(shared_pool().texture_id());
     dl->PushClipRect(ImVec2(0.f, 0.f),
@@ -742,4 +742,4 @@ void render_text(int display_w, int display_h)
     dl->PopTextureID();
 }
 
-} // namespace vanta::modules::arraylist
+} // namespace dt::modules::arraylist

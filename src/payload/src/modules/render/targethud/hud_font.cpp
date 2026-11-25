@@ -7,7 +7,7 @@
 #include <windows.h>
 #include <gl/GL.h>
 
-namespace vanta::modules::targethud {
+namespace dt::modules::targethud {
 
 namespace {
 
@@ -331,4 +331,4 @@ void destroy()
     g_baked = face_id::count;
 }
 
-} // namespace vanta::modules::targethud
+} // namespace dt::modules::targethud

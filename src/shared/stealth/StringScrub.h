@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::util {
+namespace dt::util {
 
 // Clear the live characters only: capacity beyond size is not writable string
 // storage. This does not guarantee removal of copies held elsewhere.
@@ -22,4 +22,4 @@ inline void scrubStringVector(std::vector<std::string>& vec) noexcept {
     std::vector<std::string>{}.swap(vec);
 }
 
-} // namespace vanta::util
+} // namespace dt::util

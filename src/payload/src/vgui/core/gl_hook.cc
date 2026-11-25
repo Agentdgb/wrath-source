@@ -9,7 +9,7 @@
 #include "core/ClientState.h"
 #include "core/UnloadSafety.h"
 
-#include "../vanta/views/intro.hh"
+#include "../dt/views/intro.hh"
 
 #include "core/event/GameFramePump.h"
 #include "core/keybind/KeybindManager.h"
@@ -81,7 +81,7 @@ namespace core::gl_hook
 		int                g_stream_last_fb_w      = 0;
 		int                g_stream_last_fb_h      = 0;
 		ULONGLONG          g_stream_last_geom_tick = 0;
-		vanta::al::al_fbo  g_stream_fbo{};
+		dt::al::al_fbo  g_stream_fbo{};
 
 		/* Raised by a module driving a Minecraft screen on the player's behalf.
 		   Written from the game/pump thread, read in the window procedure on
@@ -188,9 +188,9 @@ namespace core::gl_hook
 
         void update_spotify_chat()
         {
-            if (!::vanta::modules::spotify::g_enabled)
+            if (!::dt::modules::spotify::g_enabled)
             {
-                ::vanta::modules::spotify::set_chat_open(false);
+                ::dt::modules::spotify::set_chat_open(false);
                 return;
             }
 
@@ -200,7 +200,7 @@ namespace core::gl_hook
                 return;
             s_last_check = now;
 
-            using namespace ::vanta::jvm;
+            using namespace ::dt::jvm;
             bool open = false;
             JniScope scope;
             if (scope && ctx().jvmti.load()) {
@@ -221,7 +221,7 @@ namespace core::gl_hook
                 }
                 checkAndClearException(env, "Spotify chat state");
             }
-            ::vanta::modules::spotify::set_chat_open(open);
+            ::dt::modules::spotify::set_chat_open(open);
         }
 
 		LRESULT CALLBACK hooked_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -229,15 +229,15 @@ namespace core::gl_hook
 			g_in_wndproc.fetch_add(1, std::memory_order_acq_rel);
 			struct leave_t { ~leave_t() { g_in_wndproc.fetch_sub(1, std::memory_order_release); } } leave;
 			const auto original = g_orig_wndproc;
-            ::vanta::modules::antibot::observe_window_input(hwnd, msg, wp, lp,
-                vanta::g_app && vanta::g_app->visible());
-			std::unique_lock state(vanta::clientStateMutex());
+            ::dt::modules::antibot::observe_window_input(hwnd, msg, wp, lp,
+                dt::g_app && dt::g_app->visible());
+			std::unique_lock state(dt::clientStateMutex());
 			if (msg == WM_CLOSE || msg == WM_DESTROY)
 			{
 				static std::atomic<bool> s_savedOnExit{ false };
 				if (!s_savedOnExit.exchange(true))
 				{
-					auto& cm = ::vanta::ConfigManager::get();
+					auto& cm = ::dt::ConfigManager::get();
 					cm.saveProfile(cm.currentProfile());
 				}
 			}
@@ -273,7 +273,7 @@ namespace core::gl_hook
 				}
 			}
 
-			if (vanta::vgui::bridge::isMenuKeyBinding())
+			if (dt::vgui::bridge::isMenuKeyBinding())
 			{
 				if (is_key_message(msg))
 				{
@@ -284,7 +284,7 @@ namespace core::gl_hook
 						{
 							g_toggle_key_down.store(true, std::memory_order_relaxed);
 							g_toggle_rebind_tick.store(GetTickCount64(), std::memory_order_relaxed);
-							vanta::vgui::bridge::setMenuKeyBinding(false);
+							dt::vgui::bridge::setMenuKeyBinding(false);
 						}
 						else if (ext_vk > 0 && ext_vk < 256
 							&& ext_vk != VK_LBUTTON && ext_vk != VK_RBUTTON && ext_vk != VK_MBUTTON
@@ -293,8 +293,8 @@ namespace core::gl_hook
 						{
 							g_toggle_key_down.store(true, std::memory_order_relaxed);
 							g_toggle_rebind_tick.store(GetTickCount64(), std::memory_order_relaxed);
-							vanta::vgui::bridge::setGuiToggleKey(ext_vk);
-							vanta::vgui::bridge::setMenuKeyBinding(false);
+							dt::vgui::bridge::setGuiToggleKey(ext_vk);
+							dt::vgui::bridge::setMenuKeyBinding(false);
 						}
 					}
 					return 0;
@@ -321,9 +321,9 @@ namespace core::gl_hook
 					|| raw_vk == VK_INSERT || ext_vk == VK_INSERT
 					|| (raw_vk == VK_SHIFT && (GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0);
 
-				const bool editing_text = g_gui_ready && vanta::g_app && vanta::g_app->visible()
-					&& vanta::g_app->text_focus();
-				if (matches_toggle && !vanta::vgui::bridge::isMenuKeyBinding() && !editing_text)
+				const bool editing_text = g_gui_ready && dt::g_app && dt::g_app->visible()
+					&& dt::g_app->text_focus();
+				if (matches_toggle && !dt::vgui::bridge::isMenuKeyBinding() && !editing_text)
 				{
 					if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
 					{
@@ -333,9 +333,9 @@ namespace core::gl_hook
 							&& (now_tick - g_toggle_rebind_tick.load(std::memory_order_relaxed) > 200)
 							&& !g_toggle_key_down.exchange(true, std::memory_order_relaxed))
 						{
-							if (g_gui_ready && vanta::g_app)
+							if (g_gui_ready && dt::g_app)
 							{
-								vanta::vgui::toggleVisible();
+								dt::vgui::toggleVisible();
 							}
 						}
 					}
@@ -353,14 +353,14 @@ namespace core::gl_hook
 						const bool is_repeat = (lp & (1 << 30)) != 0;
 						if (!is_repeat)
 						{
-							vanta::entry::requestFullUnload();
+							dt::entry::requestFullUnload();
 						}
 					}
 					return 0;
 				}
 			}
 
-			const bool gui_open = g_gui_ready && vanta::g_app && vanta::g_app->visible();
+			const bool gui_open = g_gui_ready && dt::g_app && dt::g_app->visible();
 
 			/* Freecam capture (see g_freecam_capture). Never while the panel is
 			   up: the panel owns the mouse then and swallows its own input
@@ -495,8 +495,8 @@ namespace core::gl_hook
             /* Set when the Spotify branch already queued this message into ImGui,
                so the release forwarding below does not queue it a second time. */
             bool forwarded_by_spotify = false;
-            if (!gui_open && g_gui_ready && ::vanta::modules::spotify::chat_open()
-                && ::vanta::modules::spotify::g_enabled) {
+            if (!gui_open && g_gui_ready && ::dt::modules::spotify::chat_open()
+                && ::dt::modules::spotify::g_enabled) {
                 POINT cursor{};
                 GetCursorPos(&cursor);
                 ScreenToClient(hwnd, &cursor);
@@ -506,7 +506,7 @@ namespace core::gl_hook
                 const float mouse_x = cursor.x * display.x / std::max(1L, client.right);
                 const float mouse_y = cursor.y * display.y / std::max(1L, client.bottom);
                 float x, y, w, h;
-                ::vanta::modules::spotify::query_bbox(x, y, w, h);
+                ::dt::modules::spotify::query_bbox(x, y, w, h);
                 const bool over = w > 0.f && mouse_x >= x && mouse_x < x + w
                     && mouse_y >= y && mouse_y < y + h;
                 if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP
@@ -624,7 +624,7 @@ namespace core::gl_hook
 					   every field in it is drawn by hand — so the guard the comment
 					   above describes has never actually fired, and typing a name
 					   into any search box strafed the player at the same time. */
-					if (is_move && !(vanta::g_app && vanta::g_app->text_focus()))
+					if (is_move && !(dt::g_app && dt::g_app->text_focus()))
 						break;      /* fall through to CallWindowProcW → game */
 					return 0;
 				}
@@ -1133,7 +1133,7 @@ namespace core::gl_hook
 				return false;
 			}
 
-			if (!vanta::g_app->initialize())
+			if (!dt::g_app->initialize())
 			{
 				slog::log::error("gl: app initialize failed");
 				return false;
@@ -1146,21 +1146,21 @@ namespace core::gl_hook
 		void shutdown_gui_on_render_thread(HDC dc, HGLRC host_ctx)
 		{
 			if (g_gui_ready && (!g_our_ctx || !wglMakeCurrent(dc, g_our_ctx))) {
-				vanta::blockUnload();
+				dt::blockUnload();
 				return;
 			}
 			if (g_gui_ready && g_our_ctx && wglMakeCurrent(dc, g_our_ctx))
 			{
 				g_stream_fbo.destroy();
-				try { vanta::g_app->shutdown(); } catch (...) { vanta::blockUnload(); return; }
+				try { dt::g_app->shutdown(); } catch (...) { dt::blockUnload(); return; }
 				ImGui_ImplOpenGL3_Shutdown();
 				ImGui_ImplWin32_Shutdown();
 				ImGui::DestroyContext();
 			}
 
 			if (host_ctx && wglMakeCurrent(dc, host_ctx)) {
-				vanta::modules::visualports::shutdownGl();
-				vanta::modules::itemshader::shutdown_gl();
+				dt::modules::visualports::shutdownGl();
+				dt::modules::itemshader::shutdown_gl();
 			}
 
 			if (g_our_ctx)
@@ -1177,7 +1177,7 @@ namespace core::gl_hook
 			g_in_detour.fetch_add(1, std::memory_order_acquire);
 			struct leave_t { ~leave_t() { g_in_detour.fetch_sub(1, std::memory_order_release); } } leave;
 			if (!o_wglSwapBuffers) return TRUE;
-			std::unique_lock state(vanta::clientStateMutex());
+			std::unique_lock state(dt::clientStateMutex());
 			auto present = [&] { state.unlock(); return o_wglSwapBuffers(dc); };
 			if (g_stream_dc && dc == g_stream_dc) return present();
 
@@ -1190,10 +1190,10 @@ namespace core::gl_hook
 			if (g_shutdown_requested.load(std::memory_order_acquire)
 				&& !g_shutdown_done.load(std::memory_order_acquire))
 			{
-				if (!vanta::safeToUnload()) return present();
+				if (!dt::safeToUnload()) return present();
 				// Keep presenting until the JVM has restored its original visual
 				// resources, before retiring native callbacks and the DLL image.
-				if (!vanta::modules::visualports::prepareShutdown()) return present();
+				if (!dt::modules::visualports::prepareShutdown()) return present();
 				// Restore every Java hook before module-owned JNI caches are freed.
 				// Pending callbacks may dispatch events, so never drain with the
 				// state mutex held.
@@ -1201,34 +1201,34 @@ namespace core::gl_hook
 				const auto restored = JNIHook_Shutdown();
 				state.lock();
 				if (restored != JNIHOOK_OK) {
-					vanta::blockUnload();
+					dt::blockUnload();
 					return present();
 				}
 				shutdown_gui_on_render_thread(dc, host_ctx);
-				if (!vanta::safeToUnload()) return present();
+				if (!dt::safeToUnload()) return present();
 				g_shutdown_done.store(true, std::memory_order_release);
 				return present();
 			}
 
 			if (g_shutdown_done.load(std::memory_order_acquire))
 				return present();
-			if (!vanta::entry::bootstrapFinished()) return present();
+			if (!dt::entry::bootstrapFinished()) return present();
 
 			/* Drive the game-side modules first, before any GL work and
 			   regardless of whether the gui has initialised. This thread is
 			   Minecraft's render thread, which in 1.21 is also the thread that
 			   runs the game loop — so it is the correct place to call into the
 			   game over JNI. */
-			::vanta::KeybindManager::get().dispatchQueuedBinds();
-			::vanta::core::pumpGameFrame();
-			::vanta::ConfigManager::get().pumpAutosave();
+			::dt::KeybindManager::get().dispatchQueuedBinds();
+			::dt::core::pumpGameFrame();
+			::dt::ConfigManager::get().pumpAutosave();
 
 			/* Arm the chams GL layer here, and ONLY here: wglGetProcAddress needs a
 			   current context, and this is the one point in the frame where the
 			   GAME's context is guaranteed current — which is the context whose
 			   entry points must be resolved. Idempotent, and a cheap atomic read
 			   once installed. */
-			::vanta::modules::chams::tick_game_context();
+			::dt::modules::chams::tick_game_context();
 			update_spotify_chat();
 
 			/* Spectate re-applies EVERY frame, and here rather than in an
@@ -1236,9 +1236,9 @@ namespace core::gl_hook
 			   with the ClickGui closed, and the free-look rotation it writes is
 			   only true for the frame it is written in. */
 			{
-				::vanta::jvm::JniScope spec_scope;
+				::dt::jvm::JniScope spec_scope;
 				if (spec_scope)
-					::vanta::modules::spectate::tick(spec_scope.get());
+					::dt::modules::spectate::tick(spec_scope.get());
 			}
 
 			if (!g_gui_ready)
@@ -1255,7 +1255,7 @@ namespace core::gl_hook
 			   g_toggle_key_down with hooked_wndproc so it never double-toggles. */
 			{
 				const int toggle_vk = g_toggle_vk.load(std::memory_order_relaxed);
-				if (!vanta::vgui::bridge::isMenuKeyBinding())
+				if (!dt::vgui::bridge::isMenuKeyBinding())
 				{
 					const bool phys_down = (toggle_vk > 0 && (GetAsyncKeyState(toggle_vk) & 0x8000) != 0)
 						|| (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0
@@ -1264,17 +1264,17 @@ namespace core::gl_hook
 					{
 						g_toggle_key_down.store(false, std::memory_order_relaxed);
 					}
-					else if (vanta::g_app && vanta::g_app->visible() && vanta::g_app->text_focus())
+					else if (dt::g_app && dt::g_app->visible() && dt::g_app->text_focus())
 					{
 						g_toggle_key_down.store(true, std::memory_order_relaxed);
 					}
-					else if (vanta::g_app && (!g_window || GetForegroundWindow() == g_window))
+					else if (dt::g_app && (!g_window || GetForegroundWindow() == g_window))
 					{
 						const ULONGLONG now_tick = GetTickCount64();
 						if ((now_tick - g_toggle_rebind_tick.load(std::memory_order_relaxed) > 200)
 							&& !g_toggle_key_down.exchange(true, std::memory_order_relaxed))
 						{
-							vanta::vgui::toggleVisible();
+							dt::vgui::toggleVisible();
 						}
 					}
 				}
@@ -1330,11 +1330,11 @@ namespace core::gl_hook
 			   Escape hides the panel through a different path, which left the
 			   pointer free while you were trying to play. set_active early-outs
 			   when nothing changed, so this only does work on a transition. */
-			cursor_guard::set_active(vanta::g_app && vanta::g_app->visible());
+			cursor_guard::set_active(dt::g_app && dt::g_app->visible());
 
 			if (g_our_ctx && wglMakeCurrent(dc, g_our_ctx))
 			{
-				/* Everything below runs on VANTA's context, not the game's.
+				/* Everything below runs on DT's context, not the game's.
 
 				   The chams module patches the driver's own draw, program and texture
 				   stubs to classify Minecraft's entity draws. ImGui's GL3 backend and
@@ -1347,7 +1347,7 @@ namespace core::gl_hook
 				   client's own rendering out of the game's bookkeeping. Lowered again
 				   once the host context is restored, so it also covers the panel's
 				   glass callback, the draw-list reorder and the inject sequence. */
-				::vanta::modules::chams::gl::set_suppressed(true);
+				::dt::modules::chams::gl::set_suppressed(true);
 
 				if (!want_stream_proof && g_stream_fbo.framebuffer_id() != 0)
 					g_stream_fbo.destroy();
@@ -1370,8 +1370,8 @@ namespace core::gl_hook
 				   NewFrame runs Fonts->Locked is true and the atlas can't be rebuilt without
 				   crashing the current frame. The last frame filed the request via
 				   set_pending_atlas_scale; here is the only safe window to service it. */
-				if (vanta::g_fonts)
-					vanta::g_fonts->apply_pending_atlas_scale();
+				if (dt::g_fonts)
+					dt::g_fonts->apply_pending_atlas_scale();
 
 				/* ArrayList background: raw-GL shader pipeline (dual-Kawase +
 				   composite) drawn directly to the currently bound framebuffer
@@ -1386,19 +1386,19 @@ namespace core::gl_hook
 					   to the HUD. Drawn here it is part of the scene the glass
 					   panes below then blur, which is what a light in the world
 					   does to a sheet of frosted glass held in front of it. */
-					vanta::modules::outline::render_background(
+					dt::modules::outline::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
 
-					vanta::modules::arraylist::render_background(
+					dt::modules::arraylist::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
-                    vanta::modules::keybindhud::render_background(fb_w, fb_h, static_cast<unsigned int>(fb_binding));
-					vanta::modules::watermark::render_background(
+                    dt::modules::keybindhud::render_background(fb_w, fb_h, static_cast<unsigned int>(fb_binding));
+					dt::modules::watermark::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
-					vanta::modules::spotify::render_background(
+					dt::modules::spotify::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
-					vanta::modules::targethud::render_background(
+					dt::modules::targethud::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
-					vanta::modules::radar::render_background(
+					dt::modules::radar::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
 
 					/* Last, because each of these composites onto the same
@@ -1406,7 +1406,7 @@ namespace core::gl_hook
 					   passing over another element's pane picks that pane up
 					   in its own blur, which is what a sheet of glass sliding
 					   over another sheet of glass actually does. */
-					vanta::modules::notifier::render_background(
+					dt::modules::notifier::render_background(
 						fb_w, fb_h, static_cast<unsigned int>(fb_binding));
 				}
 
@@ -1432,35 +1432,35 @@ namespace core::gl_hook
 				   back to the real framebuffer on the draw data below, after the
 				   vertices have been transformed into it. */
 				ImGuiIO& io = ImGui::GetIO();
-				io.DisplaySize = ImVec2(static_cast<float>(vanta::c_app::k_window_width),
-				                        static_cast<float>(vanta::c_app::k_window_height));
+				io.DisplaySize = ImVec2(static_cast<float>(dt::c_app::k_window_width),
+				                        static_cast<float>(dt::c_app::k_window_height));
 
 				ImGui::NewFrame();
 
-				vanta::g_app->frame();
+				dt::g_app->frame();
 
 				/* ArrayList text: queues the module names on ImGui's foreground
 				   draw list. The transform loop below detects the foreground
 				   list by owner name and skips it, so these vertices stay in
 				   framebuffer pixels. */
-				vanta::modules::arraylist::render_text(fb_w, fb_h);
-				vanta::modules::watermark::render_text(fb_w, fb_h);
-                vanta::modules::keybindhud::render_text(fb_w, fb_h);
-				vanta::modules::spotify::render_text(fb_w, fb_h);
-				vanta::modules::hitfx::render_text(fb_w, fb_h);
-				vanta::modules::chams::render_text(fb_w, fb_h);
-				vanta::modules::esp::render_text(fb_w, fb_h);
-				vanta::modules::backtrack::render(fb_w, fb_h);
-                vanta::modules::blockesp::render_text(fb_w, fb_h);
-                vanta::modules::worldtweaks::render_text(fb_w, fb_h);
-				vanta::modules::targetesp::render(fb_w, fb_h);
-                vanta::modules::triggerbot::render_focus_visual(fb_w, fb_h);
-				vanta::modules::targethud::render_text(fb_w, fb_h);
-				vanta::modules::radar::render_text(fb_w, fb_h);
+				dt::modules::arraylist::render_text(fb_w, fb_h);
+				dt::modules::watermark::render_text(fb_w, fb_h);
+                dt::modules::keybindhud::render_text(fb_w, fb_h);
+				dt::modules::spotify::render_text(fb_w, fb_h);
+				dt::modules::hitfx::render_text(fb_w, fb_h);
+				dt::modules::chams::render_text(fb_w, fb_h);
+				dt::modules::esp::render_text(fb_w, fb_h);
+				dt::modules::backtrack::render(fb_w, fb_h);
+                dt::modules::blockesp::render_text(fb_w, fb_h);
+                dt::modules::worldtweaks::render_text(fb_w, fb_h);
+				dt::modules::targetesp::render(fb_w, fb_h);
+                dt::modules::triggerbot::render_focus_visual(fb_w, fb_h);
+				dt::modules::targethud::render_text(fb_w, fb_h);
+				dt::modules::radar::render_text(fb_w, fb_h);
 
 				/* Last of the HUD passes: a notification is the one thing on
 				   screen that is allowed to sit over the others. */
-				vanta::modules::notifier::render_text(fb_w, fb_h);
+				dt::modules::notifier::render_text(fb_w, fb_h);
 
 				/* The inject sequence, last of everything.
 
@@ -1472,8 +1472,8 @@ namespace core::gl_hook
 				   list underneath it, which is why that reorder stands down while
 				   the sequence is running. Ticked here too, so the sequence keeps
 				   its own clock whether or not the panel happens to be visible. */
-				vanta::intro::tick(ImGui::GetIO().DeltaTime);
-				vanta::intro::render(fb_w, fb_h);
+				dt::intro::tick(ImGui::GetIO().DeltaTime);
+				dt::intro::render(fb_w, fb_h);
 
 				ImGui::Render();
 
@@ -1517,7 +1517,7 @@ namespace core::gl_hook
 					   this frame". On the HUD editor page the panel is not painted
 					   at all, so the foreground list is the only one there is and
 					   there is nothing to go behind. */
-					if (vanta::g_app->visible() && !vanta::intro::active()
+					if (dt::g_app->visible() && !dt::intro::active()
 						&& dd->CmdListsCount > 1)
 					{
 						for (int n = 0; n < dd->CmdListsCount; ++n)
@@ -1536,9 +1536,9 @@ namespace core::gl_hook
 						}
 					}
 
-					const float s  = vanta::g_app->panel_scale();
-					const float ox = vanta::g_app->panel_x();
-					const float oy = vanta::g_app->panel_y();
+					const float s  = dt::g_app->panel_scale();
+					const float ox = dt::g_app->panel_x();
+					const float oy = dt::g_app->panel_y();
 
 					/* @the open / close animation.
 
@@ -1551,22 +1551,22 @@ namespace core::gl_hook
 					   its own centre so it expands rather than drifts. Both curves
 					   are eased so neither the size nor the opacity arrives at a
 					   constant rate. */
-					const float reveal = vanta::g_app->reveal();
-					const float travel = vanta::g_app->open_travel();
+					const float reveal = dt::g_app->reveal();
+					const float travel = dt::g_app->open_travel();
 
 					/* Both clocks, because the alpha now finishes long before
 					   the geometry does — testing only the alpha would stop
 					   transforming a panel that is still moving. */
 					const bool  animating = reveal < 0.999f || travel < 0.9995f;
 
-					const float grow = vanta::g_app->open_grow();
-					const float rise = vanta::g_app->open_rise() * s;   /* canvas px -> fb */
+					const float grow = dt::g_app->open_grow();
+					const float rise = dt::g_app->open_rise() * s;   /* canvas px -> fb */
 
-					const float pw = static_cast<float>(vanta::c_app::k_window_width) * s;
-					const float ph = static_cast<float>(vanta::c_app::k_window_height) * s;
+					const float pw = static_cast<float>(dt::c_app::k_window_width) * s;
+					const float ph = static_cast<float>(dt::c_app::k_window_height) * s;
 
-					const float centre_x = ox + vanta::g_app->pivot_x() * s;
-					const float centre_y = oy + vanta::g_app->pivot_y() * s;
+					const float centre_x = ox + dt::g_app->pivot_x() * s;
+					const float centre_y = oy + dt::g_app->pivot_y() * s;
 
 					for (int n = 0; n < dd->CmdListsCount; ++n)
 					{
@@ -1679,7 +1679,7 @@ namespace core::gl_hook
 				/* Back on the game's context — the classifier may look again
 				   only when not in StreamProof mode (3D Chams draws directly
 				   into the game's framebuffer). */
-				::vanta::modules::chams::gl::set_suppressed(want_stream_proof);
+				::dt::modules::chams::gl::set_suppressed(want_stream_proof);
 			}
 
 			return present();
@@ -1821,9 +1821,9 @@ namespace core::gl_hook
 			SetLastError(0);
 			const auto previous = SetWindowLongPtrW(g_window, GWLP_WNDPROC,
 				reinterpret_cast<LONG_PTR>(g_orig_wndproc));
-			if (!previous && GetLastError() != 0) { vanta::blockUnload(); return; }
+			if (!previous && GetLastError() != 0) { dt::blockUnload(); return; }
 			for (int spins = 0; g_in_wndproc.load() > 0 && spins < 2000; ++spins) Sleep(1);
-			if (g_in_wndproc.load() > 0) { vanta::blockUnload(); return; }
+			if (g_in_wndproc.load() > 0) { dt::blockUnload(); return; }
 			g_orig_wndproc = nullptr;
 		}
 
@@ -1868,7 +1868,7 @@ namespace core::gl_hook
 			{
 				const auto disabled = MH_DisableHook(g_swap_target);
 				if (disabled != MH_OK && disabled != MH_ERROR_DISABLED) {
-					vanta::blockUnload();
+					dt::blockUnload();
 					return;
 				}
 
@@ -1878,11 +1878,11 @@ namespace core::gl_hook
 					Sleep(1);
 
 				if (g_in_detour.load(std::memory_order_acquire) > 0) {
-					vanta::blockUnload();
+					dt::blockUnload();
 					return;
 				}
 				if (MH_RemoveHook(g_swap_target) != MH_OK) {
-					vanta::blockUnload();
+					dt::blockUnload();
 					return;
 				}
 				g_swap_target = nullptr;

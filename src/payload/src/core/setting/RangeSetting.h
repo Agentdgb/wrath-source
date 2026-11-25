@@ -2,7 +2,7 @@
 
 #include "core/setting/Setting.h"
 
-namespace vanta {
+namespace dt {
 
 // A pair of ints sharing one absolute range — the storage-side counterpart of
 // the double-thumb slider in the vgui. Kept as ints because every current
@@ -35,4 +35,4 @@ private:
     int absoluteMin_, absoluteMax_;
 };
 
-} // namespace vanta
+} // namespace dt

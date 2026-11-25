@@ -19,7 +19,7 @@
 //               suppressed for the session, since a real screen stops movement
 //               input, and a CloseHandledScreen ends it.
 //
-// Runs from Vanta's GameLoopEvent, throttled to 20 Hz. In MC 1.21 the render
+// Runs from Dt's GameLoopEvent, throttled to 20 Hz. In MC 1.21 the render
 // pump thread IS the thread that runs the game loop, so the JNI work lands on
 // the game thread without retransforming any bytecode.
 
@@ -27,7 +27,7 @@
 #include <jni.h>
 #include <atomic>
 
-namespace vanta::modules::autototem {
+namespace dt::modules::autototem {
 
 enum class Mode : int {
     Hotbar    = 0,
@@ -123,7 +123,7 @@ struct jni_cache {
 
 struct settings {
     inline static std::atomic<bool> enabled         { false };
-    inline static std::atomic<bool> overlay_open    { false };  // Vanta ClickGui up
+    inline static std::atomic<bool> overlay_open    { false };  // Dt ClickGui up
 
     inline static std::atomic<int>  mode            { 0 };      // Mode
     inline static std::atomic<int>  open_mode       { 0 };      // OpenMode
@@ -162,4 +162,4 @@ void ensure_installed();
 
 inline std::atomic<bool> g_shutting_down{ false };
 
-} // namespace vanta::modules::autototem
+} // namespace dt::modules::autototem

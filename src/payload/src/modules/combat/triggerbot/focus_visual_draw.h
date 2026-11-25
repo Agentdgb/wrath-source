@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace vanta::modules::triggerbot::focus_visual {
+namespace dt::modules::triggerbot::focus_visual {
 
 // Geometry only: caller owns the draw list and clipping. This is shared by
 // the actual world marker and the panel preview.

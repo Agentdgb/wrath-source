@@ -1,6 +1,6 @@
 #pragma once
 
-namespace vanta::vgui {
+namespace dt::vgui {
 
 // Arm the in-game overlay: hooks wglSwapBuffers and subclasses the game window.
 // Returns false if either could not be installed. Does NOT block — the gui

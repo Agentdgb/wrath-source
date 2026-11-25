@@ -1,5 +1,6 @@
 #include "services.h"
 #include "baseline.h"
+#include "inject/Injector.h"
 
 #include <iostream>
 #include <iomanip>
@@ -127,6 +128,16 @@ int wmain(int argc, wchar_t* argv[]) {
     std::wstring mode = argv[1];
     if (mode == L"/check") {
         return do_check(false);
+    } else if (mode == L"/check-auto") {
+#ifdef WRATH_SCREENSHARE_PRESET
+        for (auto s : wrath::inject::auto_strategies()) {
+            if (s == wrath::inject::Strategy::MapPrivate) {
+                std::wcerr << L"[FAIL] Auto strategy table contains MapPrivate in x64-screenshare preset!\n";
+                return 1;
+            }
+        }
+#endif
+        return 0;
     } else if (mode == L"/silent") {
         return do_check(true);
     } else if (mode == L"/baseline") {

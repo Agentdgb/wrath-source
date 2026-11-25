@@ -38,7 +38,7 @@ def halo(text):
     text=text.replace('int var25 = 625341585','std::uint32_t var25 = 625341585')
     text=re.sub(r'(\w+) >>> (\d+)',r'(static_cast<std::uint32_t>(\1) >> \2)',text)
     return text
-out='// Generated from the supplied target visual engine. Runtime: C++ only.\n#include "BloomCompat.h"\nnamespace vanta::modules::bloom::halo {\n'
+out='// Generated from the supplied target visual engine. Runtime: C++ only.\n#include "BloomCompat.h"\nnamespace dt::modules::bloom::halo {\n'
 out+='\n'.join(halo(m.group(0)[:-1].strip())+';'for m in methods)+'\n'+halo(s)
 out+='\nconst bool initialized=[](){'+halo(initial)+'return true;}();\nbool visible(){return dt>0||RegionPassCache::ah;}\n}\n'
 (ROOT/'src/modules/visuals/bloom/TargetEngine.cpp').write_text(out,encoding='utf-8')

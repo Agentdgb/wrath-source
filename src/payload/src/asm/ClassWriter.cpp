@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 namespace {
 
@@ -145,4 +145,4 @@ std::vector<std::uint8_t> ClassWriter::emit(const ClassView& v, const RewriteOne
     return out;
 }
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

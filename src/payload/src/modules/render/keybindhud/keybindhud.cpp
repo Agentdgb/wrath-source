@@ -10,7 +10,7 @@
 #include <cmath>
 #include <vector>
 #include <string>
-namespace vanta::modules::keybindhud {
+namespace dt::modules::keybindhud {
 namespace {
 struct Row { std::string name, key; BindMode mode; bool active; };
 std::vector<Row> rows;

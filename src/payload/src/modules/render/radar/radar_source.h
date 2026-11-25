@@ -32,7 +32,7 @@
 
 #include <vector>
 
-namespace vanta::modules::radar {
+namespace dt::modules::radar {
 
 struct blip
 {
@@ -83,4 +83,4 @@ float viewer_yaw();
    functions of the same name in it would be one declaration with two bodies. */
 void reset_source();
 
-} // namespace vanta::modules::radar
+} // namespace dt::modules::radar

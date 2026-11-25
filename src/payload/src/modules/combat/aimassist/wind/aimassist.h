@@ -9,7 +9,7 @@
 #include <string>
 #include <thread>
 
-namespace vanta::modules::aimassist {
+namespace dt::modules::aimassist {
 
 struct JniCache {
     bool initialized = false;

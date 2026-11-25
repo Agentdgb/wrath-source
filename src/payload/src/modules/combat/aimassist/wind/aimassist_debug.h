@@ -1,6 +1,6 @@
 #pragma once
 
-namespace vanta::modules::aimassist::debug {
+namespace dt::modules::aimassist::debug {
 
 void setEnabled(bool on);
 bool active();

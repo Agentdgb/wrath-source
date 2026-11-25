@@ -61,7 +61,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::chams::cull {
+namespace dt::modules::chams::cull {
 
 // Resolves the target and attaches the detour. Idempotent; safe to call every
 // frame until it succeeds. Requires a live JNIEnv and a loaded world.
@@ -80,4 +80,4 @@ void log_summary();
 
 void shutdown();
 
-} // namespace vanta::modules::chams::cull
+} // namespace dt::modules::chams::cull

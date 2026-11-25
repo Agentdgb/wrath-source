@@ -2,7 +2,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::triggerbot_hook {
+namespace dt::modules::triggerbot_hook {
 
 bool init();
 void shutdown();
@@ -49,4 +49,4 @@ jobject visual_focus_target(JNIEnv* env);
 // spoof crosshair through hkDoAttack.
 void set_silentaim_target(JNIEnv* env, jobject target);
 
-} // namespace vanta::modules::triggerbot_hook
+} // namespace dt::modules::triggerbot_hook

@@ -1,6 +1,6 @@
 // Ported from Bloom 2.2; numerical source preserved. Native C++ only.
 #include "NativeImages.h"
-namespace vanta::modules::bloom::span {
+namespace dt::modules::bloom::span {
 
 int F = 1024;
 int G = 2;
@@ -1324,4 +1324,4 @@ const bool initialized = []() {
     aa = var38;
     return true;
 }();
-} // namespace vanta::modules::bloom::span
+} // namespace dt::modules::bloom::span

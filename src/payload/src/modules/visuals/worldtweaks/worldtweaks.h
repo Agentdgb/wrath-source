@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::modules::worldtweaks {
+namespace dt::modules::worldtweaks {
 
 // Ambient particle style spawned continuously around the player. Off = none.
 enum class AmbientMode : int {
@@ -78,5 +78,5 @@ void shutdown();
 // next enable eases from the world's real time instead of a stale value.
 void on_disabled();
 
-} // namespace vanta::modules::worldtweaks
+} // namespace dt::modules::worldtweaks
 

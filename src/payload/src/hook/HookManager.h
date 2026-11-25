@@ -5,7 +5,7 @@
 #include <jni.h>
 #include <jvmti.h>
 
-namespace vanta::hook {
+namespace dt::hook {
 
 class HookManager {
 public:
@@ -43,4 +43,4 @@ private:
     HookManager& operator=(const HookManager&) = delete;
 };
 
-} // namespace vanta::hook
+} // namespace dt::hook

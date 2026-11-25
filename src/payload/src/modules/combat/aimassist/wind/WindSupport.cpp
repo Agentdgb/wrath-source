@@ -22,7 +22,7 @@
 #include <windows.h>
 #include <timeapi.h>
 
-namespace vanta::modules::aimassist {
+namespace dt::modules::aimassist {
 
 namespace {
 
@@ -35,7 +35,7 @@ void workerLoop(Runtime* rt)
 
     JavaVM* vm = nullptr;
     while (rt->running.load(std::memory_order_acquire) && !vm) {
-        vm = vanta::jvm::ctx().vm;
+        vm = dt::jvm::ctx().vm;
         if (!vm) { std::this_thread::sleep_for(std::chrono::milliseconds(50)); }
     }
     if (!vm) { if (timerOk == TIMERR_NOERROR) timeEndPeriod(timerPeriod); return; }
@@ -301,8 +301,8 @@ bool isValidTarget(JNIEnv* env, jobject target, const SettingsView& sv)
         if (!isPlayer && !sv.mobs) ok = false;
         // A friend is not a target. Cached per entity id — this runs on the
         // worker thread at ~1 kHz over every loaded entity.
-        if (ok && isPlayer && ::vanta::social::isFriend(env, target)) ok = false;
-        if (ok && isPlayer && sv.teams && ::vanta::social::isTeammate(env, player, target)) ok = false;
+        if (ok && isPlayer && ::dt::social::isFriend(env, target)) ok = false;
+        if (ok && isPlayer && sv.teams && ::dt::social::isTeammate(env, player, target)) ok = false;
         if (ok && sv.ignoreInvisible && c.ent_invisible_mid
             && env->CallBooleanMethod(target, c.ent_invisible_mid) == JNI_TRUE)
             ok = false;

@@ -1,7 +1,7 @@
 #pragma once
 #include "core/setting/Setting.h"
 
-namespace vanta {
+namespace dt {
 
 struct RGBA { float r, g, b, a; };
 
@@ -22,4 +22,4 @@ private:
     RGBA v_;
 };
 
-} // namespace vanta
+} // namespace dt

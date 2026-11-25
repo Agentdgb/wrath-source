@@ -17,7 +17,7 @@
 #include <thread>
 #include <windows.h>
 
-namespace vanta {
+namespace dt {
 namespace {
 std::string profileKey(std::string name) {
     for (auto& c : name) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');

@@ -15,7 +15,7 @@
 #include <cstdio>
 #include <vector>
 
-namespace vanta::modules::radar {
+namespace dt::modules::radar {
 
 bool g_enabled = false;
 settings g_settings{};
@@ -23,7 +23,7 @@ std::function<void(settings&)> g_settings_provider{};
 
 namespace {
 
-vanta::al::al_glass g_glass{};
+dt::al::al_glass g_glass{};
 
 constexpr float k_pi = 3.14159265358979323846f;
 
@@ -98,7 +98,7 @@ ImVec2 heading(float degrees)
 
 ImFont* font_at(float size)
 {
-    auto& pool = vanta::modules::arraylist::shared_pool();
+    auto& pool = dt::modules::arraylist::shared_pool();
 
     if (!pool.ensure())
         return nullptr;
@@ -217,7 +217,7 @@ void render_background(int display_w, int display_h, unsigned int bound_fb)
     /* Only when the panel itself is frosted. With Glass off the client is a set
        of flat cards, and one acrylic surface floating among them does not read as
        the same product. */
-    if (!vanta::vgui::bridge::isGlassEnabled() || !g_glass.available())
+    if (!dt::vgui::bridge::isGlassEnabled() || !g_glass.available())
         return;
 
     /* al_glass works in framebuffer pixels with a BOTTOM-LEFT origin, where every
@@ -290,7 +290,7 @@ void render_text(int display_w, int display_h)
     /* With Glass on the pane was already composited by the shader pass, and
        painting the flat card over it would bury the blur under the very colour it
        was meant to replace. */
-    if (!vanta::vgui::bridge::isGlassEnabled() || !g_glass.available())
+    if (!dt::vgui::bridge::isGlassEnabled() || !g_glass.available())
     {
         draw_list->AddRectFilled(
             ImVec2(g_layout.x, g_layout.y),
@@ -581,7 +581,7 @@ void render_text(int display_w, int display_h)
 
         const ImVec2 title_extent = title_font->CalcTextSizeA(title_size, FLT_MAX, -1.f, "Radar");
         const ImVec2 count_extent = small_font->CalcTextSizeA(count_size, FLT_MAX, -1.f, count_text);
-        draw_list->PushTextureID(vanta::modules::arraylist::shared_pool().texture_id());
+        draw_list->PushTextureID(dt::modules::arraylist::shared_pool().texture_id());
 
         draw_list->AddText(title_font, title_size,
             ImVec2(text_left, header_mid - title_extent.y * 0.5f),
@@ -681,4 +681,4 @@ void reset()
     reset_source();
 }
 
-} // namespace vanta::modules::radar
+} // namespace dt::modules::radar

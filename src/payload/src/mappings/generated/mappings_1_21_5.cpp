@@ -3,8 +3,8 @@
 #include "mappings/generated/GenTable.h"
 #include "util/Hash.h"
 
-namespace vanta::mappings::gen::v_1_21_5_data {
-using ::vanta::fnv1a64;
+namespace dt::mappings::gen::v_1_21_5_data {
+using ::dt::fnv1a64;
 
 static constexpr ClassEntry kClasses[] = {
     { fnv1a64("MinecraftClient"), "net/minecraft/class_310" },
@@ -133,9 +133,9 @@ static constexpr ReverseClassEntry kReverseClasses[] = {
     { fnv1a64("net/minecraft/class_2828$class_5911"), "PlayerMoveC2SPacket$OnGroundOnly" },
 };
 static_assert(fnv1a64("MinecraftClient") == 0x12c0bfbae5b280f7ull, "fnv drift");
-} // namespace vanta::mappings::gen::v_1_21_5_data
+} // namespace dt::mappings::gen::v_1_21_5_data
 
-namespace vanta::mappings::gen {
+namespace dt::mappings::gen {
 extern constinit const VersionTable v_1_21_5 = {
     /* mcVersion         */ "1.21.5",
     /* classes           */ v_1_21_5_data::kClasses,
@@ -147,4 +147,4 @@ extern constinit const VersionTable v_1_21_5 = {
     /* reverseClasses    */ v_1_21_5_data::kReverseClasses,
     /* reverseClassCount */ 31,
 };
-} // namespace vanta::mappings::gen
+} // namespace dt::mappings::gen

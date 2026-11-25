@@ -6,7 +6,7 @@
 #include "modules/render/outline/camera_effect_time.h"
 #include "util/Log.h"
 
-namespace vanta::modules::outline::view {
+namespace dt::modules::outline::view {
 
 namespace {
 
@@ -48,11 +48,11 @@ bool ensure_cache(JNIEnv* env)
     if (C.ok) return true;
     if (!env) return false;
 
-    jclass mc    = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_310");
-    jclass gr    = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_757");
-    jclass stack = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4587");
-    jclass entry = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_4587$class_4665");
-    jclass rtc   = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_9779");
+    jclass mc    = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_310");
+    jclass gr    = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_757");
+    jclass stack = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4587");
+    jclass entry = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_4587$class_4665");
+    jclass rtc   = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_9779");
     jclass m4    = env->FindClass("org/joml/Matrix4f");
     if (env->ExceptionCheck()) env->ExceptionClear();
 
@@ -78,11 +78,11 @@ bool ensure_cache(JNIEnv* env)
     /* The View Bobbing toggle, through GameOptions.getBobView() -> SimpleOption
        -> getValue() -> Boolean. Every step is allowed to fail. */
     C.mc_options = env->GetFieldID(mc, "field_1690", "Lnet/minecraft/class_315;");
-    if (jclass go = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_315")) {
+    if (jclass go = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_315")) {
         C.opts_bobView = env->GetMethodID(go, "method_42448", "()Lnet/minecraft/class_7172;");
         env->DeleteLocalRef(go);
     }
-    if (jclass so = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_7172")) {
+    if (jclass so = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_7172")) {
         C.simple_value = env->GetMethodID(so, "method_41753", "()Ljava/lang/Object;");
         env->DeleteLocalRef(so);
     }
@@ -188,7 +188,7 @@ bool bob_matrix(JNIEnv* env, float out[16])
     scoped s_s{ env, stack };
 
 // Match renderWorld: camera interpolation, then hurt tilt followed by walking bob.
-    tp = ::vanta::modules::outline::view::camera_effect_time(env, renderer, tp);
+    tp = ::dt::modules::outline::view::camera_effect_time(env, renderer, tp);
     if (C.gr_tiltHurt) env->CallVoidMethod(renderer, C.gr_tiltHurt, stack, tp);
     if (bob_enabled)   env->CallVoidMethod(renderer, C.gr_bobView,  stack, tp);
     if (env->ExceptionCheck()) { env->ExceptionClear(); return false; }
@@ -216,4 +216,4 @@ bool bob_matrix(JNIEnv* env, float out[16])
     return true;
 }
 
-} // namespace vanta::modules::outline::view
+} // namespace dt::modules::outline::view

@@ -106,7 +106,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -554,6 +554,6 @@ public:
         return buf;
     }
 };
-VANTA_REGISTER_MODULE(Freecam);
+DT_REGISTER_MODULE(Freecam);
 
-} // namespace vanta::modules
+} // namespace dt::modules

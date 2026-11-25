@@ -12,7 +12,7 @@
 
 #include <atomic>
 
-namespace vanta::modules::chams::item {
+namespace dt::modules::chams::item {
 
 namespace {
 
@@ -127,7 +127,7 @@ constexpr const char* kGetBatchingSig = "(I)Lnet/minecraft/class_11785;";
 // Our ordering key. Any int is legal -- the queues are a sorted map -- and a
 // large positive one puts player equipment last, which is where a replayed copy
 // wants to be anyway.
-constexpr jint kVantaOrder = 0x40000000;
+constexpr jint kDtOrder = 0x40000000;
 
 // An item is not submitted through one door. A sword goes to submitItem, a
 // BLOCK held in the hand goes to submitBlockStateModel, and armour pieces and
@@ -261,7 +261,7 @@ inline void bracket(JNIEnv* env, jobject provider, int owner, CallOrig&& call_or
     // to replay, and the local player is excluded HERE rather than left to a
     // texture test that shared assets defeat.
     if (owner < 0) { call_original(); return; }
-    if (owner == ::vanta::modules::chams::jni::self_entity_id()) {
+    if (owner == ::dt::modules::chams::jni::self_entity_id()) {
         c_self_skipped.fetch_add(1, std::memory_order_relaxed);
         call_original();
         return;
@@ -316,7 +316,7 @@ inline void bracket(JNIEnv* env, jobject provider, int owner, CallOrig&& call_or
 void JNICALL hkHeld2(JNIEnv* env, jobject thiz, jobject m, jobject p,
                      jint light, jobject st, jfloat a, jfloat b)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     bracket(env, p, owner_of(env, st), [&] {
         if (ORIG_held && g_held_class) {
             env->CallNonvirtualVoidMethod(thiz, g_held_class, ORIG_held, m, p, light, st, a, b);
@@ -328,7 +328,7 @@ void JNICALL hkHeld6(JNIEnv* env, jobject thiz, jobject m, jobject p,
                      jint light, jobject e,
                      jfloat a, jfloat b, jfloat c, jfloat d, jfloat f, jfloat g)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     // 1.21..1.21.1 hands the LivingEntity itself, not a render state, and that
     // branch never reaches the queue path -- it keeps the flush bracket, where
     // ownership is still settled at draw time.
@@ -343,7 +343,7 @@ void JNICALL hkHeld6(JNIEnv* env, jobject thiz, jobject m, jobject p,
 void JNICALL hkArmour2(JNIEnv* env, jobject thiz, jobject m, jobject p,
                        jint light, jobject st, jfloat a, jfloat b)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     bracket(env, p, owner_of(env, st), [&] {
         if (ORIG_armour && g_armour_class) {
             env->CallNonvirtualVoidMethod(thiz, g_armour_class, ORIG_armour, m, p, light, st, a, b);
@@ -355,7 +355,7 @@ void JNICALL hkArmour6(JNIEnv* env, jobject thiz, jobject m, jobject p,
                        jint light, jobject e,
                        jfloat a, jfloat b, jfloat c, jfloat d, jfloat f, jfloat g)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     bracket(env, p, 0, [&] {
         if (ORIG_armour && g_armour_class) {
             env->CallNonvirtualVoidMethod(thiz, g_armour_class, ORIG_armour,
@@ -376,7 +376,7 @@ jobject redirect_target(JNIEnv* env, jobject thiz)
         || g_owner_id < 0 || !g_get_batching || !g_bq_class)
         return nullptr;
 
-    jobject q = env->CallObjectMethod(g_ordered, g_get_batching, kVantaOrder);
+    jobject q = env->CallObjectMethod(g_ordered, g_get_batching, kDtOrder);
     if (env->ExceptionCheck()) { env->ExceptionClear(); return nullptr; }
     if (!q) return nullptr;
 
@@ -401,41 +401,41 @@ void JNICALL hkSubmitModel(JNIEnv* env, jobject thiz, jobject model, jobject sta
                            jobject m, jobject layer, jint l1, jint l2, jint l3,
                            jobject sprite, jint i4, jobject crumbling)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitModel, model, state, m, layer, l1, l2, l3, sprite, i4, crumbling); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitModel, model, state, m, layer, l1, l2, l3, sprite, i4, crumbling); }
 
 void JNICALL hkSubmitItem(JNIEnv* env, jobject thiz, jobject m, jobject ctx,
                           jint a, jint b, jint c, jintArray tints, jobject quads,
                           jobject layer, jobject glint)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitItem, m, ctx, a, b, c, tints, quads, layer, glint); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitItem, m, ctx, a, b, c, tints, quads, layer, glint); }
 
 // A BLOCK held in the hand comes through here, not submitItem.
 void JNICALL hkSubmitBSM(JNIEnv* env, jobject thiz, jobject m, jobject layer, jobject model,
                          jfloat r, jfloat g, jfloat b, jint i1, jint i2, jint i3)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitBSM, m, layer, model, r, g, b, i1, i2, i3); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitBSM, m, layer, model, r, g, b, i1, i2, i3); }
 
 // Armour pieces and shields. Four overloads, all of them live.
 void JNICALL hkSubmitMP1(JNIEnv* env, jobject thiz, jobject part, jobject m, jobject layer,
                          jint l1, jint l2, jobject sprite)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP1, part, m, layer, l1, l2, sprite); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP1, part, m, layer, l1, l2, sprite); }
 
 void JNICALL hkSubmitMP2(JNIEnv* env, jobject thiz, jobject part, jobject m, jobject layer,
                          jint l1, jint l2, jobject sprite, jint i3, jobject crumbling)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP2, part, m, layer, l1, l2, sprite, i3, crumbling); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP2, part, m, layer, l1, l2, sprite, i3, crumbling); }
 
 void JNICALL hkSubmitMP3(JNIEnv* env, jobject thiz, jobject part, jobject m, jobject layer,
                          jint l1, jint l2, jobject sprite, jboolean z1, jboolean z2)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP3, part, m, layer, l1, l2, sprite, z1, z2); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP3, part, m, layer, l1, l2, sprite, z1, z2); }
 
 void JNICALL hkSubmitMP4(JNIEnv* env, jobject thiz, jobject part, jobject m, jobject layer,
                          jint l1, jint l2, jobject sprite, jboolean z1, jboolean z2,
                          jint i3, jobject crumbling, jint i4)
 {
-    vanta::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP4, part, m, layer, l1, l2, sprite, z1, z2, i3, crumbling, i4); }
+    dt::NativeCallback callbackLifetime; CHAMS_REDIRECT(ORIG_submitMP4, part, m, layer, l1, l2, sprite, z1, z2, i3, crumbling, i4); }
 
 // 1.21.9+ : the queue is emitted here, and the Immediate to emit into arrives
 // as a parameter -- so this is where the two flushes finally have something to
@@ -459,7 +459,7 @@ bool is_our_batch(JNIEnv* env, jobject batch, jobject immediate)
 void JNICALL hkIcrRender(JNIEnv* env, jobject thiz, jobject batch,
                          jobject immediate, jobject ctx)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     const bool ours = is_our_batch(env, batch, immediate);
     if (ours) {
         flush(env, immediate);                 // clear anything pending FIRST
@@ -480,7 +480,7 @@ void JNICALL hkIcrRender(JNIEnv* env, jobject thiz, jobject batch,
 void JNICALL hkMcrRender(JNIEnv* env, jobject thiz, jobject batch, jobject immediate,
                          jobject ctx, jobject immediate2)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     const bool ours = is_our_batch(env, batch, immediate);
     if (ours) {
         flush(env, immediate);
@@ -498,7 +498,7 @@ void JNICALL hkMcrRender(JNIEnv* env, jobject thiz, jobject batch, jobject immed
 void JNICALL hkMprRender(JNIEnv* env, jobject thiz, jobject batch, jobject immediate,
                          jobject ctx, jobject immediate2)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     const bool ours = is_our_batch(env, batch, immediate);
     if (ours) {
         flush(env, immediate);
@@ -521,7 +521,7 @@ bool attach_on(JNIEnv* env, jclass k, const char* owner, const char* name,
 {
     jmethodID mid = env->GetMethodID(k, name, sig);
     if (env->ExceptionCheck()) env->ExceptionClear();
-    ::vanta::desklog::jni_lookup(dbg::ch(), "method", owner, name, label, mid != nullptr);
+    ::dt::desklog::jni_lookup(dbg::ch(), "method", owner, name, label, mid != nullptr);
     if (!mid) return false;
 
     jnihook_result_t r = JNIHOOK_ERR_JVMTI_OPERATION;
@@ -545,8 +545,8 @@ bool attach_one(JNIEnv* env, const char* cls, const char* method,
                 void* detour2, void* detour6,
                 jclass* out_class, jmethodID* out_orig, const char* label)
 {
-    jclass k = ::vanta::jvm::findClassAnyLoader(env, cls);
-    ::vanta::desklog::jni_lookup(dbg::ch(), "class", cls, "<self>", "", k != nullptr);
+    jclass k = ::dt::jvm::findClassAnyLoader(env, cls);
+    ::dt::desklog::jni_lookup(dbg::ch(), "class", cls, "<self>", "", k != nullptr);
     if (!k) { if (env->ExceptionCheck()) env->ExceptionClear(); return false; }
 
     jmethodID mid = nullptr;
@@ -556,7 +556,7 @@ bool attach_one(JNIEnv* env, const char* cls, const char* method,
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (mid) { used = &vars[i]; break; }
     }
-    ::vanta::desklog::jni_lookup(dbg::ch(), "method", cls, method,
+    ::dt::desklog::jni_lookup(dbg::ch(), "method", cls, method,
                                  used ? used->range : "<no variant matched>", mid != nullptr);
     if (!mid) {
         CHAMS_LOG("item: %s.%s matched none of the %d known signatures -- %s is not "
@@ -616,18 +616,18 @@ bool install(JNIEnv* env)
 
     // The flush target. Optional on purpose: without it the brackets still run
     // and simply decline to move the boundary, which is inert, not harmful.
-    if (jclass imm = ::vanta::jvm::findClassAnyLoader(env, kImmediate)) {
+    if (jclass imm = ::dt::jvm::findClassAnyLoader(env, kImmediate)) {
         g_draw = env->GetMethodID(imm, kDraw, "()V");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (g_draw) g_immediate_class = static_cast<jclass>(env->NewGlobalRef(imm));
-        ::vanta::desklog::jni_lookup(dbg::ch(), "method", kImmediate, kDraw, "()V",
+        ::dt::desklog::jni_lookup(dbg::ch(), "method", kImmediate, kDraw, "()V",
                                      g_draw != nullptr);
         env->DeleteLocalRef(imm);
     } else {
-        ::vanta::desklog::jni_lookup(dbg::ch(), "class", kImmediate, "<self>", "", false);
+        ::dt::desklog::jni_lookup(dbg::ch(), "class", kImmediate, "<self>", "", false);
     }
 
-    ::vanta::desklog::section(dbg::ch(), "player equipment hooks");
+    ::dt::desklog::section(dbg::ch(), "player equipment hooks");
 
     // PlayerEntityRenderState.id -- the per-entity ownership signal.
     //
@@ -641,16 +641,16 @@ bool install(JNIEnv* env)
     // Optional: if either lookup fails, owner_of() returns -1 for every entity,
     // no equipment is redirected, and the module falls back to texture identity
     // alone -- the behaviour it had before the queue path existed.
-    if (jclass ps = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_10055")) {
+    if (jclass ps = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_10055")) {
         g_pstate_id = env->GetFieldID(ps, "field_53528", "I");
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (g_pstate_id) g_pstate_class = static_cast<jclass>(env->NewGlobalRef(ps));
-        ::vanta::desklog::jni_lookup(dbg::ch(), "field", "net/minecraft/class_10055",
+        ::dt::desklog::jni_lookup(dbg::ch(), "field", "net/minecraft/class_10055",
                                      "field_53528", "I  PlayerEntityRenderState.id",
                                      g_pstate_id != nullptr);
         env->DeleteLocalRef(ps);
     } else {
-        ::vanta::desklog::jni_lookup(dbg::ch(), "class", "net/minecraft/class_10055",
+        ::dt::desklog::jni_lookup(dbg::ch(), "class", "net/minecraft/class_10055",
                                      "<self>", "", false);
     }
 
@@ -660,11 +660,11 @@ bool install(JNIEnv* env)
     // Absent on 1.21.0 .. 1.21.8, where none of these classes exist. Resolving
     // nothing there is the expected outcome, not a failure, and the flush path
     // above carries those versions on its own.
-    if (jclass ocq = ::vanta::jvm::findClassAnyLoader(env, kOrderedQueue)) {
+    if (jclass ocq = ::dt::jvm::findClassAnyLoader(env, kOrderedQueue)) {
         g_get_batching = env->GetMethodID(ocq, kGetBatching, kGetBatchingSig);
         if (env->ExceptionCheck()) env->ExceptionClear();
         if (g_get_batching) g_ocq_class = static_cast<jclass>(env->NewGlobalRef(ocq));
-        ::vanta::desklog::jni_lookup(dbg::ch(), "method", kOrderedQueue, kGetBatching,
+        ::dt::desklog::jni_lookup(dbg::ch(), "method", kOrderedQueue, kGetBatching,
                                      kGetBatchingSig, g_get_batching != nullptr);
         env->DeleteLocalRef(ocq);
     }
@@ -673,7 +673,7 @@ bool install(JNIEnv* env)
         // BatchingRenderCommandQueue, NOT the RenderCommandQueue interface. The
         // interface declares these abstract; detouring it would intercept
         // nothing. Established by reading the 1.21.11 class files.
-        if (jclass bq = ::vanta::jvm::findClassAnyLoader(env, kBatchQueue)) {
+        if (jclass bq = ::dt::jvm::findClassAnyLoader(env, kBatchQueue)) {
             g_bq_class = static_cast<jclass>(env->NewGlobalRef(bq));
 
             attach_on(env, bq, kBatchQueue, "method_73480",
@@ -748,21 +748,21 @@ bool install(JNIEnv* env)
             "(Lnet/minecraft/class_11788;Lnet/minecraft/class_4597$class_4598;"
             "Lnet/minecraft/class_4618;Lnet/minecraft/class_4597$class_4598;)V";
 
-        if (jclass icr = ::vanta::jvm::findClassAnyLoader(env, kItemCmdRenderer)) {
+        if (jclass icr = ::dt::jvm::findClassAnyLoader(env, kItemCmdRenderer)) {
             g_icr_class = static_cast<jclass>(env->NewGlobalRef(icr));
             attach_on(env, icr, kItemCmdRenderer, kIcrRender, kIcrRenderSig,
                       reinterpret_cast<void*>(&hkIcrRender), &ORIG_icrRender,
                       "ItemCommandRenderer.render");
             env->DeleteLocalRef(icr);
         }
-        if (jclass mcr = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_11683")) {
+        if (jclass mcr = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_11683")) {
             g_mcr_class = static_cast<jclass>(env->NewGlobalRef(mcr));
             attach_on(env, mcr, "net/minecraft/class_11683", "method_73001", kBatchRenderSig,
                       reinterpret_cast<void*>(&hkMcrRender), &ORIG_mcrRender,
                       "ModelCommandRenderer.render");
             env->DeleteLocalRef(mcr);
         }
-        if (jclass mpr = ::vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_11793")) {
+        if (jclass mpr = ::dt::jvm::findClassAnyLoader(env, "net/minecraft/class_11793")) {
             g_mpr_class = static_cast<jclass>(env->NewGlobalRef(mpr));
             attach_on(env, mpr, "net/minecraft/class_11793", "method_73543", kBatchRenderSig,
                       reinterpret_cast<void*>(&hkMprRender), &ORIG_mprRender,
@@ -798,7 +798,7 @@ bool install(JNIEnv* env)
             CHAMS_LOG("item: 1.21.9+ queue path armed on key 0x%08X. submit: item=%d "
                       "blockStateModel=%d modelPart=%d/%d/%d/%d | emit: item=%d model=%d "
                       "modelPart=%d",
-                      (unsigned)kVantaOrder,
+                      (unsigned)kDtOrder,
                       ORIG_submitItem != nullptr, ORIG_submitBSM != nullptr,
                       ORIG_submitMP1 != nullptr, ORIG_submitMP2 != nullptr,
                       ORIG_submitMP3 != nullptr, ORIG_submitMP4 != nullptr,
@@ -877,7 +877,7 @@ void shutdown()
 {
     if (!g_installed.exchange(false, std::memory_order_acq_rel)) return;
     g_active.store(false, std::memory_order_release);
-    ::vanta::jvm::JniScope s;
+    ::dt::jvm::JniScope s;
     if (s) {
         JNIEnv* env = s.get();
         if (g_held_class)      { env->DeleteGlobalRef(g_held_class);      g_held_class = nullptr; }
@@ -900,4 +900,4 @@ void shutdown()
     CHAMS_LOG("item: shutdown");
 }
 
-} // namespace vanta::modules::chams::item
+} // namespace dt::modules::chams::item

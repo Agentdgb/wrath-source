@@ -35,7 +35,7 @@
 #include <shlobj.h>
 #include <vector>
 
-namespace vanta::entry {
+namespace dt::entry {
 
 std::atomic<bool> g_agentPresent{false};
 
@@ -59,7 +59,7 @@ void reportUnloadFailure(UnloadState state, const wchar_t* reason, DWORD error =
 
 // Wrath Loader watches this per-PID named object (blended as a standard Windows
 // Feature Configuration / WIL staging object) to confirm that the payload
-// reached Vanta's bootstrap entry point.
+// reached Dt's bootstrap entry point.
 std::atomic<HANDLE> g_sentinelMutex{nullptr};
 
 std::wstring sentinelMutexName(DWORD pid) {
@@ -77,8 +77,8 @@ void reapAndFree();          // bare thread: waits for the image to empty, frees
 // intermediary-only). We say so and carry on WITHOUT the Java hook layer —
 // the GUI and the config still run, so the user gets a window and a reason
 // instead of a process that silently does nothing.
-void warnNonFabric(vanta::jvm::Loader detected) {
-    const char* name = vanta::jvm::loaderName(detected);
+void warnNonFabric(dt::jvm::Loader detected) {
+    const char* name = dt::jvm::loaderName(detected);
     VLOG_ERR("boot",
         "Java hooks disabled: WrathClient ships Fabric intermediary mappings only. "
         "Detected loader: {}. The GUI still runs; game-side modules stay inert.", name);
@@ -89,10 +89,10 @@ void warnNonFabric(vanta::jvm::Loader detected) {
 // EVERY level maps to Info so slog::debug ("created font: X") is not filtered
 // out — that granularity is what pinpoints crashes inside vgui init.
 void routeSlogIntoLog(int level, const char* message) {
-    vanta::log::Level lvl = vanta::log::Level::Info;
-    if (level == 2) lvl = vanta::log::Level::Warn;
-    if (level == 3) lvl = vanta::log::Level::Error;
-    vanta::log::write(lvl, "vgui", message ? std::string(message) : std::string());
+    dt::log::Level lvl = dt::log::Level::Info;
+    if (level == 2) lvl = dt::log::Level::Warn;
+    if (level == 3) lvl = dt::log::Level::Error;
+    dt::log::write(lvl, "vgui", message ? std::string(message) : std::string());
 }
 
 #ifdef _DEBUG
@@ -100,15 +100,15 @@ LPTOP_LEVEL_EXCEPTION_FILTER g_prevExceptionFilter = nullptr;
 
 // Last-chance crash reporter (Debug only so Release never hooks kernel32 top-level
 // exception handling or leaves a dangling filter pointer after F8 unload).
-LONG WINAPI vantaUnhandledFilter(EXCEPTION_POINTERS* ep) {
+LONG WINAPI dtUnhandledFilter(EXCEPTION_POINTERS* ep) {
     char msg[256];
     std::snprintf(msg, sizeof(msg),
         "UNHANDLED EXCEPTION code=0x%08lX addr=%p flags=0x%08lX",
         ep->ExceptionRecord->ExceptionCode,
         ep->ExceptionRecord->ExceptionAddress,
         ep->ExceptionRecord->ExceptionFlags);
-    vanta::log::write(vanta::log::Level::Fatal, "crash", msg);
-    vanta::log::shutdown();   // force flush
+    dt::log::write(dt::log::Level::Fatal, "crash", msg);
+    dt::log::shutdown();   // force flush
     return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
@@ -118,7 +118,7 @@ LONG WINAPI vantaUnhandledFilter(EXCEPTION_POINTERS* ep) {
 // trampoline writer or a driver's context creation is exactly that. MSVC
 // forbids __try in any function containing objects with destructors, so the
 // SEH wrapper and the C++ callee are physically separated.
-void guiCallCppSide(HWND wnd, bool* ok) { *ok = vanta::vgui::start(wnd); }
+void guiCallCppSide(HWND wnd, bool* ok) { *ok = dt::vgui::start(wnd); }
 
 DWORD guiArmSEH(HWND wnd, bool* ok) {
     __try {
@@ -134,9 +134,9 @@ DWORD guiArmSEH(HWND wnd, bool* ok) {
 // haven't authorised. Any such fault must NOT take down the whole client —
 // we log it, leave the Java hook layer inert, and let the GUI keep running.
 void jvmCallCppSide() {
-    vanta::jvm::initFromRunningProcess();
-    if (vanta::jvm::ctx().vm.load()) {
-        vanta::jvm::requestCapabilities();
+    dt::jvm::initFromRunningProcess();
+    if (dt::jvm::ctx().vm.load()) {
+        dt::jvm::requestCapabilities();
     }
 }
 
@@ -145,11 +145,11 @@ DWORD jvmBringUpSEH() {
     __except (EXCEPTION_EXECUTE_HANDLER) { return GetExceptionCode(); }
 }
 
-void jvmCallDetect(JNIEnv* env, vanta::jvm::RuntimeInfo* out) {
-    *out = vanta::jvm::detectRuntime(env);
+void jvmCallDetect(JNIEnv* env, dt::jvm::RuntimeInfo* out) {
+    *out = dt::jvm::detectRuntime(env);
 }
 
-DWORD jvmDetectSEH(JNIEnv* env, vanta::jvm::RuntimeInfo* out) {
+DWORD jvmDetectSEH(JNIEnv* env, dt::jvm::RuntimeInfo* out) {
     __try { jvmCallDetect(env, out); return 0; }
     __except (EXCEPTION_EXECUTE_HANDLER) { return GetExceptionCode(); }
 }
@@ -163,10 +163,10 @@ DWORD jvmDetectSEH(JNIEnv* env, vanta::jvm::RuntimeInfo* out) {
 // when a launcher injects during its splash screen. Blocking bootstrap on that
 // would delay (or, under AgentOnLoad, deadlock) the JVM bring-up below.
 void armOverlayAsync() {
-    vanta::platform::spawnNamed("Render Thread", []{
+    dt::platform::spawnNamed("Render Thread", []{
         slog::log::set_external_sink(&routeSlogIntoLog);
 
-        HWND wnd = vanta::platform::waitForGameWindow(20000, &g_unloading);
+        HWND wnd = dt::platform::waitForGameWindow(20000, &g_unloading);
         if (!wnd) {
             VLOG_ERR("gui", "no game window after 20s — overlay not armed");
             return;
@@ -204,7 +204,7 @@ void armOverlayAsync() {
             bool  ok   = false;
             DWORD code;
             {
-                std::lock_guard state(vanta::clientStateMutex());
+                std::lock_guard state(dt::clientStateMutex());
                 if (g_unloading.load()) return;
                 code = guiArmSEH(wnd, &ok);
             }
@@ -226,7 +226,7 @@ void armOverlayAsync() {
 }
 
 void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
-    wrath::diagnostics::recordModule(vanta::platform::currentModule());
+    wrath::diagnostics::recordModule(dt::platform::currentModule());
     const std::wstring mtxName = sentinelMutexName(GetCurrentProcessId());
     HANDLE sentinel = CreateMutexW(nullptr, FALSE, mtxName.c_str());
     g_sentinelMutex.store(sentinel, std::memory_order_release);
@@ -237,9 +237,9 @@ void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
     // goes through OutputDebugStringA, so DbgView.exe shows the boot even when
     // the file could not be opened.
 #ifdef _DEBUG
-    auto logDir = vanta::platform::logDir();
-    vanta::log::init(vanta::log::Level::Info, std::filesystem::path(logDir) / L"wrath.log");
-    g_prevExceptionFilter = SetUnhandledExceptionFilter(&vantaUnhandledFilter);
+    auto logDir = dt::platform::logDir();
+    dt::log::init(dt::log::Level::Info, std::filesystem::path(logDir) / L"wrath.log");
+    g_prevExceptionFilter = SetUnhandledExceptionFilter(&dtUnhandledFilter);
 #endif
     VLOG_INFO("boot", "WrathClient booting (door={})",
               door == Door::AgentOnLoad   ? "AgentOnLoad" :
@@ -249,18 +249,18 @@ void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
     // 2) Modules + config + keybinds. All pure C++ — no JNI is required to
     // build the module registry, so this happens BEFORE any JVM work and the
     // GUI is guaranteed a populated module list.
-    vanta::ModuleManager::get().initAll();
-    vanta::ConfigManager::get().init(vanta::platform::appDataDir());
-    if (!vanta::ConfigManager::get().isInitialized()) {
+    dt::ModuleManager::get().initAll();
+    dt::ConfigManager::get().init(dt::platform::appDataDir());
+    if (!dt::ConfigManager::get().isInitialized()) {
         VLOG_ERR("cfg", "No safe profile directory available");
     }
-    vanta::KeybindManager::get().init();
-    vanta::ConfigManager::get().loadProfile(vanta::ConfigManager::get().currentProfile());
+    dt::KeybindManager::get().init();
+    dt::ConfigManager::get().loadProfile(dt::ConfigManager::get().currentProfile());
 
     // Hotkeys are processed directly in the window procedure (gl_hook.cc) with 0 ms latency,
     // avoiding dedicated polling threads and GetAsyncKeyState loops.
-    auto& binds = vanta::KeybindManager::get();
-    vanta::vgui::setHotkeys(binds.guiToggleKey(), binds.panicKey());
+    auto& binds = dt::KeybindManager::get();
+    dt::vgui::setHotkeys(binds.guiToggleKey(), binds.panicKey());
 
     // 3) Overlay. Deliberately armed BEFORE the JVM work: a failure to find
     // the VM, detect the version, or resolve mappings must never leave the
@@ -272,7 +272,7 @@ void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
     // Any such fault is turned into a log line, the GUI keeps running.
     VLOG_INFO("boot", "step: bringing up JVM (SEH-guarded)");
     if (vm) {
-        vanta::jvm::init(vm);
+        dt::jvm::init(vm);
     } else {
         DWORD ec = jvmBringUpSEH();
         if (ec != 0) {
@@ -282,13 +282,13 @@ void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
         }
     }
 
-    if (!vanta::jvm::ctx().vm.load()) {
+    if (!dt::jvm::ctx().vm.load()) {
         VLOG_ERR("boot", "No JavaVM in this process — Java hooks disabled, GUI OK");
         return;
     }
 
     VLOG_INFO("boot", "step: attaching JNIEnv");
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) {
         VLOG_ERR("boot", "No JNIEnv — Java hooks disabled, GUI OK");
         return;
@@ -297,7 +297,7 @@ void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
     // 5) Version + loader detect (also SEH-guarded — SharedConstants reflection
     // can crash in an unstable VM).
     VLOG_INFO("boot", "step: detecting loader + MC version");
-    vanta::jvm::RuntimeInfo ri;
+    dt::jvm::RuntimeInfo ri;
     DWORD ec = jvmDetectSEH(env, &ri);
     if (ec != 0) {
         char hex[16]; std::snprintf(hex, sizeof(hex), "%08lX", ec);
@@ -305,26 +305,26 @@ void bootstrapUnlocked(JavaVM* vm, const char* options, Door door) {
         return;
     }
 
-    if (ri.loader != vanta::jvm::Loader::Fabric) {
+    if (ri.loader != dt::jvm::Loader::Fabric) {
         warnNonFabric(ri.loader);
         return;
     }
 
     VLOG_INFO("boot", "step: binding MappingRegistry to MC {}", ri.mcVersion);
-    vanta::mappings::MappingRegistry::get().init(ri.mcVersion);
+    dt::mappings::MappingRegistry::get().init(ri.mcVersion);
 
     // 6) Hooks (Java-side via JVMTI).
     VLOG_INFO("boot", "step: installing JVMTI hooks");
-    vanta::hook::HookManager::get().install(vanta::jvm::ctx().jvmti.load(), env);
+    dt::hook::HookManager::get().install(dt::jvm::ctx().jvmti.load(), env);
 
     VLOG_INFO("boot", "Bootstrap complete (transformed={} classes)",
-              vanta::hook::HookManager::get().transformedClassCount());
+              dt::hook::HookManager::get().transformedClassCount());
 
     // Fetch account profile & avatar asynchronously once JVM & mappings are active
-    vanta::profile::start();
+    dt::profile::start();
 
     // Iniciar verificación continua de latido con el servidor
-    vanta::sync::HeartbeatWatchdog::get().start();
+    dt::sync::HeartbeatWatchdog::get().start();
 }
 
 } // namespace
@@ -352,45 +352,51 @@ void shutdown() {
     }
 
     // Detener de inmediato el supervisor de latidos
-    vanta::sync::HeartbeatWatchdog::get().stop();
+    dt::sync::HeartbeatWatchdog::get().stop();
 
     // The overlay is torn down by unloadOnThisThread before it gets here (it
     // has to be — see the comment there). Calling stop() again is a no-op.
-    VLOG_INFO("boot", "  shutdown: profile"); vanta::profile::stop();
-    if (!vanta::hook::packets::shutdown()) return;
-    VLOG_INFO("boot", "  shutdown: vgui");     vanta::vgui::stop();
-    VLOG_INFO("boot", "  shutdown: keybinds"); vanta::KeybindManager::get().shutdown();
+    VLOG_INFO("boot", "  shutdown: profile"); dt::profile::stop();
+    if (!dt::hook::packets::shutdown()) return;
+    VLOG_INFO("boot", "  shutdown: vgui");     dt::vgui::stop();
+    VLOG_INFO("boot", "  shutdown: keybinds"); dt::KeybindManager::get().shutdown();
     VLOG_INFO("boot", "  shutdown: config");
-    vanta::ConfigManager::get().shutdown();
+    dt::ConfigManager::get().shutdown();
 
     // Raise shutdown flags first so any in-flight JNIHook callback immediately
     // bails out to the original method before caches and hooks are torn down.
-    vanta::modules::autototem::g_shutting_down.store(true, std::memory_order_release);
-    vanta::modules::triggerbot::g_shutting_down.store(true, std::memory_order_release);
-    vanta::modules::silentaim::g_shutting_down.store(true, std::memory_order_release);
+    dt::modules::autototem::g_shutting_down.store(true, std::memory_order_release);
+    dt::modules::triggerbot::g_shutting_down.store(true, std::memory_order_release);
+    dt::modules::silentaim::g_shutting_down.store(true, std::memory_order_release);
 
-    VLOG_INFO("boot", "  shutdown: modules");  vanta::ModuleManager::get().shutdownAll();
+    VLOG_INFO("boot", "  shutdown: modules");  dt::ModuleManager::get().shutdownAll();
 
     VLOG_INFO("boot", "  shutdown: autototem");
-    vanta::modules::autototem::shutdown_cache();
+    dt::modules::autototem::shutdown_cache();
 
     VLOG_INFO("boot", "  shutdown: tt");
-    vanta::modules::triggerbot::shutdown_cache();
+    dt::modules::triggerbot::shutdown_cache();
 
     VLOG_INFO("boot", "  shutdown: sa");
-    vanta::modules::silentaim::shutdown_cache();
+    dt::modules::silentaim::shutdown_cache();
 
     VLOG_INFO("boot", "  shutdown: hooks");
-    vanta::hook::HookManager::get().uninstall();
-    if (JNIHook_Shutdown() != JNIHOOK_OK) { vanta::blockUnload(); return; }
-    vanta::modules::visualports::shutdownCache();
+    dt::hook::HookManager::get().uninstall();
+    jnihook_result_t jhRes = JNIHook_Shutdown();
+    for (int retry = 0; retry < 3 && jhRes != JNIHOOK_OK && jhRes != JNIHOOK_ERR_MUST_POSSESS_CAPABILITY; ++retry) {
+        Sleep(50);
+        jhRes = JNIHook_Shutdown();
+    }
+    if (jhRes != JNIHOOK_OK) { dt::blockUnload(); return; }
+    dt::modules::visualports::shutdownCache();
 
     // Profile/artwork workers must finish before the VM context and its
     // shared lookup references are retired. This shutdown worker is counted.
-    for (int attempt = 0; attempt < 1000 && vanta::platform::liveThreadCount() > 1; ++attempt) Sleep(10);
-    if (vanta::platform::liveThreadCount() > 1) { vanta::blockUnload(); return; }
-    vanta::jvm::invalidateCaches();
-    VLOG_INFO("boot", "  shutdown: jvm");      vanta::jvm::shutdown();
+    for (int attempt = 0; attempt < 200 && dt::platform::liveThreadCount() > 1; ++attempt) Sleep(10);
+    if (dt::platform::liveThreadCount() > 1) { dt::blockUnload(); return; }
+    dt::jvm::invalidateCaches();
+    dt::jvm::detachThisThreadIfAttached();
+    VLOG_INFO("boot", "  shutdown: jvm");      dt::jvm::shutdown();
 
     // Erase all diagnostic artefacts (load/module/unload JSON files) written
     // during this session. Done BEFORE closing the log so any write failure
@@ -400,8 +406,8 @@ void shutdown() {
     wrath::diagnostics::purgeSessionRecords(GetCurrentProcessId());
 
     VLOG_INFO("boot", "  shutdown: log");
-    vanta::log::shutdown();
-    vanta::platform::closeConsole();
+    dt::log::shutdown();
+    dt::platform::closeConsole();
 }
 
 namespace {
@@ -423,11 +429,11 @@ void unloadOnThisThread() {
             L"La inicializacion no termino. No se inicio la descarga y el DLL sigue cargado.");
         return;
     }
-    vanta::EventBus::get().stop();
-    vanta::profile::stop();
-    vanta::modules::autototem::g_shutting_down.store(true);
-    vanta::modules::triggerbot::g_shutting_down.store(true);
-    vanta::modules::silentaim::g_shutting_down.store(true);
+    dt::EventBus::get().stop();
+    dt::profile::stop();
+    dt::modules::autototem::g_shutting_down.store(true);
+    dt::modules::triggerbot::g_shutting_down.store(true);
+    dt::modules::silentaim::g_shutting_down.store(true);
 
     /* Tear the overlay down FIRST, and synchronously. This is a hard
        precondition, not a courtesy: the render thread executes our detour, our
@@ -438,9 +444,9 @@ void unloadOnThisThread() {
 
        vgui::stop() raises a flag the render thread acts on, waits for its
        acknowledgement, then drains the detour before removing it. */
-    vanta::vgui::stop();
+    dt::vgui::stop();
 
-    if (vanta::vgui::isRunning() || !vanta::safeToUnload()) {
+    if (dt::vgui::isRunning() || !dt::safeToUnload()) {
         /* Refuse to free the image while callbacks may still reference it.
            Keep their caches alive and report the incomplete shutdown. */
         VLOG_ERR("boot",
@@ -457,7 +463,7 @@ void unloadOnThisThread() {
 
     // Resolved BEFORE shutdown() runs, because shutdown() closes the log and a
     // failure after that point would be invisible.
-    HMODULE self = vanta::platform::currentModule();
+    HMODULE self = dt::platform::currentModule();
     if (!self) {
         VLOG_ERR("boot", "no module handle — cannot unload; the DLL stays resident");
         g_unloading.store(false);
@@ -469,7 +475,7 @@ void unloadOnThisThread() {
 
     shutdown();
 
-    if (!vanta::safeToUnload()) {
+    if (!dt::safeToUnload()) {
         reportUnloadFailure(UnloadState::StoppedResident,
             L"El cierre de callbacks o hilos no termino correctamente. El DLL permanece cargado.");
         return;
@@ -478,7 +484,7 @@ void unloadOnThisThread() {
 #ifdef _DEBUG
     OutputDebugStringA("[wrath] teardown done, handing off to the reaper\n");
 #endif
-    if (!vanta::platform::spawnReaper(&reapAndFree)) {
+    if (!dt::platform::spawnReaper(&reapAndFree)) {
         reportUnloadFailure(UnloadState::StoppedResident,
             L"El cliente termino su cierre, pero no se pudo crear el hilo de liberacion.\n"
             L"El DLL permanece cargado.", GetLastError());
@@ -490,7 +496,7 @@ void unloadOnThisThread() {
 // Runs on the bare thread from spawnReaper, using Win32 calls and atomics:
 // this code outlives every other thread in the image on purpose.
 void reapAndFree() {
-    HMODULE self = vanta::platform::currentModule();
+    HMODULE self = dt::platform::currentModule();
     if (!self) {
         reportUnloadFailure(UnloadState::Failed,
             L"El hilo de liberacion no encontro el modulo. El DLL permanece cargado.");
@@ -501,10 +507,10 @@ void reapAndFree() {
     }
 
     // Every spawnNamed thread must have returned, releasing its CRT reference.
-    for (int i = 0; i < 1000 && vanta::platform::liveThreadCount() > 0; ++i)
+    for (int i = 0; i < 1000 && dt::platform::liveThreadCount() > 0; ++i)
         Sleep(10);
 
-    if (vanta::platform::liveThreadCount() > 0) {
+    if (dt::platform::liveThreadCount() > 0) {
         reportUnloadFailure(UnloadState::StoppedResident,
             L"Todavia hay hilos activos. Se cancelo la liberacion del DLL.");
 #ifdef _DEBUG
@@ -514,7 +520,7 @@ void reapAndFree() {
     }
 
     DWORD releaseError = ERROR_SUCCESS;
-    if (vanta::platform::isRegisteredDll(self, releaseError)) {
+    if (dt::platform::isRegisteredDll(self, releaseError)) {
         // ── Normal path: image in PEB loader list ─────────────────────────
         // FreeLibraryAndExitThread releases the module reference and kills
         // this thread atomically: no instant where this thread executes
@@ -558,7 +564,7 @@ void reapAndFree() {
     g_unloadState.store(UnloadState::ReleaseRequested);
 
     // Isolated stub executes VirtualFree/NtUnmapViewOfSection and tail-jumps to ExitThread(0)
-    vanta::platform::executeManualUnloadAndExit(self);
+    dt::platform::executeManualUnloadAndExit(self);
 }
 
 } // namespace
@@ -568,17 +574,17 @@ void requestFullUnload() {
 }
 
 void requestFullUnload(bool /*purgeConfig*/) {
-    g_notificationWindow.store(vanta::platform::findGameWindow());
+    g_notificationWindow.store(dt::platform::findGameWindow());
     // Compatibility overload: Unload always preserves profiles and user data.
     wrath::diagnostics::recordUnloadRequest();
     // Callers reach this from threads that must survive (a JNI callback, the
     // render thread), so the teardown runs on a thread of its own — the one
     // that will eventually free the image and exit with it.
     try {
-        if (!vanta::platform::spawnNamed("GC Finalizer", [] {
+        if (!dt::platform::spawnNamed("GC Finalizer", [] {
             try { unloadOnThisThread(); }
             catch (...) {
-                vanta::blockUnload();
+                dt::blockUnload();
                 reportUnloadFailure(UnloadState::StoppedResident,
                     L"El cierre encontro un error inesperado. El DLL permanece cargado.");
             }
@@ -592,5 +598,5 @@ void requestFullUnload(bool /*purgeConfig*/) {
     }
 }
 
-} // namespace vanta::entry
+} // namespace dt::entry
 

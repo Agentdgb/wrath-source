@@ -8,7 +8,7 @@
 // so the gradient survives the whole ping-pong smoothly. Same method names as
 // al_fbo so the glow code reads the same, but nothing here touches the arraylist.
 //
-// Routes GL through the shared vanta::al::gl loader (api()) exactly like the rest
+// Routes GL through the shared dt::al::gl loader (api()) exactly like the rest
 // of the native layer; the loader is neutral infrastructure, not arraylist logic.
 
 #pragma once
@@ -20,7 +20,7 @@
 #define GL_RGBA16F 0x881A
 #endif
 
-namespace vanta::modules::itemshader {
+namespace dt::modules::itemshader {
 
 // One RGBA16F colour-attachment framebuffer, resizable in-place. Half-float so a
 // blurred gradient keeps far more than 256 levels — no 8-bit banding lines.
@@ -34,7 +34,7 @@ public:
     // (Re)allocate to the requested size. Cheap no-op when unchanged.
     bool ensure(int w, int h) {
         if (w < 1 || h < 1) return false;
-        const auto& g = ::vanta::al::gl::api();
+        const auto& g = ::dt::al::gl::api();
         if (!g.ok) return false;
         if (framebuffer_id_ != 0 && width_ == w && height_ == h) return true;
 
@@ -63,7 +63,7 @@ public:
     }
 
     void bind_draw() {
-        ::vanta::al::gl::api().BindFramebuffer(GL_FRAMEBUFFER, framebuffer_id_);
+        ::dt::al::gl::api().BindFramebuffer(GL_FRAMEBUFFER, framebuffer_id_);
         glViewport(0, 0, width_, height_);
     }
 
@@ -79,7 +79,7 @@ public:
     bool         valid()  const { return framebuffer_id_ != 0 && color_texture_id_ != 0; }
 
     void destroy() {
-        const auto& g = ::vanta::al::gl::api();
+        const auto& g = ::dt::al::gl::api();
         if (color_texture_id_) { glDeleteTextures(1, &color_texture_id_); color_texture_id_ = 0; }
         if (framebuffer_id_ && g.ok) { g.DeleteFramebuffers(1, &framebuffer_id_); framebuffer_id_ = 0; }
         width_ = 0; height_ = 0;
@@ -92,4 +92,4 @@ private:
     int          height_ = 0;
 };
 
-} // namespace vanta::modules::itemshader
+} // namespace dt::modules::itemshader

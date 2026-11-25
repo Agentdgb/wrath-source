@@ -4,7 +4,7 @@
 #include "vgui/framework/render/stb/stb_image.hh"
 #include <memory>
 #include <stdexcept>
-namespace vanta::modules::bloom {
+namespace dt::modules::bloom {
 unsigned loadNativeTexture(int resource, bool mipmaps, bool repeat) {
     const auto &g = al::gl::api();
     if (!g.ok)
@@ -57,4 +57,4 @@ unsigned loadNativeTexture(int resource, bool mipmaps, bool repeat) {
         throw std::runtime_error("Native texture allocation failed");
     return texture;
 }
-} // namespace vanta::modules::bloom
+} // namespace dt::modules::bloom

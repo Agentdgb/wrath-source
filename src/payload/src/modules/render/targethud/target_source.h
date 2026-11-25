@@ -17,7 +17,7 @@
 
 #include <string>
 
-namespace vanta::modules::targethud {
+namespace dt::modules::targethud {
 
 struct target_snapshot
 {
@@ -78,4 +78,4 @@ float presence();
    not flash the previous fight's target. */
 void reset();
 
-} // namespace vanta::modules::targethud
+} // namespace dt::modules::targethud

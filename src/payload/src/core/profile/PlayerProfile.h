@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::profile {
+namespace dt::profile {
 
 // The signed-in player, as shown on the sidebar card.
 //
@@ -31,4 +31,4 @@ bool hasPendingHead();
 // Returns false when there is nothing pending.
 bool takeHead(std::vector<std::uint8_t>& rgba, int& width, int& height);
 
-} // namespace vanta::profile
+} // namespace dt::profile

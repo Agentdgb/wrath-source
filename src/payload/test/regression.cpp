@@ -33,12 +33,12 @@ std::atomic<bool> snapshotOnWrongThread{false};
 nlohmann::json readJson(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     std::string bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    return nlohmann::json::parse(vanta::storage::decodeProfileData(bytes));
+    return nlohmann::json::parse(dt::storage::decodeProfileData(bytes));
 }
 }
 
 // Test doubles isolate actual config persistence from Minecraft and OpenGL.
-namespace vanta {
+namespace dt {
 ModuleManager& ModuleManager::get() { static ModuleManager manager; return manager; }
 nlohmann::json ModuleManager::saveAll() const {
     if (std::this_thread::get_id() != uiThread) snapshotOnWrongThread.store(true);
@@ -55,14 +55,14 @@ void loadGuiState(const nlohmann::json& data) {
 }
 
 void testEvents() {
-    struct CancelEvent : vanta::Event, vanta::Cancellable {};
-    auto& bus = vanta::EventBus::get();
+    struct CancelEvent : dt::Event, dt::Cancellable {};
+    auto& bus = dt::EventBus::get();
     std::vector<int> order;
-    auto low = bus.subscribe<CancelEvent>([&](auto&) { order.push_back(1); }, vanta::Priority::Low);
+    auto low = bus.subscribe<CancelEvent>([&](auto&) { order.push_back(1); }, dt::Priority::Low);
     auto monitor = bus.subscribe<CancelEvent>([&](auto& event) {
         require(event.cancelled, "monitor ran before cancellation"); order.push_back(3);
-    }, vanta::Priority::Monitor);
-    auto high = bus.subscribe<CancelEvent>([&](auto& event) { order.push_back(2); event.cancel(); }, vanta::Priority::High);
+    }, dt::Priority::Monitor);
+    auto high = bus.subscribe<CancelEvent>([&](auto& event) { order.push_back(2); event.cancel(); }, dt::Priority::High);
     CancelEvent event;
     require(!bus.post(event), "cancelled event reported as surviving");
     require(order == std::vector<int>{2, 3}, "first dispatch priority/monitor order incorrect");
@@ -71,8 +71,8 @@ void testEvents() {
     CancelEvent next;
     require(bus.post(next) && order == std::vector<int>{1}, "unsubscribed listener still ran");
     low.reset();
-    struct Plain : vanta::Event {};
-    std::unique_ptr<vanta::IListenerToken> self;
+    struct Plain : dt::Event {};
+    std::unique_ptr<dt::IListenerToken> self;
     int calls = 0;
     self = bus.subscribe<Plain>([&] { ++calls; self.reset(); });
     Plain plain;
@@ -90,13 +90,13 @@ void testEvents() {
 }
 
 void testOnce() {
-    vanta::AtomicOnce once;
+    dt::AtomicOnce once;
     std::atomic<int> runs{0};
     std::jthread first([&] { once.run([&] { ++runs; std::this_thread::sleep_for(10ms); }); });
     std::jthread second([&] { once.run([&] { ++runs; }); });
     first.join(); second.join();
     require(runs == 1 && once.done(), "once initialization ran more than once");
-    vanta::AtomicOnce failed;
+    dt::AtomicOnce failed;
     try { failed.run([] { throw std::runtime_error("expected"); }); } catch (...) {}
     require(failed.failed() && !failed.run([] {}), "failed initialization retried unexpectedly");
 }
@@ -104,18 +104,18 @@ void testOnce() {
 void testMemory() {
     std::string text = "short";
     text.reserve(4096);
-    vanta::util::scrubString(text);
+    dt::util::scrubString(text);
     require(text.empty(), "string not cleared");
     std::vector<std::string> strings{"one", std::string(1024, 'x')};
-    vanta::util::scrubStringVector(strings);
+    dt::util::scrubStringVector(strings);
     require(strings.empty(), "string vector not cleared");
-    vanta::util::TimeBudget budget(1ms);
+    dt::util::TimeBudget budget(1ms);
     std::this_thread::sleep_for(3ms);
     require(budget.expired(), "time budget did not expire");
 }
 
 void testPotPlan() {
-    using namespace vanta::modules::throwpot;
+    using namespace dt::modules::throwpot;
     const std::array<Potion, 3> weak{{{0,4},{1,4},{2,4}}};
     require(randomPlan(weak, 6, 20, 0).count == 2, "low health did not prioritize two");
     require(randomPlan(weak, 16, 20, 65536).count == 1, "high health did not select one");
@@ -167,7 +167,7 @@ void testPotPlan() {
 }
 
 void testPotTiming() {
-    using namespace vanta::modules::throwpot;
+    using namespace dt::modules::throwpot;
     for (int cooldown = 1; cooldown <= 10; ++cooldown) {
         const int base = cooldown * 50;
         require(throwDelayMs(cooldown, false) == base, "Double Pot ignored cooldown");
@@ -184,7 +184,7 @@ void testPotTiming() {
 }
 
 void testShareCode() {
-    using namespace vanta::config;
+    using namespace dt::config;
     const SharedProfile source{"portable", {{"unicode", "config española"}, {"nested", {{"value", 12}}}}};
     const auto first = encodeShareCode(source), second = encodeShareCode(source);
     require(first != second, "share identifiers are not random");
@@ -204,7 +204,7 @@ void testShareCode() {
 void testConfig() {
     const auto root = std::filesystem::current_path() / ("config-regression-" + std::to_string(GetCurrentProcessId()));
     struct Cleanup { std::filesystem::path path; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path, ec); } } cleanup{root};
-    auto& config = vanta::ConfigManager::get();
+    auto& config = dt::ConfigManager::get();
     config.init(root);
     testValue = 10;
     config.saveProfile("default");
@@ -224,7 +224,7 @@ void testConfig() {
     testValue = 40; config.markDirty();
     std::this_thread::sleep_for(420ms); config.pumpAutosave();
     require(config.deleteProfile("other"), "profile delete failed");
-    require(!vanta::ConfigManager::validName("CON.txt") && !vanta::ConfigManager::validName("../outside"), "unsafe config name accepted");
+    require(!dt::ConfigManager::validName("CON.txt") && !dt::ConfigManager::validName("../outside"), "unsafe config name accepted");
     config.saveProfile("rename-me");
     require(config.renameProfile("rename-me", "renamed"), "inactive rename failed");
     require(!std::filesystem::exists(root / "profiles/rename-me.json"), "old renamed profile remains");
@@ -251,7 +251,7 @@ void testConfig() {
     require(readJson(root / "profiles/active-2.json")["test"] == 88, "sharing lost unsaved edits");
     require(config.importProfile(code) == "active-3", "duplicate import did not get unique name");
     bool rejected = false;
-    try { config.importProfile(vanta::config::encodeShareCode({"invalid", {{"test", "wrong type"}}})); }
+    try { config.importProfile(dt::config::encodeShareCode({"invalid", {{"test", "wrong type"}}})); }
     catch (...) { rejected = true; }
     require(rejected && !std::filesystem::exists(root / "profiles/invalid.json"), "invalid setting import wrote a profile");
     require(!config.deleteProfile("DEFAULT"), "case variant bypassed default protection");
@@ -259,7 +259,7 @@ void testConfig() {
     // Invalid profiles must be rejected before any live state is touched.
     const auto writeProfile = [&](const char* name, const nlohmann::json& data) {
         std::ofstream file(root / "profiles" / (std::string(name) + ".json"), std::ios::binary);
-        file << vanta::storage::encodeProfileData(data.dump());
+        file << dt::storage::encodeProfileData(data.dump());
         require(file.good(), "could not write profile fixture");
     };
     const auto originalProfile = config.currentProfile();
@@ -273,13 +273,13 @@ void testConfig() {
     require(loadCalls == callsBefore && testValue == 88, "invalid friends applied module settings");
 
     guiValue = 17;
-    vanta::FriendList::get().replaceAll({"OriginalFriend"});
+    dt::FriendList::get().replaceAll({"OriginalFriend"});
     writeProfile("apply-failure", {{"test", 99}, {"#test_gui", 42}, {"#friends", {"NewFriend"}}});
     failGuiOnce = true;
     config.loadProfile("apply-failure");
     require(testValue == 88 && guiValue == 17 && config.currentProfile() == originalProfile
-        && vanta::FriendList::get().contains("OriginalFriend")
-        && !vanta::FriendList::get().contains("NewFriend") && !config.isLoading(),
+        && dt::FriendList::get().contains("OriginalFriend")
+        && !dt::FriendList::get().contains("NewFriend") && !config.isLoading(),
         "application failure did not restore modules, GUI and friends");
 
     // A failed autosave must retry without a new edit or another pump.
@@ -318,7 +318,7 @@ int main() {
         std::cout << "Event ordering, cancellation, concurrent dispatch, initialization, memory and config regression checks passed\n";
         return 0;
     } catch (const std::exception& error) {
-        vanta::ConfigManager::get().shutdown();
+        dt::ConfigManager::get().shutdown();
         std::cerr << error.what() << '\n'; return 1;
     }
 }

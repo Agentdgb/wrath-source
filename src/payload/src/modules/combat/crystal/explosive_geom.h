@@ -5,7 +5,7 @@
 #include <string_view>
 #include "modules/shared/NativeAccess.h"
 
-namespace vanta::modules::crystal_geom {
+namespace dt::modules::crystal_geom {
 
 using native::Vec;
 
@@ -147,4 +147,4 @@ inline std::string at(Block b) {
     return std::to_string(b.x) + " " + std::to_string(b.y) + " " + std::to_string(b.z);
 }
 
-} // namespace vanta::modules::crystal_geom
+} // namespace dt::modules::crystal_geom

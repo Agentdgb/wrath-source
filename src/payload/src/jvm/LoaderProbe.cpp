@@ -2,7 +2,7 @@
 
 #include "util/Log.h"
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 namespace {
 
@@ -36,4 +36,4 @@ const char* loaderName(Loader l) noexcept {
     }
 }
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

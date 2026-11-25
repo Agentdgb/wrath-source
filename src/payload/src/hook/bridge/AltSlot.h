@@ -1,7 +1,7 @@
 #pragma once
 #include <jni.h>
 
-namespace vanta::hook::bridge {
+namespace dt::hook::bridge {
 
 // Thread-local scratch slot used by Recipe B to smuggle a replaced return
 // value from a bridge native back into Java without allocating.
@@ -14,4 +14,4 @@ public:
     static jlong   getLong(JNIEnv* env);
 };
 
-} // namespace vanta::hook::bridge
+} // namespace dt::hook::bridge

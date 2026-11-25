@@ -15,7 +15,7 @@
 
 #include "modules/render/blockesp/blockesp.h"
 
-namespace vanta::modules {
+namespace dt::modules {
 
 class BlockEsp : public Module {
 public:
@@ -35,7 +35,7 @@ public:
 
         listen<events::GameLoopEvent>([this](events::GameLoopEvent&) {
             mirror();
-            ::vanta::jvm::JniScope s;
+            ::dt::jvm::JniScope s;
             if (s) blockesp::tick(s.get());
         });
     }
@@ -86,6 +86,6 @@ private:
     // (blockesp::g_debug) stays off; flip it in code when diagnosing.
 };
 
-VANTA_REGISTER_MODULE(BlockEsp);
+DT_REGISTER_MODULE(BlockEsp);
 
-} // namespace vanta::modules
+} // namespace dt::modules

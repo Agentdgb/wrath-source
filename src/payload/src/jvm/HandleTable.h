@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <jni.h>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 // Thread-local pool that recycles jobject <-> uint64 handles for bridge natives.
 // The pool is drained on PostTickEvent so we never NewGlobalRef in the hot path.
@@ -24,4 +24,4 @@ private:
 
 HandleTable& threadHandles();
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

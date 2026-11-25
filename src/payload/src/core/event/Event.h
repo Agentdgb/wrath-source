@@ -1,6 +1,6 @@
 #pragma once
 
-namespace vanta {
+namespace dt {
 
 struct Event {};
 
@@ -9,4 +9,4 @@ struct Cancellable {
     void cancel() noexcept { cancelled = true; }
 };
 
-} // namespace vanta
+} // namespace dt

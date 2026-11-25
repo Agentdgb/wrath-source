@@ -23,9 +23,9 @@
 #include <utility>
 #include <windows.h>
 
-namespace vanta::modules::silentaim_tick {
+namespace dt::modules::silentaim_tick {
 
-namespace tb = ::vanta::modules::silentaim;
+namespace tb = ::dt::modules::silentaim;
 
 static constexpr double kPi     = 3.14159265358979323846;
 static constexpr double kDeg    = 180.0 / kPi;
@@ -211,7 +211,7 @@ static void clear_target(JNIEnv* env)
         if (env) {
             env->DeleteGlobalRef(g_target_ref);
         } else {
-            vanta::jvm::JniScope scope;
+            dt::jvm::JniScope scope;
             if (scope) scope.get()->DeleteGlobalRef(g_target_ref);
         }
     }
@@ -221,7 +221,7 @@ static void clear_target(JNIEnv* env)
 
 void reset()
 {
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     clear_target(env);
 
     g_has_target     = false;
@@ -238,7 +238,7 @@ void reset()
     g_jitter_pitch.reset();
 
     tb::set_managed_rotation(false, 0.f, 0.f, 0.f);
-    if (env) ::vanta::modules::triggerbot_hook::set_silentaim_target(env, nullptr);
+    if (env) ::dt::modules::triggerbot_hook::set_silentaim_target(env, nullptr);
 }
 
 // â”€â”€ entity reads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -551,7 +551,7 @@ static jobject pick_target(JNIEnv* env, const tb::jni_cache& c, jobject mc,
 
         // A friend is not a target. One entity-id probe on the hot path, and the
         // whole call short-circuits to false while nobody is marked.
-        if (::vanta::social::isFriend(env, ent.get())) continue;
+        if (::dt::social::isFriend(env, ent.get())) continue;
 
         if (!entity_alive(env, c, ent.get())) continue;
         if (entity_is_invisible(env, c, ent.get())) continue;   // honeypot bait
@@ -1169,7 +1169,7 @@ static void disengage(JNIEnv* env, const tb::jni_cache& c, jobject player,
     if (g_has_target) {
         g_has_target = false;
         clear_target(env);
-        ::vanta::modules::triggerbot_hook::set_silentaim_target(env, nullptr);
+        ::dt::modules::triggerbot_hook::set_silentaim_target(env, nullptr);
         g_release_ticks = RELEASE_TICKS;
     }
     if (g_release_ticks <= 0) return;
@@ -1223,7 +1223,7 @@ void pump(float delta_ms)
     const auto& c = tb::get_cache();
     if (!c.initialized || !c.minecraft_class || !c.mc_player_fid) return;
 
-    JNIEnv* env = vanta::jvm::thisThreadEnv();
+    JNIEnv* env = dt::jvm::thisThreadEnv();
     if (!env) return;
 
     // Switched off with nothing left to hand back: genuinely nothing to do.
@@ -1350,10 +1350,10 @@ void pump(float delta_ms)
     // Withholding it during the swing costs a click that would have missed
     // anyway, and buys never asking the server for something indefensible.
     const bool locked = g_locked_ticks >= REQUIRED_LOCK_TICKS;
-    ::vanta::modules::triggerbot_hook::set_silentaim_target(
+    ::dt::modules::triggerbot_hook::set_silentaim_target(
         env, locked ? target.get() : nullptr);
 
     g_prev_px = px; g_prev_py = py; g_prev_pz = pz; g_have_prev_player_pos = true;
 }
 
-} // namespace vanta::modules::silentaim_tick
+} // namespace dt::modules::silentaim_tick

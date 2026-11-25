@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 project(Wrath LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -27,6 +28,8 @@ if(WRATH_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
+option(WRATH_SCREENSHARE_PRESET "Enforce screenshare preset invariants" OFF)
+
 # ---- trace (library used by the loader) -------------------------------------
 file(GLOB WRATH_TRACE_SRC "${CMAKE_SOURCE_DIR}/src/trace/*.cpp")
 add_library(wrath_trace STATIC ${WRATH_TRACE_SRC})
@@ -46,17 +49,20 @@ file(GLOB WRATH_SHARED_SRC
     "${CMAKE_SOURCE_DIR}/src/shared/*.cpp")
 add_library(wrath_inject STATIC ${WRATH_INJECT_SRC} ${WRATH_SHARED_SRC})
 target_include_directories(wrath_inject PUBLIC ${WRATH_INCLUDE})
+if(WRATH_SCREENSHARE_PRESET)
+    target_compile_definitions(wrath_inject PUBLIC WRATH_SCREENSHARE_PRESET=1)
+endif()
 if(MSVC)
     # C4201 anonymous NT structs; C4100/C4189 unused params in the legacy mapper.
     target_compile_options(wrath_inject PRIVATE /W4 /WX /wd4201 /wd4100 /wd4189 /permissive- /EHsc /utf-8)
 endif()
 
 # ---- payload (client) --------------------------------------------------------
-set(VANTA_WITH_INJECTOR OFF CACHE BOOL "" FORCE)
+set(DT_WITH_INJECTOR OFF CACHE BOOL "" FORCE)
 add_subdirectory(src/payload)
 # The client target is display_service with OUTPUT_NAME display_service64.
 add_library(WrathPayload ALIAS display_service)
-add_library(vantaclient ALIAS display_service)
+add_library(dt_core ALIAS display_service)
 
 # ---- loader ------------------------------------------------------------------
 add_subdirectory(src/loader)
@@ -65,9 +71,14 @@ add_subdirectory(src/loader)
 file(GLOB WRATH_GATE_SRC "${CMAKE_SOURCE_DIR}/tools/gate/src/*.cpp")
 add_executable(wrath_gate ${WRATH_GATE_SRC})
 target_include_directories(wrath_gate PRIVATE ${WRATH_INCLUDE} ${CMAKE_SOURCE_DIR}/tools/gate/src)
-target_link_libraries(wrath_gate PRIVATE wrath_trace)
+target_link_libraries(wrath_gate PRIVATE wrath_trace wrath_inject)
 if(MSVC)
     target_compile_options(wrath_gate PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+endif()
+if(WRATH_SCREENSHARE_PRESET)
+    add_custom_command(TARGET wrath_gate POST_BUILD
+        COMMAND $<TARGET_FILE:wrath_gate> /check-auto
+        COMMENT "Verifying x64-screenshare Auto strategy invariants")
 endif()
 
 # ---- probe tool (source created in the probe block) --------------------------

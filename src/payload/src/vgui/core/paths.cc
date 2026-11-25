@@ -80,7 +80,7 @@ namespace core
 
 	bool locate_asset_root()
 	{
-		// All Vanta assets are now embedded in memory; no disk directory lookup is required.
+		// All Dt assets are now embedded in memory; no disk directory lookup is required.
 		return true;
 	}
 
@@ -96,8 +96,8 @@ namespace core
 
 	void scrub_paths()
 	{
-		vanta::util::scrubString(g_asset_root);
-		vanta::util::scrubString(g_asset_directory);
+		dt::util::scrubString(g_asset_root);
+		dt::util::scrubString(g_asset_directory);
 	}
 }
 

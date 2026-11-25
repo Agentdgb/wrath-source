@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace vanta::modules::aimassist {
+namespace dt::modules::aimassist {
 
 namespace {
 
@@ -19,7 +19,7 @@ JniCache g_cache;
 jclass cache_class(JNIEnv* env, const char* binary_name)
 {
     if (!binary_name) return nullptr;
-    jclass local = vanta::jvm::findClassAnyLoader(env, binary_name);
+    jclass local = dt::jvm::findClassAnyLoader(env, binary_name);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return nullptr; }
     jclass global = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);

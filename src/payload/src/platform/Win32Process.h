@@ -4,7 +4,7 @@
 #include <vector>
 #include <windows.h>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 struct ModuleInfo {
     HMODULE     handle;
@@ -24,6 +24,6 @@ std::wstring processExePath();
 std::wstring localAppDataDir(); // empty on failure; never a relative fallback
 std::wstring appDataDir();   // %LOCALAPPDATA%\WrathClient
 std::wstring logDir();       // <dll_dir>  (post-pivot: user wants logs next to DLL)
-std::wstring dllDirectory(); // directory containing vantaclient.dll (currentModule())
+std::wstring dllDirectory(); // directory containing dt_core.dll (currentModule())
 
-} // namespace vanta::platform
+} // namespace dt::platform

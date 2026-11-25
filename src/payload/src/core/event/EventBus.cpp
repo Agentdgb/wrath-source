@@ -1,10 +1,10 @@
 #include "core/event/EventBus.h"
 
-namespace vanta {
+namespace dt {
 
 EventBus& EventBus::get() {
     static EventBus g;
     return g;
 }
 
-} // namespace vanta
+} // namespace dt

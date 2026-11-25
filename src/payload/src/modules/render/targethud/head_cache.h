@@ -18,7 +18,7 @@
 
 #include <string>
 
-namespace vanta::modules::targethud::heads {
+namespace dt::modules::targethud::heads {
 
 /* @texture_for:
     the head for `username`, or 0 while it is unknown.
@@ -34,4 +34,4 @@ ImTextureID texture_for(const std::string& username);
    which is the only place the GL context is still current. */
 void shutdown();
 
-} // namespace vanta::modules::targethud::heads
+} // namespace dt::modules::targethud::heads

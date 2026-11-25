@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace vanta::hook {
+namespace dt::hook {
 
 // Every hook site's canonical identity. When adding a new site, add an entry
 // here AND a matching sites/*.cpp registering it with HookRegistry.
@@ -63,4 +63,4 @@ enum class HookLoad : std::uint8_t {
     Lazy,        // patched on first arm() call by a subscribing module
 };
 
-} // namespace vanta::hook
+} // namespace dt::hook

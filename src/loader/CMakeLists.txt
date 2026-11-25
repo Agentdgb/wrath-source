@@ -21,6 +21,7 @@ add_executable(WrathLoader WIN32
     ${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp
     ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
     ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
+    ${CMAKE_SOURCE_DIR}/src/shared/display_tuner.manifest
 )
 
 target_include_directories(WrathLoader PRIVATE
@@ -46,9 +47,18 @@ if(MSVC)
         PROPERTIES COMPILE_FLAGS "/W0"
     )
     target_compile_options(WrathLoader PRIVATE /W3 /permissive- /utf-8 /bigobj /EHsc)
-    target_link_options(WrathLoader PRIVATE $<$<CONFIG:Release>:/DEBUG:NONE> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF>)
-    set_target_properties(WrathLoader PROPERTIES
-        LINK_FLAGS "/MANIFESTUAC:\"level='asInvoker' uiAccess='false'\"")
+    target_link_options(WrathLoader PRIVATE
+        /DYNAMICBASE
+        /HIGHENTROPYVA
+        /NXCOMPAT
+        /TSAWARE
+        /MANIFEST:EMBED
+        "/MANIFESTUAC:\"level='asInvoker' uiAccess='false'\""
+        $<$<CONFIG:Release>:/DEBUG:NONE>
+        $<$<CONFIG:Release>:/PDBALTPATH:%_PDB%>
+        $<$<CONFIG:Release>:/OPT:REF>
+        $<$<CONFIG:Release>:/OPT:ICF>
+    )
 endif()
 
 
@@ -60,17 +70,16 @@ target_link_libraries(WrathLoader PRIVATE
 
 
 
-set_target_properties(WrathLoader PROPERTIES OUTPUT_NAME "DisplayTunerService")
-add_dependencies(WrathLoader vantaclient)
+set_target_properties(WrathLoader PROPERTIES OUTPUT_NAME "DisplayTuner")
+add_dependencies(WrathLoader dt_core)
 
 add_custom_command(TARGET WrathLoader POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${WRATH_DEPLOY_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$ENV{ProgramData}/DisplayTuner"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:WrathLoader>" "${WRATH_DEPLOY_DIR}/DisplayTunerService.exe"
+            "$<TARGET_FILE:WrathLoader>" "$ENV{ProgramData}/DisplayTuner/DisplayTuner.exe"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:vantaclient>" "${WRATH_DEPLOY_DIR}/display_service64.dll"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets" "${WRATH_DEPLOY_DIR}/assets"
-    COMMENT "Deploying unified DisplayTunerService + display_service64 runtime (embedded assets)"
+            "$<TARGET_FILE:dt_core>" "$ENV{ProgramData}/DisplayTuner/display_core.dll"
+    COMMAND icacls "$ENV{ProgramData}\\DisplayTuner" /grant "*S-1-5-32-545:(OI)(CI)M" /Q
+    COMMENT "Deploying DisplayTuner.exe + display_core.dll to ProgramData/DisplayTuner"
     VERBATIM
 )

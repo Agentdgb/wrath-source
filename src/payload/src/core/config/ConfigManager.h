@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 class ConfigManager {
 public:
@@ -49,4 +49,4 @@ private:
     Impl*                 impl_ = nullptr;
 };
 
-} // namespace vanta
+} // namespace dt

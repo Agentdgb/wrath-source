@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace vanta {
+namespace dt {
 
 class Module {
 public:
@@ -84,7 +84,7 @@ private:
 };
 
 // ─── Registration ─────────────────────────────────────────────────────────────
-// Each module TU calls VANTA_REGISTER_MODULE(YourType) at global scope; this
+// Each module TU calls DT_REGISTER_MODULE(YourType) at global scope; this
 // pre-main static-init pushes the factory into ModuleManager.
 using ModuleFactory = std::unique_ptr<Module>(*)();
 
@@ -92,18 +92,18 @@ void _register_module_factory(ModuleFactory f);
 
 // Global-scope static-init factory registration. The identifier is built from
 // __LINE__ + __COUNTER__ so a fully-qualified type like
-// `vanta::modules::AimAssist` works — a naive `_reg_##T` would produce an
+// `dt::modules::AimAssist` works — a naive `_reg_##T` would produce an
 // invalid identifier containing `::`.
-#define VANTA_CAT2_(a, b) a##b
-#define VANTA_CAT_(a, b)  VANTA_CAT2_(a, b)
-#define VANTA_REGISTER_MODULE(T)                                                    \
+#define DT_CAT2_(a, b) a##b
+#define DT_CAT_(a, b)  DT_CAT2_(a, b)
+#define DT_REGISTER_MODULE(T)                                                    \
     namespace {                                                                     \
-        static const int VANTA_CAT_(_vanta_reg_mod_, __COUNTER__) = [](){           \
-            ::vanta::_register_module_factory([]() -> std::unique_ptr<::vanta::Module> { \
+        static const int DT_CAT_(_dt_reg_mod_, __COUNTER__) = [](){           \
+            ::dt::_register_module_factory([]() -> std::unique_ptr<::dt::Module> { \
                 return std::make_unique<T>();                                       \
             });                                                                     \
             return 0;                                                               \
         }();                                                                        \
     }
 
-} // namespace vanta
+} // namespace dt

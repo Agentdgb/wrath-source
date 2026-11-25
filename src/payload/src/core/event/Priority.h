@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace vanta {
+namespace dt {
 
 enum class Priority : std::int8_t {
     Lowest  = -100,
@@ -12,4 +12,4 @@ enum class Priority : std::int8_t {
     Monitor =  127,   // observers only; never cancels
 };
 
-} // namespace vanta
+} // namespace dt

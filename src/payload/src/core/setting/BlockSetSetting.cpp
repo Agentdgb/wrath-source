@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace vanta {
+namespace dt {
 
 BlockSetSetting::BlockSetSetting(Module* o, std::string n, std::vector<std::string> d)
     : Setting(o, std::move(n), SettingType::BlockSet), ids_(std::move(d)) {}
@@ -33,4 +33,4 @@ void BlockSetSetting::load(const nlohmann::json& j) {
     }
 }
 
-} // namespace vanta
+} // namespace dt

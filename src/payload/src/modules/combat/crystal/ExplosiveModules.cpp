@@ -164,7 +164,7 @@
 // Every intermediary name and descriptor below was checked against
 // tools/genmaps/.cache/{1.21,1.21.11}/yarn_merged.tiny; none differ
 // (method_26216 would, which is why isFullCube is used instead of it).
-namespace vanta::modules {
+namespace dt::modules {
 namespace {
 using native::Vec;
 constexpr auto Entity="net/minecraft/class_1297";
@@ -2148,8 +2148,8 @@ public:
 class Auto : public Explosive {public: Auto():Explosive(Variant::Crystal){}};
 class AnchorAssist : public Explosive {public: AnchorAssist():Explosive(Variant::Anchor){}};
 class SafeAnchor : public Explosive {public: SafeAnchor():Explosive(Variant::SafeAnchor){}};
-VANTA_REGISTER_MODULE(Auto);
-VANTA_REGISTER_MODULE(AnchorAssist);
-VANTA_REGISTER_MODULE(SafeAnchor);
+DT_REGISTER_MODULE(Auto);
+DT_REGISTER_MODULE(AnchorAssist);
+DT_REGISTER_MODULE(SafeAnchor);
 }
 }

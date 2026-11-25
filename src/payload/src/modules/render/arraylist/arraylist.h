@@ -7,7 +7,7 @@
 
 #include <functional>
 
-namespace vanta::modules::arraylist {
+namespace dt::modules::arraylist {
 
 // Toggled by ArrayListModule. The renderer short-circuits when false, so
 // gl_hook can call render_frame() unconditionally without paying for the
@@ -66,7 +66,7 @@ extern settings g_settings;
 extern std::function<void(settings&)> g_settings_provider;
 
 // Reverse channel: the HUD editor calls these to push a widget edit back into
-// the real vanta::Setting so it persists across sessions. The module installs
+// the real dt::Setting so it persists across sessions. The module installs
 // them at construction (setting_writer.bool_ etc.). All names are the exact
 // settings names ArrayListModule registered (case sensitive).
 struct setting_writers {
@@ -91,4 +91,4 @@ void query_bbox(float& x, float& y, float& w, float& h);
 void set_top_left(float x, float y);
 float draw_editor_settings(float x, float y, float w);
 
-} // namespace vanta::modules::arraylist
+} // namespace dt::modules::arraylist

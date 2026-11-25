@@ -3,7 +3,7 @@
 
 #include <cstring>
 
-namespace vanta::al {
+namespace dt::al {
 
 using gl::api;
 
@@ -300,4 +300,4 @@ void al_fbo::destroy()
     height_ = 0;
 }
 
-} // namespace vanta::al
+} // namespace dt::al

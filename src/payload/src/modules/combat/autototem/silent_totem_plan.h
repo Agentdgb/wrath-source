@@ -1,5 +1,5 @@
 #pragma once
-namespace vanta::modules::autototem {
+namespace dt::modules::autototem {
 struct SilentTotemPlan {
     int source = -1; // PlayerInventory index
     int button = 40; // SWAP target: offhand only

@@ -46,7 +46,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
@@ -60,7 +60,7 @@ void build_cache(JNIEnv* env)
     if (g_tried) return;
     g_tried = true;
 
-    jclass local = vanta::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
+    jclass local = dt::jvm::findClassAnyLoader(env, sdk::mappings::minecraftclass_sig);
     if (!local) { if (env->ExceptionCheck()) env->ExceptionClear(); return; }
     g_mc_class = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);
@@ -109,7 +109,7 @@ private:
         accum -= TICK_MS;
         if (accum > TICK_MS) accum = TICK_MS;
 
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
 
@@ -126,14 +126,14 @@ private:
         // Keep vanilla's attack reset visible until sendMovementPackets reports
         // it. The short hold expires automatically.
         const bool want = isEnabled()
-                       && !::vanta::vgui::bridge::isOverlayVisible()
-                       && !::vanta::shared::sprint_reset_active();
+                       && !::dt::vgui::bridge::isOverlayVisible()
+                       && !::dt::shared::sprint_reset_active();
 
         if (want) {
-            ::vanta::shared::set_movement_key(env, mc, ::vanta::shared::KEY_SPRINT, true);
+            ::dt::shared::set_movement_key(env, mc, ::dt::shared::KEY_SPRINT, true);
             held_ = true;
         } else if (held_) {
-            ::vanta::shared::set_movement_key(env, mc, ::vanta::shared::KEY_SPRINT, false);
+            ::dt::shared::set_movement_key(env, mc, ::dt::shared::KEY_SPRINT, false);
             held_ = false;
         }
 
@@ -145,17 +145,17 @@ private:
     void release()
     {
         if (!held_) return;
-        vanta::jvm::JniScope scope;
+        dt::jvm::JniScope scope;
         JNIEnv* env = scope.get();
         if (!env) return;
         if (jobject mc = resolve_minecraft(env)) {
-            ::vanta::shared::set_movement_key(env, mc, ::vanta::shared::KEY_SPRINT, false);
+            ::dt::shared::set_movement_key(env, mc, ::dt::shared::KEY_SPRINT, false);
             env->DeleteLocalRef(mc);
         }
         held_ = false;
     }
 };
 
-VANTA_REGISTER_MODULE(Sprint);
+DT_REGISTER_MODULE(Sprint);
 
-} // namespace vanta::modules
+} // namespace dt::modules

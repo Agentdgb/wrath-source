@@ -14,15 +14,15 @@ math::c_vector_2d input::c_input_controller::get_mouse_position()
 {
 	const ImVec2 p = ImGui::GetMousePos();
 
-	if (!vanta::g_app)
+	if (!dt::g_app)
 		return math::c_vector_2d(p.x, p.y);
 
-	const float s = vanta::g_app->panel_scale();
+	const float s = dt::g_app->panel_scale();
 	if (s <= 0.f)
 		return math::c_vector_2d(p.x, p.y);
 
-	const float ox = vanta::g_app->panel_x();
-	const float oy = vanta::g_app->panel_y();
+	const float ox = dt::g_app->panel_x();
+	const float oy = dt::g_app->panel_y();
 
 	/* @the entrance transform has to be undone here as well.
 
@@ -33,16 +33,16 @@ math::c_vector_2d input::c_input_controller::get_mouse_position()
 	   animation runs. That was latent while the deviation was four percent at an
 	   alpha near zero; with the panel fully opaque at 55% of its travel it is
 	   about forty-five pixels, which is a whole row. */
-	const float grow = vanta::g_app->open_grow();
-	const float rise = vanta::g_app->open_rise() * s;
+	const float grow = dt::g_app->open_grow();
+	const float rise = dt::g_app->open_rise() * s;
 
 	float px = p.x;
 	float py = p.y - rise;
 
 	if (grow > 0.0001f)
 	{
-		const float cx = ox + vanta::g_app->pivot_x() * s;
-		const float cy = oy + vanta::g_app->pivot_y() * s;
+		const float cx = ox + dt::g_app->pivot_x() * s;
+		const float cy = oy + dt::g_app->pivot_y() * s;
 
 		px = cx + (px - cx) / grow;
 		py = cy + (py - cy) / grow;
@@ -557,7 +557,7 @@ void c_render::setup()
 		slog::log::info("[+] drawlist has been initialized.");
 	}
 
-	// vanta port: typography and textures are owned by the gui layer (vanta::g_fonts / vanta::g_icons),
+	// dt port: typography and textures are owned by the gui layer (dt::g_fonts / dt::g_icons),
 	// the embedded electro font blobs that used to be baked here are not shipped anymore.
 	slog::log::success("render engine has been initialized.");
 }

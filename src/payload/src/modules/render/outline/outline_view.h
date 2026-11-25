@@ -44,7 +44,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::outline::view {
+namespace dt::modules::outline::view {
 
 bool ensure_cache(JNIEnv* env);
 void release_cache(JNIEnv* env);
@@ -55,4 +55,4 @@ void release_cache(JNIEnv* env);
 // project without it, which is what every previous version of this module did.
 bool bob_matrix(JNIEnv* env, float out[16]);
 
-} // namespace vanta::modules::outline::view
+} // namespace dt::modules::outline::view

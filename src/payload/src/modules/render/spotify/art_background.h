@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <vector>
-namespace vanta::modules::spotify {
+namespace dt::modules::spotify {
 inline std::vector<std::uint8_t> ember_background(const std::uint8_t* rgba,int width,int height) {
     constexpr int side=128;
     using Color=std::array<float,3>;

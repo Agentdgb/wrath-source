@@ -19,7 +19,7 @@
 
 #pragma comment(lib, "winhttp.lib")
 
-namespace vanta::modules::targethud::heads {
+namespace dt::modules::targethud::heads {
 
 namespace {
 
@@ -286,7 +286,7 @@ void ensure_worker()
        spawnNamed hands the thread to the client's own reaper, which already
        holds the unload open until every one of them has returned. Nothing here
        joins, and nothing here can be left joinable. */
-    vanta::platform::spawnNamed("Asset Loader", &worker_body);
+    dt::platform::spawnNamed("Asset Loader", &worker_body);
 }
 
 void evict_if_needed()
@@ -452,4 +452,4 @@ void shutdown()
     g_queue.clear();
 }
 
-} // namespace vanta::modules::targethud::heads
+} // namespace dt::modules::targethud::heads

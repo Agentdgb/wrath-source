@@ -63,7 +63,7 @@
 
 #include <jni.h>
 
-namespace vanta::modules::chams::item {
+namespace dt::modules::chams::item {
 
 // Idempotent; retried by the caller until a world exists. Returns true once the
 // detour is in place.
@@ -90,4 +90,4 @@ void on_frame();
 void log_summary();
 void shutdown();
 
-} // namespace vanta::modules::chams::item
+} // namespace dt::modules::chams::item

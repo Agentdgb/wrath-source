@@ -4,7 +4,7 @@
 #include <fstream>
 #include <set>
 
-namespace vanta::storage {
+namespace dt::storage {
 
 std::string encodeProfileData(const std::string& jsonText) {
     if (jsonText.empty()) return {};

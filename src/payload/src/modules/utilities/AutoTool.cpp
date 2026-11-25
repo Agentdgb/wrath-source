@@ -38,11 +38,11 @@
 #include <cstring>
 #include <string>
 
-namespace vanta::modules {
+namespace dt::modules {
 
 namespace {
 
-// Bring-up logging for the swap path, written next to the other Vanta logs.
+// Bring-up logging for the swap path, written next to the other Dt logs.
 bool g_dbg_on = false;
 void dbg(const char* fmt, ...)
 {
@@ -55,7 +55,7 @@ void dbg(const char* fmt, ...)
     static bool tried = false;
     if (!tried) {
         tried = true;
-        const std::wstring dbg_path = vanta::platform::logDir() + L"\\vanta_autotool.txt";
+        const std::wstring dbg_path = dt::platform::logDir() + L"\\dt_autotool.txt";
         _wfopen_s(&fp, dbg_path.c_str(), L"w");
     }
     if (!fp) return;
@@ -156,7 +156,7 @@ void bind_enchants(JNIEnv* env)
     // has_enchant() bailed out on its very first check for every slot — the
     // whole preference was inert. Bind it here with the others.
     if (!C.stack_getEnchants) {
-        if (jclass is = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1799")) {
+        if (jclass is = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1799")) {
             C.stack_getEnchants = env->GetMethodID(is, "method_58657",
                                       "()Lnet/minecraft/class_9304;");
             if (env->ExceptionCheck()) env->ExceptionClear();
@@ -164,21 +164,21 @@ void bind_enchants(JNIEnv* env)
         }
     }
     if (!C.ench_getSet) {
-        if (jclass ec = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_9304")) {
+        if (jclass ec = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_9304")) {
             C.ench_getSet = env->GetMethodID(ec, "method_57534", "()Ljava/util/Set;");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(ec);
         }
     }
     if (!C.entry_matchesId) {
-        if (jclass re = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_6880")) {
+        if (jclass re = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_6880")) {
             C.entry_matchesId = env->GetMethodID(re, "method_40226", "(Lnet/minecraft/class_2960;)Z");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(re);
         }
     }
     if (!C.id_fortune || !C.id_silk) {
-        if (jclass ident = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2960")) {
+        if (jclass ident = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2960")) {
             // Identifier.ofVanilla(String) -> minecraft:<path>
             jmethodID of = env->GetStaticMethodID(ident, "method_60656",
                                "(Ljava/lang/String;)Lnet/minecraft/class_2960;");
@@ -246,19 +246,19 @@ bool init(JNIEnv* env)
     if (now < s_next_try) return false;
     s_next_try = now + 1000;
 
-    jclass mc     = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_310");
-    jclass player = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1657");
-    jclass cplayer= vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_746");
-    jclass inv    = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1661");
-    jclass nh     = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_634");
-    jclass pkt    = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2868");
-    jclass hit    = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_239");
-    jclass hitT   = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_239$class_240");
-    jclass bhr    = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_3965");
-    jclass world  = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_638");
-    jclass stack  = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1799");
-    jclass tags   = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_3489");
-    jclass im     = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_636");
+    jclass mc     = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_310");
+    jclass player = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1657");
+    jclass cplayer= dt::jvm::findClassAnyLoader(env, "net/minecraft/class_746");
+    jclass inv    = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1661");
+    jclass nh     = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_634");
+    jclass pkt    = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2868");
+    jclass hit    = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_239");
+    jclass hitT   = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_239$class_240");
+    jclass bhr    = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_3965");
+    jclass world  = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_638");
+    jclass stack  = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1799");
+    jclass tags   = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_3489");
+    jclass im     = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_636");
     if (!mc || !player || !cplayer || !inv || !nh || !pkt || !hit || !hitT
         || !bhr || !world || !stack || !tags || !im) {
         VLOG_WARN("autotool", "class resolve failed — module inert");
@@ -285,7 +285,7 @@ bool init(JNIEnv* env)
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     if (!C.nh_sendPacket) {
-        if (jclass cch = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_8673")) {
+        if (jclass cch = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_8673")) {
             C.nh_sendPacket = env->GetMethodID(cch, "method_52787", "(Lnet/minecraft/class_2596;)V");
             if (env->ExceptionCheck()) env->ExceptionClear();
             env->DeleteLocalRef(cch);
@@ -310,7 +310,7 @@ bool init(JNIEnv* env)
     C.im_breakPos       = env->GetFieldID(im, "field_3714", "Lnet/minecraft/class_2338;");
     C.im_network        = env->GetFieldID(im, "field_3720", "Lnet/minecraft/class_634;");
     C.im_class          = static_cast<jclass>(env->NewGlobalRef(im));
-    if (jclass ent = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_1297")) {
+    if (jclass ent = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_1297")) {
         C.ent_isSneaking = env->GetMethodID(ent, "method_5715", "()Z");
         C.ent_isOnGround = env->GetMethodID(ent, "method_24828", "()Z");
         C.ent_age        = env->GetFieldID(ent, "field_6012", "I");
@@ -323,18 +323,18 @@ bool init(JNIEnv* env)
     // handleBlockBreaking() returns immediately — 10 ticks (500 ms) of NOTHING.
     C.mc_attackCd = env->GetFieldID(mc, "field_1771", "I");
     if (env->ExceptionCheck()) env->ExceptionClear();
-    if (jclass go = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_315")) {
+    if (jclass go = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_315")) {
         C.opt_attackKey = env->GetFieldID(go, "field_1886", "Lnet/minecraft/class_304;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(go);
     }
-    if (jclass kb = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_304")) {
+    if (jclass kb = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_304")) {
         C.key_pressed = env->GetFieldID(kb, "field_1653", "Z");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(kb);
     }
     // Debug readers (never required for the module to work).
-    if (jclass bp = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2338")) {
+    if (jclass bp = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2338")) {
         C.bp_getX = env->GetMethodID(bp, "method_10263", "()I");
         C.bp_getY = env->GetMethodID(bp, "method_10264", "()I");
         C.bp_getZ = env->GetMethodID(bp, "method_10260", "()I");
@@ -343,14 +343,14 @@ bool init(JNIEnv* env)
         if (!C.bp_class) C.bp_class = static_cast<jclass>(env->NewGlobalRef(bp));
         env->DeleteLocalRef(bp);
     }
-    if (jclass bs = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2680")) {
+    if (jclass bs = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2680")) {
         C.state_getBlock = env->GetMethodID(bs, "method_26204", "()Lnet/minecraft/class_2248;");
         C.state_isAir    = env->GetMethodID(bs, "method_26215", "()Z");
         C.state_toolReq  = env->GetMethodID(bs, "method_29291", "()Z");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(bs);
     }
-    if (jclass blk = vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_2248")) {
+    if (jclass blk = dt::jvm::findClassAnyLoader(env, "net/minecraft/class_2248")) {
         C.block_transKey = env->GetMethodID(blk, "method_63499", "()Ljava/lang/String;");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(blk);
@@ -441,7 +441,7 @@ void send_slot_now(JNIEnv* env, jobject im, int slot)
 
 void JNICALL hkImSync(JNIEnv* env, jobject thiz)
 {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     // Original first (it may emit the real slot), ours second so it wins.
     if (ORIG_im_sync && C.im_class) {
         env->CallNonvirtualVoidMethod(thiz, C.im_class, ORIG_im_sync);
@@ -462,7 +462,7 @@ void install_hook(JNIEnv* env)
     // Latch only AFTER we know we can actually try. Setting it before the VM
     // check meant one early tick with no VM pointer disabled Silent Swap for
     // the whole session, silently falling back to the visible swap.
-    if (!vanta::jvm::ctx().vm.load()) return;
+    if (!dt::jvm::ctx().vm.load()) return;
     tried = true;
 
     // Candidate names: the intermediary for this has moved across 1.21.x drops,
@@ -477,7 +477,7 @@ void install_hook(JNIEnv* env)
     }
     if (!mid) { VLOG_WARN("autotool", "hook: syncSelectedSlot not found"); return; }
 
-    jnihook_result_t init = JNIHook_Init(vanta::jvm::ctx().vm.load());
+    jnihook_result_t init = JNIHook_Init(dt::jvm::ctx().vm.load());
     if (init != JNIHOOK_OK && init != JNIHOOK_ERR_ADD_JVMTI_CAPS) {
         VLOG_WARN("autotool", "hook: JNIHook_Init failed ({})", (int)init);
         return;
@@ -886,7 +886,7 @@ private:
 
     void tick()
     {
-        vanta::jvm::JniScope s;
+        dt::jvm::JniScope s;
         if (!s) return;
         JNIEnv* env = s.get();
         g_dbg_on = debug_.value();
@@ -906,8 +906,8 @@ private:
         prev_silk_    = preferSilkTouch_.value();
 
         // Never act while the ClickGui owns the screen.
-        const bool live = isEnabled() && !::vanta::vgui::bridge::isOverlayVisible()
-                       && !::vanta::vgui::bridge::isEnabled("Freecam");   // the crosshair is the camera's
+        const bool live = isEnabled() && !::dt::vgui::bridge::isOverlayVisible()
+                       && !::dt::vgui::bridge::isEnabled("Freecam");   // the crosshair is the camera's
 
         jobject mc = env->CallStaticObjectMethod(C.mc_class, C.mc_getInstance);
         if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
@@ -1590,6 +1590,6 @@ private:
     }
 };
 
-} // namespace vanta::modules
+} // namespace dt::modules
 
-VANTA_REGISTER_MODULE(vanta::modules::AutoTool)
+DT_REGISTER_MODULE(dt::modules::AutoTool)

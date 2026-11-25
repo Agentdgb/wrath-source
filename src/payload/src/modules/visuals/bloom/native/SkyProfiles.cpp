@@ -1,5 +1,5 @@
 #include "SkyModel.h"
-namespace vanta::modules::bloom::sky {
+namespace dt::modules::bloom::sky {
 Array<Array<float>> cm = Array<Array<float>>{
     {204.0F, 210.0F, 218.0F, 216.0F, 222.0F, 228.0F, 255.0F, 255.0F, 255.0F, 0.0F,   216.0F,
      222.0F, 228.0F, 226.0F, 232.0F, 242.0F, 0.0F,   0.0F,   0.0F,   180.0F, 180.0F, 0.0F,
@@ -61,4 +61,4 @@ void profile(Array<float> &out, int index, float density) {
     out[17] = cn[index] + (co[index] - cn[index]) * t;
     out[18] = cp[index] + (cq[index] - cp[index]) * t;
 }
-} // namespace vanta::modules::bloom::sky
+} // namespace dt::modules::bloom::sky

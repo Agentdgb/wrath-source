@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace vanta::asm_ {
+namespace dt::asm_ {
 
 // Full opcode enum for JVMS §6.5. Only the ones we actually emit or scan for
 // are named; the numeric holes reflect the unused ones (breakpoint, wide, ...).
@@ -64,4 +64,4 @@ enum : std::uint8_t {
     CP_PACKAGE        = 20,
 };
 
-} // namespace vanta::asm_
+} // namespace dt::asm_

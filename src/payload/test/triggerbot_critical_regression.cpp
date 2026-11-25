@@ -2,7 +2,7 @@
 #include <limits>
 #include <iostream>
 
-using vanta::modules::triggerbot::critical::can_attack;
+using dt::modules::triggerbot::critical::can_attack;
 
 int main() {
     if (!can_attack(false, false, false, false, false, false, -0.001, 0.001)) return 1;

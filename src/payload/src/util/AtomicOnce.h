@@ -3,11 +3,11 @@
 #include <cstdint>
 #include <utility>
 
-namespace vanta {
+namespace dt {
 
 // Idempotent once-init: multiple threads race; the winner runs Fn to completion,
 // the losers spin until Done. Safe to call from any entry point (Agent_OnLoad,
-// Agent_OnAttach, VantaInit) with no ordering guarantee between them.
+// Agent_OnAttach, DtInit) with no ordering guarantee between them.
 class AtomicOnce {
     enum : std::uint8_t { Idle = 0, Running = 1, Done = 2, Failed = 3 };
     std::atomic<std::uint8_t> state_{Idle};
@@ -39,4 +39,4 @@ public:
     bool failed() const noexcept { return state_.load(std::memory_order_acquire) == Failed; }
 };
 
-} // namespace vanta
+} // namespace dt

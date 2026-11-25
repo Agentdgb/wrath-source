@@ -10,7 +10,7 @@
 #include <jnihook.h>
 #include <windows.h>
 
-namespace vanta::modules::itemshader {
+namespace dt::modules::itemshader {
 namespace {
 jclass owner = nullptr;
 jmethodID method = nullptr, original = nullptr;
@@ -21,7 +21,7 @@ bool tried = false;
 
 void JNICALL render_item(JNIEnv *env, jobject self, jobject player, jfloat delta, jfloat pitch, jobject hand,
                          jfloat swing, jobject item, jfloat equip, jobject matrices, jobject consumers, jint light) {
-    vanta::NativeCallback callbackLifetime;
+    dt::NativeCallback callbackLifetime;
     callbacks.fetch_add(1, std::memory_order_acq_rel);
     struct Leave {
         ~Leave() { callbacks.fetch_sub(1, std::memory_order_acq_rel); }
@@ -34,11 +34,11 @@ void JNICALL render_item(JNIEnv *env, jobject self, jobject player, jfloat delta
         return;
     if (!stopping.load() && wanted())
         note_firstperson_render_call();
-    const bool transformed = vanta::modules::visualports::beforeHand(env, player, hand, swing, matrices);
+    const bool transformed = dt::modules::visualports::beforeHand(env, player, hand, swing, matrices);
     if (original)
         env->CallNonvirtualVoidMethod(self, owner, original, player, delta, pitch, hand, transformed ? 0.f : swing,
                                       item, equip, matrices, consumers, light);
-    vanta::modules::visualports::afterHand(env, matrices, transformed);
+    dt::modules::visualports::afterHand(env, matrices, transformed);
     // Preserve Java exceptions: this hook only observes the vanilla render.
 }
 } // namespace
@@ -46,12 +46,12 @@ void JNICALL render_item(JNIEnv *env, jobject self, jobject player, jfloat delta
 bool install_hook() {
     if (tried)
         return original != nullptr;
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     if (!scope)
         return false;
     tried = true;
     auto *env = scope.get();
-    vanta::jvm::LocalClass local(env, vanta::jvm::findClassAnyLoader(env, "net/minecraft/class_759"));
+    dt::jvm::LocalClass local(env, dt::jvm::findClassAnyLoader(env, "net/minecraft/class_759"));
     if (env->ExceptionCheck())
         env->ExceptionClear();
     if (!local)
@@ -77,7 +77,7 @@ bool install_hook() {
         VLOG_WARN("itemshader", "First-person render mapping unavailable");
         return false;
     }
-    const auto init = JNIHook_Init(vanta::jvm::ctx().vm.load());
+    const auto init = JNIHook_Init(dt::jvm::ctx().vm.load());
     if (init != JNIHOOK_OK && init != JNIHOOK_ERR_ADD_JVMTI_CAPS)
         return false;
     const auto result = JNIHook_Attach(method, reinterpret_cast<void *>(&render_item), &original);
@@ -98,16 +98,16 @@ void shutdown_hook() {
     while (callbacks.load() && GetTickCount64() < deadline)
         Sleep(1);
     if (!detached || callbacks.load()) {
-        vanta::blockUnload();
+        dt::blockUnload();
         HMODULE pinned = nullptr;
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                            reinterpret_cast<LPCWSTR>(&shutdown_hook), &pinned);
         VLOG_WARN("itemshader", "Callback still active; keeping disabled DLL resident");
         return;
     }
-    vanta::jvm::JniScope scope;
+    dt::jvm::JniScope scope;
     if (scope && owner)
         scope.get()->DeleteGlobalRef(owner);
     owner = nullptr;
 }
-} // namespace vanta::modules::itemshader
+} // namespace dt::modules::itemshader

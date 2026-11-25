@@ -31,7 +31,7 @@
 
 #include <jni.h>
 
-namespace vanta::social {
+namespace dt::social {
 
 // False for a non-player, for an unresolved build, and whenever the friend list
 // is empty. Never throws and never leaves a pending Java exception behind.
@@ -42,4 +42,4 @@ bool isFriend(JNIEnv* env, jobject entity);
 // team display color equivalence second. Never throws and never leaves a pending exception.
 bool isTeammate(JNIEnv* env, jobject local_player, jobject target);
 
-} // namespace vanta::social
+} // namespace dt::social

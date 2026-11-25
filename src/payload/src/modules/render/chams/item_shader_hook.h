@@ -1,5 +1,5 @@
 #pragma once
-namespace vanta::modules::itemshader {
+namespace dt::modules::itemshader {
 // Attaches the HeldItemRenderer.renderFirstPersonItem detour once per process
 // (idempotent; a repeat call is a load). Safe to call with the ItemShader module
 // off: installing says nothing about the glow, which follows set_wanted /

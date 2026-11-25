@@ -1,7 +1,7 @@
 #pragma once
 #include "../BloomCompat.h"
 #include <deque>
-namespace vanta::modules::bloom::sky {
+namespace dt::modules::bloom::sky {
 struct Rotation {
     std::array<float, 9> m{1, 0, 0, 0, 1, 0, 0, 0, 1};
 };
@@ -65,4 +65,4 @@ void reset();
 float moonCoverage();
 float sunCoverage();
 void starData(Array<float> positions, Array<int> colors);
-} // namespace vanta::modules::bloom::sky
+} // namespace dt::modules::bloom::sky

@@ -12,7 +12,7 @@
 #include <array>
 #include <memory>
 
-namespace vanta {
+namespace dt {
 
 struct KeybindManager::Impl {};
 
@@ -133,4 +133,4 @@ void KeybindManager::dispatchQueuedBinds() {
     }
 }
 
-} // namespace vanta
+} // namespace dt

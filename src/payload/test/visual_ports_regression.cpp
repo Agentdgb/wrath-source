@@ -2,7 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
-using namespace vanta::modules::visualports;
+using namespace dt::modules::visualports;
 void require(bool test, const char *why) {
     if (!test)
         throw std::runtime_error(why);

@@ -5,7 +5,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace vanta {
+namespace dt {
 
 // Bump-allocator arena. Not thread-safe on its own — one instance per thread
 // (see threadArena()). Reset per class transform to keep peak memory bounded.
@@ -40,4 +40,4 @@ public:
 
 Arena& threadArena();
 
-} // namespace vanta
+} // namespace dt

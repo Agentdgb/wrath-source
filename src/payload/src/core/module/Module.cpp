@@ -7,7 +7,7 @@
 
 #include <imgui.h>
 
-namespace vanta {
+namespace dt {
 
 Module::Module(std::string name, std::string desc, Category cat, int defaultKey)
     : name_(std::move(name)), desc_(std::move(desc)), category_(cat),
@@ -17,8 +17,8 @@ Module::Module(std::string name, std::string desc, Category cat, int defaultKey)
 
 Module::~Module() {
     listeners_.clear();
-    vanta::util::scrubString(name_);
-    vanta::util::scrubString(desc_);
+    dt::util::scrubString(name_);
+    dt::util::scrubString(desc_);
 }
 
 void Module::registerSetting(Setting* s) {
@@ -69,4 +69,4 @@ void _register_module_factory(ModuleFactory f) {
     ModuleManager::registerFactory(f);
 }
 
-} // namespace vanta
+} // namespace dt

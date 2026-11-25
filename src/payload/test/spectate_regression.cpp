@@ -6,7 +6,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
-namespace vanta::jvm {
+namespace dt::jvm {
 JvmContext state;
 JvmContext& ctx() noexcept { return state; }
 jclass findClassAnyLoader(JNIEnv* e,const char* name) { return e->FindClass(name); }
@@ -24,13 +24,13 @@ int main(int argc,char** argv) {
         JavaVMOption options[]={{cp.data(),nullptr},{const_cast<char*>("-Xverify:all"),nullptr}};
         JavaVMInitArgs args{JNI_VERSION_1_8,2,options,JNI_FALSE};
         require(create&&create(&vm,reinterpret_cast<void**>(&e),&args)==JNI_OK,"Create JVM");
-        vanta::jvm::ctx().vm.store(vm);
+        dt::jvm::ctx().vm.store(vm);
         auto cls=e->FindClass("net/minecraft/SpectateFixture");
         require(cls!=nullptr,"Fixture missing");
         auto cameraId=e->GetStaticMethodID(cls,"cameraId","()I");
         auto camera=[&]{return e->CallStaticIntMethod(cls,cameraId);};
         auto call=[&](const char* method){e->CallStaticVoidMethod(cls,e->GetStaticMethodID(cls,method,"()V"));};
-        namespace spec=vanta::modules::spectate;
+        namespace spec=dt::modules::spectate;
         spec::request("Alpha"); spec::tick(e);
         require(!e->ExceptionCheck()&&spec::resolved()&&camera()==2,"Profile accessor / first camera attach failed");
         spec::request("Beta"); spec::tick(e);

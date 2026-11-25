@@ -1,7 +1,7 @@
 // Ported from ShellArrayCache: native vertex streams replace Java rendering objects.
 #include "NativeImages.h"
 #include "SkyModel.h"
-namespace vanta::modules::bloom::sky {
+namespace dt::modules::bloom::sky {
 Array<float> FR(24), cz;
 Array<int> da;
 Rotation rotation;
@@ -1052,4 +1052,4 @@ void starData(Array<float> positions, Array<int> colors) {
     cz = positions;
     da = colors;
 }
-} // namespace vanta::modules::bloom::sky
+} // namespace dt::modules::bloom::sky

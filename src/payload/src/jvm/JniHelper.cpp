@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-namespace vanta::jvm {
+namespace dt::jvm {
 
 namespace {
 
@@ -629,4 +629,4 @@ void setBoolFieldCanon(JNIEnv* env, jobject self, std::string_view owner, std::s
     if (auto id = fieldCanon(env, owner, field)) env->SetBooleanField(self, id, v);
 }
 
-} // namespace vanta::jvm
+} // namespace dt::jvm

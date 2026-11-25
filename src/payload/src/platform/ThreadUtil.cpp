@@ -11,7 +11,7 @@
 #include <process.h>
 #include <utility>
 
-namespace vanta::platform {
+namespace dt::platform {
 
 // SetThreadDescription lives in KernelBase.dll on modern Windows.
 using SetThreadDescription_t = HRESULT (WINAPI*)(HANDLE, PCWSTR);
@@ -52,7 +52,7 @@ unsigned __stdcall threadEntry(void* raw) {
         delete p;
     }
 
-    vanta::jvm::detachThisThreadIfAttached();
+    dt::jvm::detachThisThreadIfAttached();
     g_live.fetch_sub(1, std::memory_order_release);
     return 0;
 }
@@ -110,4 +110,4 @@ int liveThreadCount() noexcept {
     return g_live.load(std::memory_order_acquire);
 }
 
-} // namespace vanta::platform
+} // namespace dt::platform

@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace vanta::desklog {
+namespace dt::desklog {
 
 namespace {
 
@@ -96,7 +96,7 @@ bool dir_exists(const std::wstring& p)
 std::vector<std::wstring> log_candidates()
 {
     std::vector<std::wstring> out;
-    const std::wstring dir = vanta::platform::logDir();
+    const std::wstring dir = dt::platform::logDir();
     if (!dir.empty()) {
         out.emplace_back(dir);
     }
@@ -123,7 +123,7 @@ bool open_file(Chan& c)
             MultiByteToWideChar(CP_UTF8, 0, c.name.c_str(), -1, wname.data(), need);
         }
     }
-    if (wname.empty()) wname = L"vanta_debug";
+    if (wname.empty()) wname = L"dt_debug";
 
     for (const std::wstring& dir : log_candidates()) {
         if (!dir_exists(dir)) continue;
@@ -152,7 +152,7 @@ void ensure_open(Chan& c)
     if (!open_file(c)) {
         char msg[256];
         std::snprintf(msg, sizeof(msg),
-                      "[vanta desklog] could not open a log file for channel '%s' "
+                      "[dt desklog] could not open a log file for channel '%s' "
                       "in any candidate directory\n", c.name.c_str());
         OutputDebugStringA(msg);
         return;
@@ -209,14 +209,14 @@ Channel open(const char* basename)
     (void)basename;
     return Channel{ -1 };
 #else
-    if (!basename || !*basename) basename = "vanta_debug";
+    if (!basename || !*basename) basename = "dt_debug";
 
     std::lock_guard<std::mutex> lk(g_registry_mx);
     for (int i = 0; i < g_chan_count; ++i)
         if (g_chans[i].name == basename) return Channel{ i };
 
     if (g_chan_count >= kMaxChannels) {
-        OutputDebugStringA("[vanta desklog] channel table full\n");
+        OutputDebugStringA("[dt desklog] channel table full\n");
         return Channel{ -1 };
     }
 
@@ -656,5 +656,5 @@ void jni_summary(Channel ch)
         logf(ch, "    %s", f.line.c_str());
 }
 
-} // namespace vanta::desklog
+} // namespace dt::desklog
 

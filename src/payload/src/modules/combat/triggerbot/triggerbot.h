@@ -4,7 +4,7 @@
 #include <jni.h>
 #include <atomic>
 
-namespace vanta::modules::triggerbot {
+namespace dt::modules::triggerbot {
 
 // Per-VM reflection cache. Populated once by init_cache() the first time
 // the module fires; every JNI lookup after that is a hash-table hit.
@@ -156,4 +156,4 @@ inline std::atomic<bool> g_shutting_down{ false };
 bool is_visual_focus_target(JNIEnv* env, jobject ent);
 void render_focus_visual(int display_w, int display_h);
 
-} // namespace vanta::modules::triggerbot
+} // namespace dt::modules::triggerbot

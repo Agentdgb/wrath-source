@@ -4,10 +4,10 @@
 // downstream files that #include it link cleanly; the functions are no-ops
 // until we ship the value-modifying recipe path.
 
-namespace vanta::hook::bridge {
+namespace dt::hook::bridge {
 
 jobject AltSlot::threadLocalArray(JNIEnv*)      { return nullptr; }
 void    AltSlot::setLong(JNIEnv*, jlong)        {}
 jlong   AltSlot::getLong(JNIEnv*)               { return 0; }
 
-} // namespace vanta::hook::bridge
+} // namespace dt::hook::bridge

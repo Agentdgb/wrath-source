@@ -9,7 +9,7 @@
 	Minecraft's own render loop, so these entry points only arm and disarm that
 	hook.
 */
-namespace vanta::vgui
+namespace dt::vgui
 {
 	bool start(void* game_window)
 	{
@@ -28,18 +28,18 @@ namespace vanta::vgui
 
 	void toggleVisible()
 	{
-		if (!vanta::g_app) return;
+		if (!dt::g_app) return;
 
-		vanta::g_app->toggle_visible();
+		dt::g_app->toggle_visible();
 
 		/* The cursor is NOT handed over here. gl_hook does it every frame from
 		   the panel's actual visibility, so that every way of showing or hiding
 		   it — this key, Escape, the panel coming up on inject — releases and
 		   recaptures the pointer identically. */
-		slog::log::info("gui: panel {}", vanta::g_app->visible() ? "opened" : "closed");
+		slog::log::info("gui: panel {}", dt::g_app->visible() ? "opened" : "closed");
 	}
 
-	bool isVisible() { return vanta::g_app && vanta::g_app->visible(); }
+	bool isVisible() { return dt::g_app && dt::g_app->visible(); }
 
 	void setHotkeys(int toggle_vk, int panic_vk)
 	{

@@ -2,7 +2,7 @@
 #include <cstdio>
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "failed line %d: %s\n", __LINE__, #x); return 1; } } while (false)
 int main() {
-    using vanta::modules::antibot::Activity;
+    using dt::modules::antibot::Activity;
     Activity input;
     constexpr auto game = 123u;
     CHECK(!input.active(100, game, 300));
